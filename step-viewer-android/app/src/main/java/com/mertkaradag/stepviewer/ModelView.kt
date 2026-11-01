@@ -18,6 +18,7 @@ import javax.microedition.khronos.egl.EGLDisplay
  * - İki parmak: kıstırarak yakınlaştır, sürükleyerek kaydır
  * - Çift dokunma: modeli 360° döndür
  * - Tek dokunma: [onTap] ile bildirilir (ölçüm / seçim)
+ * - Uzun basma: [onLongPress] ile bildirilir (parça seçimi)
  */
 class ModelView @JvmOverloads constructor(
     context: Context,
@@ -29,6 +30,9 @@ class ModelView @JvmOverloads constructor(
 
     /** Sürükleme olmadan yapılan tek dokunuş (piksel koordinatları). */
     var onTap: ((x: Float, y: Float) -> Unit)? = null
+
+    /** Uzun basma (parça seçimi). */
+    var onLongPress: ((x: Float, y: Float) -> Unit)? = null
 
     private var lastX = 0f
     private var lastY = 0f
@@ -54,6 +58,10 @@ class ModelView @JvmOverloads constructor(
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 onTap?.invoke(e.x, e.y)
                 return true
+            }
+
+            override fun onLongPress(e: MotionEvent) {
+                if (!multiTouchHappened) onLongPress?.invoke(e.x, e.y)
             }
 
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {

@@ -107,6 +107,12 @@ class StepMesh(
         return if (n.isNullOrBlank()) fallback else n
     }
 
+    /** Parçayı içeren montajların adları (dıştan içe; adsız montajlar atlanır). */
+    fun partPath(part: Int): List<String> =
+        tree.filter { it.isAssembly && part >= it.leafStart && part < it.leafEnd && it.name.isNotBlank() }
+            .sortedBy { it.depth }
+            .map { it.name }
+
     private fun rangeIndex(offsets: IntArray, value: Int): Int {
         var lo = 0
         var hi = offsets.size - 2

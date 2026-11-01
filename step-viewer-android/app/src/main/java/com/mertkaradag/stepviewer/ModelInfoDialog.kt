@@ -20,6 +20,9 @@ class ModelInfoDialog(
     private val partVisible: BooleanArray,
     private val runInBackground: (() -> Unit) -> Unit,
     private val runOnUi: (() -> Unit) -> Unit,
+    /** Tek parça için: başlık (kapsam satırı) ve parça indeksi. */
+    private val partTitle: String? = null,
+    private val part: Int = -1,
 ) {
     private var volumeMm3 = 0.0
     private var hasSolids = false
@@ -37,7 +40,9 @@ class ModelInfoDialog(
 
         val visibleParts = partVisible.indices.filter { partVisible[it] }
         val allVisible = visibleParts.size == mesh.partCount
-        scope.text = if (allVisible) {
+        scope.text = if (partTitle != null) {
+            partTitle
+        } else if (allVisible) {
             context.getString(R.string.info_scope_all, mesh.partCount)
         } else {
             context.getString(R.string.info_scope_visible, visibleParts.size, mesh.partCount)
@@ -49,6 +54,15 @@ class ModelInfoDialog(
             context.getString(R.string.info_size, fmt(b[3] - b[0], 2), fmt(b[4] - b[1], 2), fmt(b[5] - b[2], 2)),
             context.getString(R.string.info_counts, mesh.partCount, mesh.faceCount, mesh.triangleCount),
         ).joinToString("\n")
+        if (part >= 0) {
+            val pb = partBounds(part)
+            val faces = mesh.partFaceOffsets[part + 1] - mesh.partFaceOffsets[part]
+            val tris = mesh.partTriangleRange(part).let { it.last - it.first + 1 }
+            general.text = listOf(
+                context.getString(R.string.info_size, fmt(pb[3] - pb[0], 2), fmt(pb[4] - pb[1], 2), fmt(pb[5] - pb[2], 2)),
+                context.getString(R.string.info_part_counts, faces, tris),
+            ).joinToString("\n")
+        }
         props.text = context.getString(R.string.measure_busy)
 
         val names = context.resources.getStringArray(R.array.material_names)
@@ -82,7 +96,7 @@ class ModelInfoDialog(
         }
 
         MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.info_title)
+            .setTitle(if (partTitle != null) R.string.part_info_title else R.string.info_title)
             .setView(view)
             .setPositiveButton(R.string.ok, null)
             .show()
@@ -107,5 +121,23 @@ class ModelInfoDialog(
                 updateMass()
             }
         }
+    }
+
+    /** Parçanın üçgen köşelerinden eksen hizalı sınır kutusu. */
+    private fun partBounds(p: Int): FloatArray {
+        val b = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+        val v = mesh.vertices
+        val k = StepMesh.FLOATS_PER_VERTEX
+        for (t in mesh.partTriangleRange(p)) {
+            for (c in 0 until 3) {
+                val o = mesh.indices[t * 3 + c] * k
+                for (a in 0 until 3) {
+                    if (v[o + a] < b[a]) b[a] = v[o + a]
+                    if (v[o + a] > b[a + 3]) b[a + 3] = v[o + a]
+                }
+            }
+        }
+        if (b[0] > b[3]) return FloatArray(6)
+        return b
     }
 }

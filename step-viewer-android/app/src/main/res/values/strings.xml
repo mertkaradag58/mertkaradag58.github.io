@@ -8,6 +8,7 @@
     <string name="measure">Ölç</string>
     <string name="section">Kesit</string>
     <string name="parts">Parçalar</string>
+    <string name="select">Seç</string>
     <string name="display_shaded_edges">Kenarlı</string>
     <string name="display_shaded">Gölgeli</string>
     <string name="display_wireframe">Tel kafes</string>
@@ -21,7 +22,7 @@
     <string name="empty_subtitle">STEP (.step, .stp), IGES (.igs, .iges) ve BREP (.brep) dosyaları internet olmadan açılır.</string>
     <string name="empty_open">Dosya seç</string>
     <string name="recent_files">Son açılanlar</string>
-    <string name="gesture_hint">Tek parmak döndür · iki parmak yakınlaştır ve kaydır · çift dokun: 360° tur</string>
+    <string name="gesture_hint">Tek parmak döndür · iki parmak yakınlaştır ve kaydır · çift dokun: 360° tur · uzun bas: parça seç</string>
 
     <!-- Yükleme -->
     <string name="loading_file">%1$s okunuyor…</string>
@@ -90,6 +91,20 @@
     <string name="assembly_fallback">Montaj</string>
     <string name="part_isolate">Yalnız bunu göster</string>
     <string name="part_toggle">Göster / gizle</string>
+    <string name="parts_search">Parça ara</string>
+    <string name="parts_no_match">Eşleşen parça yok</string>
+
+    <!-- Parça seçme -->
+    <string name="select_hint">Bir parçaya dokunun · herhangi bir modda parçaya uzun basmak da seçer</string>
+    <string name="select_hide">Gizle</string>
+    <string name="select_isolate">Yalnız bu</string>
+    <string name="select_info">Bilgi</string>
+    <string name="select_close">Seçimi kapat</string>
+    <string name="select_part_index">Parça %1$d / %2$d</string>
+    <string name="hidden_count">%1$d parça gizli</string>
+    <string name="undo">Geri al</string>
+    <string name="part_info_title">Parça bilgisi</string>
+    <string name="info_part_counts">%1$,d yüzey · %2$,d üçgen</string>
 
     <!-- Model bilgisi -->
     <string name="info_title">Model bilgisi</string>

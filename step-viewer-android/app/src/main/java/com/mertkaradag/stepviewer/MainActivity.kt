@@ -56,6 +56,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var toolMeasure: View
     private lateinit var toolSection: View
     private lateinit var toolDisplayLabel: TextView
+    private lateinit var toolSelect: View
+    private lateinit var selectCard: MaterialCardView
+    private lateinit var selectName: TextView
+    private lateinit var selectPath: TextView
+    private lateinit var selectActions: View
+    private lateinit var hiddenCard: View
+    private lateinit var hiddenText: TextView
 
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var recentFiles: RecentFiles
@@ -69,6 +76,16 @@ class MainActivity : AppCompatActivity() {
     private var measureMode = false
     private var measureOverlay = ModelRenderer.Overlay()
     private var partHighlight = IntArray(0)
+
+    // Parça seçimi: [selStart, selEnd) parça aralığı (tek parça veya alt montaj)
+    private var selectMode = false
+    private var selStart = -1
+    private var selEnd = -1
+    private var selName = ""
+
+    // Görünürlük geçmişi (Geri al)
+    private val visibilityUndo = ArrayDeque<BooleanArray>()
+    private var lastVisible = BooleanArray(0)
 
     private var sectionOn = false
     private var sectionAxis = 0
@@ -130,8 +147,16 @@ class MainActivity : AppCompatActivity() {
         toolMeasure = findViewById(R.id.tool_measure)
         toolSection = findViewById(R.id.tool_section)
         toolDisplayLabel = findViewById(R.id.tool_display_label)
+        toolSelect = findViewById(R.id.tool_select)
+        selectCard = findViewById(R.id.select_card)
+        selectName = findViewById(R.id.select_name)
+        selectPath = findViewById(R.id.select_path)
+        selectActions = findViewById(R.id.select_actions)
+        hiddenCard = findViewById(R.id.hidden_card)
+        hiddenText = findViewById(R.id.hidden_text)
 
         modelView.onTap = { x, y -> onModelTap(x, y) }
+        modelView.onLongPress = { x, y -> onModelLongPress(x, y) }
     }
 
     /** Uygulama kenardan kenara çizilir; çubuklar sistem çubuklarının altında kalmasın. */
@@ -158,6 +183,16 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.empty_open_button).setOnClickListener { pickFile() }
         findViewById<View>(R.id.tool_open).setOnClickListener { pickFile() }
         toolMeasure.setOnClickListener { setMeasureMode(!measureMode) }
+        toolSelect.setOnClickListener { setSelectMode(!selectMode) }
+        findViewById<View>(R.id.select_close).setOnClickListener { setSelectMode(false) }
+        findViewById<View>(R.id.select_hide).setOnClickListener { hideSelection() }
+        findViewById<View>(R.id.select_isolate).setOnClickListener { isolateSelection() }
+        findViewById<View>(R.id.select_info).setOnClickListener { showSelectionInfo() }
+        findViewById<View>(R.id.hidden_undo).setOnClickListener { undoVisibility() }
+        findViewById<View>(R.id.hidden_show_all).setOnClickListener {
+            partVisible.fill(true)
+            applyVisibility()
+        }
         toolSection.setOnClickListener { setSection(!sectionOn) }
         findViewById<View>(R.id.tool_parts).setOnClickListener { showParts() }
         findViewById<View>(R.id.tool_display).setOnClickListener { cycleDisplayMode() }
@@ -175,6 +210,7 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this) {
             when {
                 measureMode -> setMeasureMode(false)
+                selectMode -> setSelectMode(false)
                 sectionOn -> setSection(false)
                 else -> {
                     isEnabled = false
@@ -344,14 +380,20 @@ class MainActivity : AppCompatActivity() {
         currentMesh = mesh
         currentName = name
         partVisible = BooleanArray(mesh.partCount) { true }
+        lastVisible = partVisible.copyOf()
+        visibilityUndo.clear()
         partHighlight = IntArray(0)
         measureOverlay = ModelRenderer.Overlay()
+        selStart = -1
+        selEnd = -1
 
         modelView.setMesh(mesh)
         modelView.setDisplayMode(displayMode)
         measure.setMesh(mesh)
         setMeasureMode(false)
+        setSelectMode(false)
         setSection(false)
+        updateHiddenCard()
 
         titleText.text = name
         subtitleText.text = getString(R.string.model_info_line, mesh.formatName, mesh.partCount, mesh.triangleCount, seconds)
@@ -419,6 +461,7 @@ class MainActivity : AppCompatActivity() {
     // -----------------------------------------------------------------------
 
     private fun setMeasureMode(enabled: Boolean) {
+        if (enabled && selectMode) setSelectMode(false)
         measureMode = enabled
         toolMeasure.isActivated = enabled
         measureCard.visibility = if (enabled && currentMesh != null) View.VISIBLE else View.GONE
@@ -430,7 +473,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onModelTap(x: Float, y: Float) {
-        if (!measureMode || loading) return
+        if (loading) return
+        if (selectMode) {
+            pickPartAt(x, y)
+            return
+        }
+        if (!measureMode) return
         val mesh = currentMesh ?: return
         val mvp = modelView.currentMvp()
         val w = modelView.width
@@ -442,6 +490,150 @@ class MainActivity : AppCompatActivity() {
             val hit = Picker.pick(mesh, mvp, w, h, x, y, threshold, visible, clip)
             runOnUiThread { if (mesh === currentMesh && measureMode) measure.onPicked(hit) }
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Parça seçimi
+    // -----------------------------------------------------------------------
+
+    private fun setSelectMode(enabled: Boolean) {
+        val on = enabled && currentMesh != null
+        if (on && measureMode) setMeasureMode(false)
+        selectMode = on
+        toolSelect.isActivated = on
+        if (!on) setSelection(-1, -1) else updateSelectCard()
+    }
+
+    /** Uzun basma: hangi modda olursa olsun parçayı seçer. */
+    private fun onModelLongPress(x: Float, y: Float) {
+        if (loading || currentMesh == null) return
+        modelView.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        if (!selectMode) setSelectMode(true)
+        pickPartAt(x, y)
+    }
+
+    private fun pickPartAt(x: Float, y: Float) {
+        val mesh = currentMesh ?: return
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val threshold = 18f * resources.displayMetrics.density
+        val visible = if (partVisible.all { it }) null else partVisible.copyOf()
+        val clip = if (sectionOn) clipPlane(mesh) else null
+        executor.execute {
+            val part = Picker.pickPart(mesh, mvp, w, h, x, y, threshold, visible, clip)
+            runOnUiThread {
+                if (mesh !== currentMesh || !selectMode) return@runOnUiThread
+                if (part < 0) setSelection(-1, -1) else setSelection(part, part + 1)
+            }
+        }
+    }
+
+    private fun setSelection(start: Int, end: Int) {
+        val mesh = currentMesh
+        if (mesh == null || start < 0 || end <= start) {
+            selStart = -1
+            selEnd = -1
+        } else {
+            selStart = start
+            selEnd = end
+        }
+        highlightParts(selStart, selEnd)
+        updateSelectCard()
+    }
+
+    private fun highlightParts(start: Int, end: Int) {
+        val mesh = currentMesh
+        val ranges = ArrayList<Int>()
+        if (mesh != null && start >= 0) {
+            for (p in start until end) {
+                val r = mesh.partTriangleRange(p)
+                if (!r.isEmpty()) {
+                    ranges += r.first
+                    ranges += r.last - r.first + 1
+                }
+            }
+        }
+        partHighlight = ranges.toIntArray()
+        pushOverlay()
+    }
+
+    private fun updateSelectCard() {
+        val mesh = currentMesh
+        if (!selectMode || mesh == null) {
+            selectCard.visibility = View.GONE
+            return
+        }
+        selectCard.visibility = View.VISIBLE
+        if (selStart < 0) {
+            selectName.text = getString(R.string.select_hint)
+            selectName.setTypeface(null, android.graphics.Typeface.NORMAL)
+            selectName.textSize = 14f
+            selectPath.visibility = View.GONE
+            selectActions.visibility = View.GONE
+            return
+        }
+        selectName.setTypeface(null, android.graphics.Typeface.BOLD)
+        selectName.textSize = 16f
+        selectActions.visibility = View.VISIBLE
+        if (selEnd - selStart == 1) {
+            selName = mesh.partName(selStart, getString(R.string.part_fallback, selStart + 1))
+            val path = mesh.partPath(selStart)
+            val index = getString(R.string.select_part_index, selStart + 1, mesh.partCount)
+            selectPath.text = if (path.isEmpty()) index else path.joinToString(" › ") + "  ·  " + index
+        } else {
+            // Listeden seçilen alt montaj
+            val node = mesh.tree.firstOrNull { it.isAssembly && it.leafStart == selStart && it.leafEnd == selEnd }
+            selName = node?.name?.takeIf { it.isNotBlank() } ?: getString(R.string.assembly_fallback)
+            selectPath.text = getString(R.string.parts_title, selEnd - selStart)
+        }
+        selectName.text = selName
+        selectPath.visibility = View.VISIBLE
+    }
+
+    private fun hideSelection() {
+        if (selStart < 0) return
+        for (p in selStart until selEnd) partVisible[p] = false
+        setSelection(-1, -1)
+        applyVisibility()
+    }
+
+    private fun isolateSelection() {
+        if (selStart < 0) return
+        for (p in partVisible.indices) partVisible[p] = p >= selStart && p < selEnd
+        applyVisibility()
+    }
+
+    private fun showSelectionInfo() {
+        val mesh = currentMesh ?: return
+        if (selStart < 0) return
+        val only = BooleanArray(mesh.partCount) { it >= selStart && it < selEnd }
+        ModelInfoDialog(
+            context = this,
+            mesh = mesh,
+            partVisible = only,
+            runInBackground = { task -> executor.execute(task) },
+            runOnUi = { task -> runOnUiThread(task) },
+            partTitle = selName,
+            part = if (selEnd - selStart == 1) selStart else -1,
+        ).show()
+    }
+
+    private fun undoVisibility() {
+        val prev = visibilityUndo.removeLastOrNull() ?: return
+        prev.copyInto(partVisible)
+        applyVisibility(recordUndo = false)
+    }
+
+    private fun updateHiddenCard() {
+        val hidden = partVisible.count { !it }
+        if (currentMesh == null || hidden == 0) {
+            hiddenCard.visibility = View.GONE
+            return
+        }
+        hiddenCard.visibility = View.VISIBLE
+        hiddenText.text = getString(R.string.hidden_count, hidden)
+        findViewById<View>(R.id.hidden_undo).visibility = if (visibilityUndo.isEmpty()) View.GONE else View.VISIBLE
     }
 
     private fun pushOverlay() {
@@ -523,25 +715,25 @@ class MainActivity : AppCompatActivity() {
             context = this,
             mesh = mesh,
             partVisible = partVisible,
+            selectedPart = if (selEnd - selStart == 1) selStart else -1,
             onVisibilityChanged = { applyVisibility() },
-            onHighlight = { start, end ->
-                val ranges = ArrayList<Int>()
-                for (p in start until end) {
-                    val r = mesh.partTriangleRange(p)
-                    if (!r.isEmpty()) {
-                        ranges += r.first
-                        ranges += r.last - r.first + 1
-                    }
-                }
-                partHighlight = ranges.toIntArray()
-                pushOverlay()
+            onSelect = { start, end ->
+                if (!selectMode) setSelectMode(true)
+                setSelection(start, end)
             },
+            onDismiss = { highlightParts(selStart, selEnd) },
         ).show()
     }
 
     /** Görünen parçaların üçgen ve kenar aralıklarını çiziciye verir. */
-    private fun applyVisibility() {
+    private fun applyVisibility(recordUndo: Boolean = true) {
         val mesh = currentMesh ?: return
+        if (recordUndo && !lastVisible.contentEquals(partVisible)) {
+            visibilityUndo.addLast(lastVisible)
+            while (visibilityUndo.size > 30) visibilityUndo.removeFirst()
+        }
+        lastVisible = partVisible.copyOf()
+        updateHiddenCard()
         if (partVisible.all { it }) {
             modelView.setVisibility(null, null)
             return

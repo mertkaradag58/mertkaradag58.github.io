@@ -7,7 +7,7 @@ STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) dosyalarını
 - **Çizim:** OpenGL ES 3.0, `GLSurfaceView`, 4x MSAA
 - **Arayüz:** Kotlin, Material 3 (koyu tema, kenardan kenara)
 
-## Özellikler (v0.2)
+## Özellikler (v0.3)
 
 **Dosya**
 - Dosya seçiciden veya dosya yöneticisinde **"Birlikte aç"** ile STEP / IGES / BREP açma
@@ -28,7 +28,10 @@ STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) dosyalarını
   - Tek seçim: kenar uzunluğu, çember çapı, düzlem alanı, silindir/delik çapı, koni açısı, küre çapı
   - İki seçim: en kısa mesafe (`BRepExtrema`, tam geometri), ΔX/ΔY/ΔZ, açı, paralel düzlemler arası mesafe,
     çember merkezleri / eksenler arası mesafe
-- **Parça ağacı:** gizle / göster, tek parçayı izole et, dokunarak vurgula
+- **Parça seçme:** "Seç" düğmesi veya herhangi bir modda uzun basma ile modelde parçaya dokun;
+  adı ve montaj yolu görünür, tek dokunuşla gizle / yalnız bunu göster / parça bilgisi (boyut, hacim, kütle)
+- **Parça ağacı:** ada göre arama, gizle / göster, tek parçayı izole et, seçili parça listede işaretli
+- Gizli parça varken "Geri al" ve "Tümünü göster" kısayolları
 - **Model bilgisi:** boyutlar, hacim, yüzey alanı, kütle merkezi; malzeme seçimi veya özel yoğunluk ile kütle
 - **Ekran görüntüsü paylaşma** (ölçüm sonucu ve dosya adı resmin üstüne yazılır)
 

@@ -101,6 +101,42 @@ object Picker {
         return null
     }
 
+    /**
+     * Dokunulan parçanın indeksi; ışın bir yüzeye çarpmazsa yakındaki kenarın parçası,
+     * hiçbiri yoksa -1.
+     */
+    fun pickPart(
+        mesh: StepMesh,
+        mvp: FloatArray,
+        viewWidth: Int,
+        viewHeight: Int,
+        x: Float,
+        y: Float,
+        thresholdPx: Float,
+        partVisible: BooleanArray?,
+        clip: FloatArray?,
+    ): Int {
+        val inv = FloatArray(16)
+        if (!Matrix.invertM(inv, 0, mvp, 0)) return -1
+        val ndcX = 2f * x / viewWidth - 1f
+        val ndcY = 1f - 2f * y / viewHeight
+        val near = unproject(inv, ndcX, ndcY, -1f)
+        val far = unproject(inv, ndcX, ndcY, 1f)
+        val dir = floatArrayOf(far[0] - near[0], far[1] - near[1], far[2] - near[2])
+        val dirLen = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2])
+        if (dirLen <= 0f) return -1
+        dir[0] /= dirLen; dir[1] /= dirLen; dir[2] /= dirLen
+
+        val surface = raycastSurface(mesh, near, dir, partVisible, clip)
+        if (surface != null) {
+            val face = mesh.faceOfTriangle(surface.first)
+            if (face >= 0) return mesh.partOfFace(face)
+        }
+        // Tel kafes görünümü veya yüzeysiz modeller: kenara göre
+        val hit = pick(mesh, mvp, viewWidth, viewHeight, x, y, thresholdPx, partVisible, clip) ?: return -1
+        return if (hit.kind == StepNative.KIND_EDGE) mesh.partOfEdge(hit.id) else mesh.partOfFace(hit.id)
+    }
+
     private fun unproject(inv: FloatArray, x: Float, y: Float, z: Float): FloatArray {
         val v = floatArrayOf(x, y, z, 1f)
         val r = FloatArray(4)
