@@ -1,0 +1,131 @@
+name: STEP Viewer APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "step-viewer-android/**"
+      - ".github/workflows/step-viewer-android.yml"
+  pull_request:
+    paths:
+      - "step-viewer-android/**"
+      - ".github/workflows/step-viewer-android.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: step-viewer-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NDK_VERSION: "27.2.12479018"
+  OCCT_VERSION: "V7_8_1"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: step-viewer-android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # GitHub'ın ubuntu imajında Android SDK hazır gelir ($ANDROID_HOME).
+      - name: NDK, platform ve CMake kur
+        run: |
+          SDKMANAGER="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)"
+          echo "sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;35.0.0" "cmake;3.22.1" > /dev/null
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+          ls "${ANDROID_HOME}/ndk/${NDK_VERSION}/build/cmake/android.toolchain.cmake"
+
+      - name: Ninja
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
+
+      # OCCT derlemesi uzun sürer (~30-40 dk); derleme betiği değişmedikçe önbellekten gelir.
+      # Önbellek, sonraki adımlar başarısız olsa bile kaybolmasın diye derlemeden hemen sonra kaydedilir.
+      - name: OCCT önbelleğini geri yükle
+        id: occt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: step-viewer-android/third_party/occt-install
+          key: occt-${{ env.OCCT_VERSION }}-ndk${{ env.NDK_VERSION }}-${{ hashFiles('step-viewer-android/scripts/build_occt_android.sh') }}
+
+      - name: OCCT'yi Android için derle
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        run: ./scripts/build_occt_android.sh
+
+      - name: OCCT önbelleğini kaydet
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: step-viewer-android/third_party/occt-install
+          key: ${{ steps.occt-cache.outputs.cache-primary-key }}
+
+      # Bağımlılıklar her dalda önbelleğe alınır; Maven Central'ın hız sınırına (429) takılmamak için.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      # Google Play yükleme anahtarı (repo ayarlarındaki gizli değerler). Yoksa debug imzası kullanılır.
+      - name: İmza anahtarını hazırla
+        env:
+          KEYSTORE_BASE64: ${{ secrets.STEP_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.STEP_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.STEP_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.STEP_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::STEP_KEYSTORE_BASE64 gizli değeri yok: APK debug anahtarıyla imzalanacak, Play paketi (AAB) üretilmeyecek."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          {
+            echo "STEP_KEYSTORE=$RUNNER_TEMP/upload.keystore"
+            echo "STEP_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "STEP_KEY_ALIAS=$KEY_ALIAS"
+            echo "STEP_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          } >> "$GITHUB_ENV"
+
+      - name: APK derle
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Google Play paketi (AAB) derle
+        if: env.STEP_KEYSTORE != ''
+        run: ./gradlew --no-daemon bundleRelease
+
+      - name: APK kontrolü
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk)
+          ls -la "$APK"
+          unzip -l "$APK" | grep -E "\.so$"
+          unzip -o -q "$APK" "lib/arm64-v8a/libstepviewer.so" -d /tmp/apk
+          SO=/tmp/apk/lib/arm64-v8a/libstepviewer.so
+          LLVM="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          echo "--- JNI sembolü"
+          "$LLVM/llvm-nm" -D --defined-only "$SO" | grep Java_com_mertkaradag_stepviewer_StepNative_loadModel
+          echo "--- Bağımlılıklar"
+          "$LLVM/llvm-readelf" -d "$SO" | grep NEEDED
+          echo "--- 16 KB sayfa hizalaması"
+          "$LLVM/llvm-readelf" -lW "$SO" | grep LOAD
+          echo "--- İmza"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -i "SHA-256" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: step-viewer-apk
+          path: step-viewer-android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: env.STEP_KEYSTORE != ''
+        with:
+          name: step-viewer-play-aab
+          path: step-viewer-android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
