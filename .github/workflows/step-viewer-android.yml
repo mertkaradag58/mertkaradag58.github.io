@@ -73,10 +73,20 @@ jobs:
       - name: APK derle
         run: ./gradlew --no-daemon assembleRelease
 
-      - name: APK bilgisi
+      - name: APK kontrolü
         run: |
-          ls -la app/build/outputs/apk/release/
-          unzip -l app/build/outputs/apk/release/*.apk | grep -E "\.so$" || true
+          APK=$(ls app/build/outputs/apk/release/*.apk)
+          ls -la "$APK"
+          unzip -l "$APK" | grep -E "\.so$"
+          unzip -o -q "$APK" "lib/arm64-v8a/libstepviewer.so" -d /tmp/apk
+          SO=/tmp/apk/lib/arm64-v8a/libstepviewer.so
+          LLVM="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          echo "--- JNI sembolü"
+          "$LLVM/llvm-nm" -D --defined-only "$SO" | grep Java_com_mertkaradag_stepviewer_StepNative_loadStep
+          echo "--- Bağımlılıklar"
+          "$LLVM/llvm-readelf" -d "$SO" | grep NEEDED
+          echo "--- 16 KB sayfa hizalaması"
+          "$LLVM/llvm-readelf" -lW "$SO" | grep LOAD
 
       - uses: actions/upload-artifact@v4
         with:
