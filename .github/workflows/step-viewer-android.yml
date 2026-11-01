@@ -47,9 +47,10 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
 
       # OCCT derlemesi uzun sürer (~30-40 dk); derleme betiği değişmedikçe önbellekten gelir.
-      - name: OCCT önbelleği
+      # Önbellek, sonraki adımlar başarısız olsa bile kaybolmasın diye derlemeden hemen sonra kaydedilir.
+      - name: OCCT önbelleğini geri yükle
         id: occt-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: step-viewer-android/third_party/occt-install
           key: occt-${{ env.OCCT_VERSION }}-ndk${{ env.NDK_VERSION }}-${{ hashFiles('step-viewer-android/scripts/build_occt_android.sh') }}
@@ -57,6 +58,13 @@ jobs:
       - name: OCCT'yi Android için derle
         if: steps.occt-cache.outputs.cache-hit != 'true'
         run: ./scripts/build_occt_android.sh
+
+      - name: OCCT önbelleğini kaydet
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: step-viewer-android/third_party/occt-install
+          key: ${{ steps.occt-cache.outputs.cache-primary-key }}
 
       - uses: gradle/actions/setup-gradle@v4
 
