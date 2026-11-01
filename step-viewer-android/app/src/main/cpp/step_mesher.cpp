@@ -1,6 +1,12 @@
 #include "step_mesher.h"
 
+#include <BRepAdaptor_Curve.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
+#include <GCPnts_AbscissaPoint.hxx>
+#include <gp_Circ.hxx>
+#include <gp_Elips.hxx>
+#include <gp_Lin.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
@@ -42,9 +48,13 @@ void AppendPoint(std::vector<float>& dst, const gp_Pnt& p) {
   dst.push_back(static_cast<float>(p.Z()));
 }
 
+void AppendEdgeSegments(const TopoDS_Edge& edge, const TopTools_ListOfShape& faces,
+                        std::vector<float>& edges);
+
 // Bir parçanın (yerleştirilmiş şekil) yüzey sınır kenarlarını çizgi segmentleri
 // olarak ekler. BRepMesh sonrası kenarların üçgen ağı üzerindeki poligonları kullanılır.
-void ExtractEdges(const TopoDS_Shape& shape, std::vector<float>& edges) {
+void ExtractEdges(const TopoDS_Shape& shape, MeshData& out) {
+  std::vector<float>& edges = out.edges;
   TopTools_IndexedDataMapOfShapeListOfShape edgeFaces;
   TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, edgeFaces);
 
@@ -54,40 +64,50 @@ void ExtractEdges(const TopoDS_Shape& shape, std::vector<float>& edges) {
       continue;
     }
 
-    const TopTools_ListOfShape& faces = edgeFaces.FindFromIndex(i);
-    if (faces.IsEmpty()) {
-      // Serbest kenar: varsa 3B poligonunu kullan.
-      TopLoc_Location loc;
-      Handle(Poly_Polygon3D) poly = BRep_Tool::Polygon3D(edge, loc);
-      if (poly.IsNull() || poly->NbNodes() < 2) {
-        continue;
-      }
-      const gp_Trsf trsf = loc.Transformation();
-      const TColgp_Array1OfPnt& nodes = poly->Nodes();
-      for (int k = nodes.Lower(); k < nodes.Upper(); ++k) {
-        AppendPoint(edges, nodes(k).Transformed(trsf));
-        AppendPoint(edges, nodes(k + 1).Transformed(trsf));
-      }
-      continue;
+    const size_t before = edges.size();
+    AppendEdgeSegments(edge, edgeFaces.FindFromIndex(i), edges);
+    if (edges.size() > before) {
+      out.edgeShapes.push_back(edge);
+      out.edgeOffsets.push_back(static_cast<int32_t>(edges.size() / 6));
     }
+  }
+}
 
-    const TopoDS_Face& face = TopoDS::Face(faces.First());
-    TopLoc_Location faceLoc;
-    Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, faceLoc);
-    if (tri.IsNull()) {
-      continue;
-    }
-    Handle(Poly_PolygonOnTriangulation) poly =
-        BRep_Tool::PolygonOnTriangulation(edge, tri, faceLoc);
+// Tek bir kenarın çizgi segmentlerini ekler.
+void AppendEdgeSegments(const TopoDS_Edge& edge, const TopTools_ListOfShape& faces,
+                        std::vector<float>& edges) {
+  if (faces.IsEmpty()) {
+    // Serbest kenar: varsa 3B poligonunu kullan.
+    TopLoc_Location loc;
+    Handle(Poly_Polygon3D) poly = BRep_Tool::Polygon3D(edge, loc);
     if (poly.IsNull() || poly->NbNodes() < 2) {
-      continue;
+      return;
     }
-    const gp_Trsf trsf = faceLoc.Transformation();
-    const TColStd_Array1OfInteger& nodeIdx = poly->Nodes();
-    for (int k = nodeIdx.Lower(); k < nodeIdx.Upper(); ++k) {
-      AppendPoint(edges, tri->Node(nodeIdx(k)).Transformed(trsf));
-      AppendPoint(edges, tri->Node(nodeIdx(k + 1)).Transformed(trsf));
+    const gp_Trsf trsf = loc.Transformation();
+    const TColgp_Array1OfPnt& nodes = poly->Nodes();
+    for (int k = nodes.Lower(); k < nodes.Upper(); ++k) {
+      AppendPoint(edges, nodes(k).Transformed(trsf));
+      AppendPoint(edges, nodes(k + 1).Transformed(trsf));
     }
+    return;
+  }
+
+  const TopoDS_Face& face = TopoDS::Face(faces.First());
+  TopLoc_Location faceLoc;
+  Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, faceLoc);
+  if (tri.IsNull()) {
+    return;
+  }
+  Handle(Poly_PolygonOnTriangulation) poly =
+      BRep_Tool::PolygonOnTriangulation(edge, tri, faceLoc);
+  if (poly.IsNull() || poly->NbNodes() < 2) {
+    return;
+  }
+  const gp_Trsf trsf = faceLoc.Transformation();
+  const TColStd_Array1OfInteger& nodeIdx = poly->Nodes();
+  for (int k = nodeIdx.Lower(); k < nodeIdx.Upper(); ++k) {
+    AppendPoint(edges, tri->Node(nodeIdx(k)).Transformed(trsf));
+    AppendPoint(edges, tri->Node(nodeIdx(k + 1)).Transformed(trsf));
   }
 }
 
@@ -212,7 +232,7 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
     if (options.extractEdges) {
       TopoDS_Shape partShape = XCAFDoc_ShapeTool::GetShape(node.RefLabel);
       if (!partShape.IsNull()) {
-        ExtractEdges(partShape.Moved(node.Location), out.edges);
+        ExtractEdges(partShape.Moved(node.Location), out);
       }
     }
   }
@@ -235,6 +255,7 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
 bool LoadStepFile(const std::string& path, const MeshOptions& options, MeshData& out,
                   std::string& error) {
   out = MeshData();
+  out.edgeOffsets.push_back(0);
   try {
     return LoadImpl(path, options, out, error);
   } catch (const Standard_Failure& e) {
@@ -248,6 +269,97 @@ bool LoadStepFile(const std::string& path, const MeshOptions& options, MeshData&
   }
   out = MeshData();
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Ölçüm
+// ---------------------------------------------------------------------------
+
+namespace {
+
+void ToArray(const gp_XYZ& v, double dst[3]) {
+  dst[0] = v.X();
+  dst[1] = v.Y();
+  dst[2] = v.Z();
+}
+
+}  // namespace
+
+bool GetEdgeInfo(const TopoDS_Edge& edge, EdgeInfo& info) {
+  info = EdgeInfo();
+  try {
+    if (edge.IsNull() || BRep_Tool::Degenerated(edge)) {
+      return false;
+    }
+    // BRepAdaptor_Curve kenarın konumunu (montaj yerleşimini) uygular.
+    BRepAdaptor_Curve curve(edge);
+    info.length = GCPnts_AbscissaPoint::Length(curve);
+    switch (curve.GetType()) {
+      case GeomAbs_Line: {
+        info.type = EdgeType::Line;
+        ToArray(curve.Line().Direction().XYZ(), info.dir);
+        break;
+      }
+      case GeomAbs_Circle: {
+        const gp_Circ c = curve.Circle();
+        info.type = EdgeType::Circle;
+        info.radius = c.Radius();
+        ToArray(c.Location().XYZ(), info.center);
+        ToArray(c.Axis().Direction().XYZ(), info.dir);
+        break;
+      }
+      case GeomAbs_Ellipse: {
+        const gp_Elips e = curve.Ellipse();
+        info.type = EdgeType::Ellipse;
+        info.radius = e.MajorRadius();
+        ToArray(e.Location().XYZ(), info.center);
+        ToArray(e.Axis().Direction().XYZ(), info.dir);
+        break;
+      }
+      case GeomAbs_BSplineCurve:
+      case GeomAbs_BezierCurve:
+        info.type = EdgeType::BSpline;
+        break;
+      default:
+        info.type = EdgeType::Other;
+        break;
+    }
+    return true;
+  } catch (const Standard_Failure&) {
+    return false;
+  }
+}
+
+bool MeasureEdges(const TopoDS_Edge& a, const TopoDS_Edge& b, EdgeDistance& out) {
+  out = EdgeDistance();
+  try {
+    BRepExtrema_DistShapeShape dist(a, b);
+    if (!dist.IsDone() || dist.NbSolution() < 1) {
+      return false;
+    }
+    out.distance = dist.Value();
+    ToArray(dist.PointOnShape1(1).XYZ(), out.p1);
+    ToArray(dist.PointOnShape2(1).XYZ(), out.p2);
+
+    EdgeInfo ia, ib;
+    if (GetEdgeInfo(a, ia) && GetEdgeInfo(b, ib)) {
+      if (ia.type == EdgeType::Line && ib.type == EdgeType::Line) {
+        const gp_Dir da(ia.dir[0], ia.dir[1], ia.dir[2]);
+        const gp_Dir db(ib.dir[0], ib.dir[1], ib.dir[2]);
+        double angle = da.Angle(db) * 180.0 / M_PI;  // 0..180
+        if (angle > 90.0) angle = 180.0 - angle;
+        out.angleDeg = angle;
+      }
+      if (ia.type == EdgeType::Circle && ib.type == EdgeType::Circle) {
+        const gp_Pnt ca(ia.center[0], ia.center[1], ia.center[2]);
+        const gp_Pnt cb(ib.center[0], ib.center[1], ib.center[2]);
+        out.centerDistance = ca.Distance(cb);
+      }
+    }
+    return true;
+  } catch (const Standard_Failure&) {
+    return false;
+  }
 }
 
 }  // namespace stepviewer

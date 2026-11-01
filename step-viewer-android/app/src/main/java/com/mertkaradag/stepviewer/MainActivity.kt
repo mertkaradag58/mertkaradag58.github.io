@@ -13,7 +13,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import java.io.File
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.Executors
+import kotlin.math.PI
+import kotlin.math.abs
 
 class MainActivity : ComponentActivity() {
 
@@ -24,10 +27,19 @@ class MainActivity : ComponentActivity() {
     private lateinit var progressOverlay: View
     private lateinit var progressText: TextView
     private lateinit var edgesButton: Button
+    private lateinit var measureButton: Button
+    private lateinit var measurePanel: TextView
 
     private val executor = Executors.newSingleThreadExecutor()
     private var loading = false
     private var showEdges = true
+
+    // Ölçüm durumu (UI iş parçacığında)
+    private var currentMesh: StepMesh? = null
+    private var measureMode = false
+    private var selectedA = -1
+    private var selectedB = -1
+    private var measureRequest = 0
 
     private val openDocument =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -45,6 +57,8 @@ class MainActivity : ComponentActivity() {
         progressOverlay = findViewById(R.id.progress_overlay)
         progressText = findViewById(R.id.progress_text)
         edgesButton = findViewById(R.id.edges_button)
+        measureButton = findViewById(R.id.measure_button)
+        measurePanel = findViewById(R.id.measure_panel)
 
         findViewById<Button>(R.id.open_button).setOnClickListener { pickFile() }
         emptyText.setOnClickListener { pickFile() }
@@ -54,6 +68,8 @@ class MainActivity : ComponentActivity() {
             modelView.setShowEdges(showEdges)
             edgesButton.alpha = if (showEdges) 1f else 0.5f
         }
+        measureButton.setOnClickListener { setMeasureMode(!measureMode) }
+        modelView.onTap = { x, y -> onModelTap(x, y) }
 
         if (savedInstanceState == null) handleIntent(intent)
     }
@@ -120,7 +136,11 @@ class MainActivity : ComponentActivity() {
                 loading = false
                 progressOverlay.visibility = View.GONE
                 result.onSuccess { mesh ->
+                    currentMesh = mesh
+                    selectedA = -1
+                    selectedB = -1
                     modelView.setMesh(mesh)
+                    updateMeasurement()
                     titleText.text = name
                     infoText.text = getString(
                         R.string.model_info,
@@ -136,6 +156,109 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Ölçüm
+    // -----------------------------------------------------------------------
+
+    private fun setMeasureMode(enabled: Boolean) {
+        measureMode = enabled
+        measureButton.setBackgroundColor(if (enabled) 0x405AB0FF else 0)
+        selectedA = -1
+        selectedB = -1
+        updateMeasurement()
+    }
+
+    private fun onModelTap(x: Float, y: Float) {
+        if (!measureMode || loading) return
+        val mesh = currentMesh ?: return
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val threshold = 28f * resources.displayMetrics.density
+        executor.execute {
+            val id = EdgePicker.pick(mesh, mvp, w, h, x, y, threshold)
+            runOnUiThread { if (mesh === currentMesh) onEdgePicked(id) }
+        }
+    }
+
+    private fun onEdgePicked(id: Int) {
+        when {
+            id < 0 -> { selectedA = -1; selectedB = -1 }           // boşluk: temizle
+            selectedA < 0 -> selectedA = id
+            selectedB < 0 && id == selectedA -> selectedA = -1     // aynı kenar: seçimi kaldır
+            selectedB < 0 -> selectedB = id
+            else -> { selectedA = id; selectedB = -1 }             // üçüncü dokunuş: yeniden başla
+        }
+        updateMeasurement()
+    }
+
+    /** Seçime göre paneli, vurguyu ve ölçü çizgisini günceller. */
+    private fun updateMeasurement() {
+        val mesh = currentMesh
+        if (!measureMode || mesh == null) {
+            measurePanel.visibility = View.GONE
+            modelView.setSelection(null, null)
+            return
+        }
+        measurePanel.visibility = View.VISIBLE
+        val a = selectedA
+        val b = selectedB
+        if (a < 0) {
+            measurePanel.text = getString(R.string.measure_hint_first)
+            modelView.setSelection(null, null)
+            return
+        }
+
+        val highlight = if (b >= 0) mesh.edgeSegments(a) + mesh.edgeSegments(b) else mesh.edgeSegments(a)
+        modelView.setSelection(highlight, null)
+        measurePanel.text = getString(R.string.measure_busy)
+
+        val request = ++measureRequest
+        executor.execute {
+            val infoA = StepNative.edgeInfo(a)
+            val infoB = if (b >= 0) StepNative.edgeInfo(b) else null
+            val dist = if (b >= 0) StepNative.measureEdges(a, b) else null
+            runOnUiThread {
+                if (request != measureRequest) return@runOnUiThread  // daha yeni bir seçim var
+                val lines = mutableListOf(getString(R.string.edge_label, 1, describeEdge(infoA)))
+                if (b < 0) {
+                    lines += getString(R.string.measure_hint_second)
+                } else {
+                    lines += getString(R.string.edge_label, 2, describeEdge(infoB))
+                    if (dist != null) {
+                        lines += getString(R.string.measure_distance, fmt(dist[0]))
+                        if (dist[7] >= 0) lines += getString(R.string.measure_angle, fmt(dist[7], 2))
+                        if (dist[8] >= 0) lines += getString(R.string.measure_center_distance, fmt(dist[8]))
+                        if (dist[0] > 1e-9) {
+                            val line = FloatArray(6) { dist[1 + it].toFloat() }
+                            modelView.setSelection(highlight, line)
+                        }
+                    }
+                }
+                measurePanel.text = lines.joinToString("\n")
+            }
+        }
+    }
+
+    private fun describeEdge(info: DoubleArray?): String {
+        if (info == null) return getString(R.string.edge_unknown)
+        val length = info[1]
+        val radius = info[2]
+        return when (info[0].toInt()) {
+            1 -> getString(R.string.edge_line, fmt(length))
+            2 -> {
+                val fullCircle = abs(length - 2 * PI * radius) < 1e-6 * maxOf(1.0, length)
+                if (fullCircle) getString(R.string.edge_circle, fmt(radius * 2), fmt(radius))
+                else getString(R.string.edge_arc, fmt(radius * 2), fmt(radius), fmt(length))
+            }
+            3 -> getString(R.string.edge_ellipse, fmt(radius), fmt(length))
+            else -> getString(R.string.edge_curve, fmt(length))
+        }
+    }
+
+    private fun fmt(value: Double, digits: Int = 3): String =
+        String.format(Locale.getDefault(), "%.${digits}f", value)
 
     private fun showError(message: String) {
         android.app.AlertDialog.Builder(this)

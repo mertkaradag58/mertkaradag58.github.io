@@ -26,10 +26,20 @@ class ModelRenderer(private val camera: Camera) : GLSurfaceView.Renderer {
     private var indexCount = 0
     private var edgeVertexCount = 0
 
+    // Ölçüm: seçili kenarlar ve ölçü çizgisi
+    private var highlightVbo = 0
+    private var measureVbo = 0
+    private var highlightData: FloatArray? = null
+    private var measureData: FloatArray? = null
+    private var highlightDirty = false
+    private var highlightVertexCount = 0
+    private var measureVertexCount = 0
+
     private var uMvp = 0
     private var uModelView = 0
     private var uLineMvp = 0
     private var uLineColor = 0
+    private var uPointSize = 0
 
     private val modelView = FloatArray(16)
     private val mvp = FloatArray(16)
@@ -38,6 +48,18 @@ class ModelRenderer(private val camera: Camera) : GLSurfaceView.Renderer {
     fun setMesh(newMesh: StepMesh?) {
         mesh = newMesh
         meshDirty = true
+        setSelection(null, null)
+    }
+
+    /**
+     * GL iş parçacığında çağrılmalıdır.
+     * @param highlight seçili kenarların segmentleri (xyz çiftleri) veya null
+     * @param measure ölçü çizgisinin iki ucu [x1,y1,z1,x2,y2,z2] veya null
+     */
+    fun setSelection(highlight: FloatArray?, measure: FloatArray?) {
+        highlightData = highlight
+        measureData = measure
+        highlightDirty = true
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -52,15 +74,19 @@ class ModelRenderer(private val camera: Camera) : GLSurfaceView.Renderer {
         lineProgram = buildProgram(LINE_VS, LINE_FS)
         uLineMvp = GLES30.glGetUniformLocation(lineProgram, "uMvp")
         uLineColor = GLES30.glGetUniformLocation(lineProgram, "uColor")
+        uPointSize = GLES30.glGetUniformLocation(lineProgram, "uPointSize")
 
-        val ids = IntArray(3)
-        GLES30.glGenBuffers(3, ids, 0)
+        val ids = IntArray(5)
+        GLES30.glGenBuffers(5, ids, 0)
         vbo = ids[0]
         ibo = ids[1]
         edgeVbo = ids[2]
+        highlightVbo = ids[3]
+        measureVbo = ids[4]
 
         // Yeni bağlam: GPU tamponları boş, ağı tekrar yükle.
         meshDirty = true
+        highlightDirty = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -72,6 +98,11 @@ class ModelRenderer(private val camera: Camera) : GLSurfaceView.Renderer {
         if (meshDirty) {
             uploadMesh()
             meshDirty = false
+        }
+        if (highlightDirty) {
+            highlightVertexCount = upload(highlightVbo, highlightData)
+            measureVertexCount = upload(measureVbo, measureData)
+            highlightDirty = false
         }
 
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
@@ -103,10 +134,40 @@ class ModelRenderer(private val camera: Camera) : GLSurfaceView.Renderer {
             GLES30.glUseProgram(lineProgram)
             GLES30.glUniformMatrix4fv(uLineMvp, 1, false, mvp, 0)
             GLES30.glUniform4f(uLineColor, 0.08f, 0.09f, 0.10f, 1f)
+            GLES30.glUniform1f(uPointSize, 1f)
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, edgeVbo)
             GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
             GLES30.glDrawArrays(GLES30.GL_LINES, 0, edgeVertexCount)
         }
+
+        if (highlightVertexCount > 0 || measureVertexCount > 0) {
+            GLES30.glUseProgram(lineProgram)
+            GLES30.glUniformMatrix4fv(uLineMvp, 1, false, mvp, 0)
+            GLES30.glEnableVertexAttribArray(0)
+        }
+        if (highlightVertexCount > 0) {
+            // Seçili kenarlar: turuncu, kalın
+            GLES30.glLineWidth(5f)
+            GLES30.glUniform4f(uLineColor, 1.0f, 0.55f, 0.0f, 1f)
+            GLES30.glUniform1f(uPointSize, 1f)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, highlightVbo)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+            GLES30.glDrawArrays(GLES30.GL_LINES, 0, highlightVertexCount)
+        }
+        if (measureVertexCount >= 2) {
+            // Ölçü çizgisi ve uç noktaları: her zaman görünür (derinlik testi kapalı)
+            GLES30.glDisable(GLES30.GL_DEPTH_TEST)
+            GLES30.glLineWidth(3f)
+            GLES30.glUniform4f(uLineColor, 1.0f, 0.9f, 0.1f, 1f)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, measureVbo)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+            GLES30.glUniform1f(uPointSize, 1f)
+            GLES30.glDrawArrays(GLES30.GL_LINES, 0, 2)
+            GLES30.glUniform1f(uPointSize, 14f)
+            GLES30.glDrawArrays(GLES30.GL_POINTS, 0, 2)
+            GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+        }
+        GLES30.glLineWidth(1f)
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
     }
@@ -143,6 +204,17 @@ class ModelRenderer(private val camera: Camera) : GLSurfaceView.Renderer {
             indexCount = 0
             edgeVertexCount = 0
         }
+    }
+
+    /** Küçük bir çizgi tamponunu yükler; köşe sayısını döndürür. */
+    private fun upload(buffer: Int, data: FloatArray?): Int {
+        if (data == null || data.isEmpty()) return 0
+        val buf = ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder())
+        buf.asFloatBuffer().put(data)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buffer)
+        GLES30.glBufferData(GLES30.GL_ARRAY_BUFFER, data.size * 4, buf, GLES30.GL_DYNAMIC_DRAW)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+        return data.size / 3
     }
 
     private fun buildProgram(vs: String, fs: String): Int {
@@ -218,16 +290,24 @@ void main() {
         private const val LINE_VS = """#version 300 es
 layout(location = 0) in vec3 aPos;
 uniform mat4 uMvp;
+uniform highp float uPointSize;
 void main() {
     gl_Position = uMvp * vec4(aPos, 1.0);
+    gl_PointSize = uPointSize;
 }
 """
 
         private const val LINE_FS = """#version 300 es
 precision mediump float;
 uniform vec4 uColor;
+uniform highp float uPointSize;
 out vec4 fragColor;
 void main() {
+    // Noktaları yuvarlak çiz
+    if (uPointSize > 1.5) {
+        vec2 c = gl_PointCoord - vec2(0.5);
+        if (dot(c, c) > 0.25) discard;
+    }
     fragColor = uColor;
 }
 """

@@ -14,8 +14,11 @@ STEP (`.step` / `.stp`) dosyalarını telefonda **tamamen çevrimdışı** açı
 - STEP içindeki yüzey/parça renkleri
 - Kenar çizgileri (açılıp kapatılabilir)
 - Tek parmak döndür, iki parmak yakınlaştır/kaydır, çift dokunma ile görünümü sıfırla
+- **Ölçüm** ("Ölç" düğmesi): kenara dokununca uzunluk / çap; ikinci kenarla aralarındaki en kısa
+  mesafe (OCCT `BRepExtrema` ile tam geometri), iki doğru arasındaki açı, iki çember merkezi arası mesafe.
+  Gizli (yüzeyin arkasında kalan) kenarlar seçilmez.
 
-Sıradakiler: parça ağacı, parça gizleme, kesit görünümü, ölçüm.
+Sıradakiler: yüzey ölçümleri (delik çapı, düzlem mesafesi), parça ağacı, kesit görünümü, model bilgisi (hacim/kütle).
 
 ## Mimari
 

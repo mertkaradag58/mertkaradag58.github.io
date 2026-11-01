@@ -16,6 +16,7 @@ import javax.microedition.khronos.egl.EGLDisplay
  * - Tek parmak: döndür
  * - İki parmak: kıstırarak yakınlaştır, sürükleyerek kaydır
  * - Çift dokunma: görünümü sıfırla
+ * - Tek dokunma: [onTap] ile bildirilir (ölçüm modunda kenar seçimi)
  */
 class ModelView @JvmOverloads constructor(
     context: Context,
@@ -24,6 +25,9 @@ class ModelView @JvmOverloads constructor(
 
     val camera = Camera()
     private val renderer = ModelRenderer(camera)
+
+    /** Sürükleme olmadan yapılan tek dokunuş (piksel koordinatları). */
+    var onTap: ((x: Float, y: Float) -> Unit)? = null
 
     private var lastX = 0f
     private var lastY = 0f
@@ -46,6 +50,11 @@ class ModelView @JvmOverloads constructor(
                 resetView()
                 return true
             }
+
+            override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                onTap?.invoke(e.x, e.y)
+                return true
+            }
         })
 
     init {
@@ -60,6 +69,20 @@ class ModelView @JvmOverloads constructor(
         camera.setBounds(mesh.bbox)
         queueEvent { renderer.setMesh(mesh) }
         requestRender()
+    }
+
+    /** Seçili kenarları ve ölçü çizgisini çizdirir (null = temizle). */
+    fun setSelection(highlight: FloatArray?, measure: FloatArray?) {
+        queueEvent { renderer.setSelection(highlight, measure) }
+        requestRender()
+    }
+
+    /** Anlık kamera matrisi (seçim için). */
+    fun currentMvp(): FloatArray {
+        val mv = FloatArray(16)
+        val mvp = FloatArray(16)
+        camera.computeMatrices(mv, mvp)
+        return mvp
     }
 
     fun setShowEdges(show: Boolean) {

@@ -4,6 +4,21 @@
     <string name="open">Aç</string>
     <string name="reset">Sıfırla</string>
     <string name="edges">Kenar</string>
+    <string name="measure">Ölç</string>
+    <string name="measure_hint_first">Ölçmek için bir kenara dokunun</string>
+    <string name="measure_hint_second">İkinci kenara dokunun · boş yere dokunmak seçimi temizler</string>
+    <string name="measure_busy">Hesaplanıyor…</string>
+    <string name="edge_label">Kenar %1$d: %2$s</string>
+    <string name="edge_line">Doğru · L = %1$s mm</string>
+    <string name="edge_circle">Çember · Ø %1$s mm (R %2$s mm)</string>
+    <string name="edge_arc">Yay · Ø %1$s mm (R %2$s mm) · L = %3$s mm</string>
+    <string name="edge_ellipse">Elips · büyük yarıçap %1$s mm · L = %2$s mm</string>
+    <string name="edge_curve">Eğri · L = %1$s mm</string>
+    <string name="edge_unknown">Bilgi alınamadı</string>
+    <string name="measure_distance">Mesafe: %1$s mm</string>
+    <string name="measure_angle">Açı: %1$s°</string>
+    <string name="measure_center_distance">Merkezler arası: %1$s mm</string>
+    <string name="measure_same_edge">Aynı kenar seçildi</string>
     <string name="untitled">Adsız</string>
     <string name="empty_hint">Bir STEP dosyası açmak için dokunun\n(.step / .stp)\n\nTek parmak: döndür\nİki parmak: yakınlaştır ve kaydır\nÇift dokunma: görünümü sıfırla</string>
     <string name="loading_file">%1$s okunuyor…</string>
