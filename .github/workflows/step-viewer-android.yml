@@ -68,7 +68,10 @@ jobs:
           path: step-viewer-android/third_party/occt-install
           key: ${{ steps.occt-cache.outputs.cache-primary-key }}
 
+      # Bağımlılıklar her dalda önbelleğe alınır; Maven Central'ın hız sınırına (429) takılmamak için.
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
 
       - name: APK derle
         run: ./gradlew --no-daemon assembleRelease
