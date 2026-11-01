@@ -71,7 +71,7 @@ APK şimdilik debug anahtarıyla imzalanır; doğrudan telefona kurulabilir. Pla
 
 ```bash
 # OCCT'yi masaüstü için aynı ayarlarla derleyip kurduktan sonra:
-cmake -S app/src/main/cpp/host_test -B build-host -DOpenCASCADE_DIR=<occt>/lib/cmake/opencascade
+cmake -S app/src/main/cpp/host_test -B build-host -DOCCT_PREFIX=<occt-kurulum>
 cmake --build build-host
 ./build-host/step_host_test model.step cikti.obj
 ```

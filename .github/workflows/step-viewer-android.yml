@@ -2,6 +2,7 @@ name: STEP Viewer APK
 
 on:
   push:
+    branches: [main]
     paths:
       - "step-viewer-android/**"
       - ".github/workflows/step-viewer-android.yml"
