@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">STEP Görüntüleyici</string>
+    <string name="open">Aç</string>
+    <string name="reset">Sıfırla</string>
+    <string name="edges">Kenar</string>
+    <string name="untitled">Adsız</string>
+    <string name="empty_hint">Bir STEP dosyası açmak için dokunun\n(.step / .stp)\n\nTek parmak: döndür\nİki parmak: yakınlaştır ve kaydır\nÇift dokunma: görünümü sıfırla</string>
+    <string name="loading_file">%1$s okunuyor…</string>
+    <string name="meshing_file">%1$s işleniyor…\nBüyük montajlar biraz sürebilir.</string>
+    <string name="model_info">%1$d parça · %2$,d üçgen · %3$.1f sn</string>
+    <string name="busy">Bir dosya zaten yükleniyor</string>
+    <string name="error_title">Dosya açılamadı</string>
+    <string name="error_open">Dosya açılamadı.</string>
+    <string name="error_oom">Bellek yetersiz: model bu cihaz için çok büyük.</string>
+    <string name="error_permission">Bu dosyayı okuma izni yok.</string>
+    <string name="error_unknown">Bilinmeyen bir hata oluştu.</string>
+</resources>

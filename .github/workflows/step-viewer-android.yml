@@ -1,0 +1,75 @@
+name: STEP Viewer APK
+
+on:
+  push:
+    paths:
+      - "step-viewer-android/**"
+      - ".github/workflows/step-viewer-android.yml"
+  pull_request:
+    paths:
+      - "step-viewer-android/**"
+      - ".github/workflows/step-viewer-android.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: step-viewer-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NDK_VERSION: "27.2.12479018"
+  OCCT_VERSION: "V7_8_1"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: step-viewer-android
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: NDK, platform ve CMake kur
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Ninja
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build
+
+      # OCCT derlemesi uzun sürer (~30-40 dk); derleme betiği değişmedikçe önbellekten gelir.
+      - name: OCCT önbelleği
+        id: occt-cache
+        uses: actions/cache@v4
+        with:
+          path: step-viewer-android/third_party/occt-install
+          key: occt-${{ env.OCCT_VERSION }}-ndk${{ env.NDK_VERSION }}-${{ hashFiles('step-viewer-android/scripts/build_occt_android.sh') }}
+
+      - name: OCCT'yi Android için derle
+        if: steps.occt-cache.outputs.cache-hit != 'true'
+        run: ./scripts/build_occt_android.sh
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: APK derle
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: APK bilgisi
+        run: |
+          ls -la app/build/outputs/apk/release/
+          unzip -l app/build/outputs/apk/release/*.apk | grep -E "\.so$" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: step-viewer-apk
+          path: step-viewer-android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
