@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">STEP Görüntüleyici</string>
+    <string name="app_name">Cepte CAD</string>
     <string name="untitled">Adsız</string>
 
     <!-- Araç çubuğu -->
@@ -122,7 +122,7 @@
     <string name="info_density">Yoğunluk (g/cm³)</string>
 
     <!-- Hakkında -->
-    <string name="about_title">STEP Görüntüleyici %1$s</string>
+    <string name="about_title">Cepte CAD %1$s</string>
     <string name="about_text">CAD dosyalarını telefonda internet olmadan görüntüleme ve ölçme uygulaması.\n\nBu uygulama Open CASCADE Technology (OCCT) 7.8.1 kullanır. OCCT, GNU Lesser General Public License (LGPL) 2.1 ve Open CASCADE istisnası ile lisanslıdır. OCCT kaynak kodu: https://github.com/Open-Cascade-SAS/OCCT\n\nUygulamanın kaynak kodu: https://github.com/mertkaradag58/mertkaradag58.github.io/tree/main/step-viewer-android\n\nGizlilik politikası: https://mertkaradag58.github.io/step-goruntuleyici/gizlilik.html</string>
     <string name="ok">Tamam</string>
 </resources>
