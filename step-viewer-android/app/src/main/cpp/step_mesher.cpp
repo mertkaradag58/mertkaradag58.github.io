@@ -30,6 +30,7 @@
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
+#include <StepData_ConfParameters.hxx>
 #include <XCAFApp_Application.hxx>
 #include <XCAFDoc_DocumentTool.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
@@ -140,6 +141,38 @@ std::string NodeName(const XCAFPrs_DocumentNode& node) {
   return name;
 }
 
+// Dosyadaki 8 bitlik baytlar geçerli UTF-8 mi? Eski SolidWorks gibi programlar
+// Türkçe adları UTF-8 yerine Windows-1254 ile yazar ("Varsayılan" -> "Varsay\xFDlan").
+// Geçersiz bir dizi bulunursa dosya CP1254 olarak okunur.
+bool LooksLikeUtf8(const std::string& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return true;
+  std::vector<char> buf(1 << 20);
+  int need = 0;  // beklenen devam baytı sayısı
+  while (in) {
+    in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
+    const std::streamsize n = in.gcount();
+    for (std::streamsize i = 0; i < n; ++i) {
+      const auto c = static_cast<unsigned char>(buf[static_cast<size_t>(i)]);
+      if (need > 0) {
+        if ((c & 0xC0) != 0x80) return false;
+        --need;
+      } else if (c < 0x80) {
+        continue;
+      } else if ((c & 0xE0) == 0xC0 && c >= 0xC2) {
+        need = 1;
+      } else if ((c & 0xF0) == 0xE0) {
+        need = 2;
+      } else if ((c & 0xF8) == 0xF0 && c <= 0xF4) {
+        need = 3;
+      } else {
+        return false;
+      }
+    }
+  }
+  return need == 0;
+}
+
 // Belgeyi dosyadan doldurur.
 bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Document)& doc,
                   std::string& error) {
@@ -153,7 +186,11 @@ bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Doc
       reader.SetGDTMode(false);
       reader.SetMatMode(false);
       reader.SetViewMode(false);
-      if (reader.ReadFile(path.c_str()) != IFSelect_RetDone) {
+      StepData_ConfParameters params;
+      params.InitFromStatic();
+      params.ReadCodePage =
+          LooksLikeUtf8(path) ? Resource_FormatType_UTF8 : Resource_FormatType_CP1254;
+      if (reader.ReadFile(path.c_str(), params) != IFSelect_RetDone) {
         error = "read_failed:STEP";
         return false;
       }
