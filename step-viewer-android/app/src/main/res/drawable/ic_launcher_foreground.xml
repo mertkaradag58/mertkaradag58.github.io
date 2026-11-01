@@ -1,13 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- İzometrik küp simgesi -->
+<!-- Kesik köşeli izometrik küp (kesit görünümü) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#FFE8EEF5" android:pathData="M54,30 L75,42 L54,54 L33,42 Z" />
-    <path android:fillColor="#FFAFC3D9" android:pathData="M33,42 L54,54 L54,78 L33,66 Z" />
-    <path android:fillColor="#FF7E9AB8" android:pathData="M75,42 L75,66 L54,78 L54,54 Z" />
-    <path android:strokeColor="#FF0E2440" android:strokeWidth="1.5"
-        android:pathData="M54,30 L75,42 L75,66 L54,78 L33,66 L33,42 Z M33,42 L54,54 L75,42 M54,54 L54,78" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M54,28 L77,41 L65.5,47.5 L54,41 L42.5,47.5 L31,41 Z" />
+    <path android:fillColor="#FFFFE3C8" android:pathData="M31,67 L54,80 L54,67 L42.5,60.5 L42.5,47.5 L31,41 Z" />
+    <path android:fillColor="#FFFFC594" android:pathData="M77,67 L54,80 L54,67 L65.5,60.5 L65.5,47.5 L77,41 Z" />
+    <path android:fillColor="#FF2A4E86" android:pathData="M54,54 L65.5,60.5 L54,67 L42.5,60.5 Z" />
+    <path android:fillColor="#FF142E5C" android:pathData="M54,54 L42.5,60.5 L42.5,47.5 L54,41 Z" />
+    <path android:fillColor="#FF0B1F3A" android:pathData="M54,54 L65.5,60.5 L65.5,47.5 L54,41 Z" />
+    <path android:strokeColor="#FF6B1E00" android:strokeWidth="1.6" android:strokeLineJoin="round" android:pathData="M54,28 L77,41 L65.5,47.5 L54,41 L42.5,47.5 L31,41 Z M31,67 L54,80 L54,67 L42.5,60.5 L42.5,47.5 L31,41 Z M77,67 L54,80 L54,67 L65.5,60.5 L65.5,47.5 L77,41 Z M54,54 L65.5,60.5 L54,67 L42.5,60.5 Z M54,54 L42.5,60.5 L42.5,47.5 L54,41 Z M54,54 L65.5,60.5 L65.5,47.5 L54,41 Z" />
 </vector>
