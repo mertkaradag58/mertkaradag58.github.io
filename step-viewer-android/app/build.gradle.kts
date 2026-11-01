@@ -11,15 +11,16 @@ val occtDir: String = (project.findProperty("occtDir") as String?)
 
 android {
     namespace = "com.mertkaradag.stepviewer"
-    compileSdk = 35
+    compileSdk = 36
     ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "com.mertkaradag.stepviewer"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        targetSdk = 36
+        // Play'e her yüklemede sürüm kodu artmalı: CI çalışma numarasından türetilir.
+        versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
+        versionName = "1.0.0"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -34,12 +35,25 @@ android {
         }
     }
 
+    // Google Play yükleme anahtarı: gizli tutulur, repoya konmaz.
+    // CI'da GitHub gizli değerlerinden (STEP_KEYSTORE_BASE64 vb.) çözülür ve ortam değişkeniyle verilir.
+    // Anahtar verilmezse APK yalnızca telefona doğrudan kurulum için debug anahtarıyla imzalanır.
+    val uploadKeystore: String? = System.getenv("STEP_KEYSTORE")?.takeIf { it.isNotBlank() }
+    signingConfigs {
+        if (uploadKeystore != null) {
+            create("upload") {
+                storeFile = file(uploadKeystore)
+                storePassword = System.getenv("STEP_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("STEP_KEY_ALIAS")
+                keyPassword = System.getenv("STEP_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Şimdilik telefona doğrudan kurulabilmesi için debug anahtarıyla imzalanır.
-            // Play Store'a yüklemeden önce gerçek bir yükleme anahtarı tanımlanmalı.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
         }
     }
 

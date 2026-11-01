@@ -41,7 +41,7 @@ jobs:
           SDKMANAGER="$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)"
           echo "sdkmanager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses > /dev/null || true
-          "$SDKMANAGER" "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" > /dev/null
+          "$SDKMANAGER" "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;35.0.0" "cmake;3.22.1" > /dev/null
           echo "ANDROID_NDK_HOME=${ANDROID_HOME}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
           ls "${ANDROID_HOME}/ndk/${NDK_VERSION}/build/cmake/android.toolchain.cmake"
 
@@ -73,8 +73,32 @@ jobs:
         with:
           cache-read-only: false
 
+      # Google Play yükleme anahtarı (repo ayarlarındaki gizli değerler). Yoksa debug imzası kullanılır.
+      - name: İmza anahtarını hazırla
+        env:
+          KEYSTORE_BASE64: ${{ secrets.STEP_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.STEP_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.STEP_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.STEP_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::STEP_KEYSTORE_BASE64 gizli değeri yok: APK debug anahtarıyla imzalanacak, Play paketi (AAB) üretilmeyecek."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.keystore"
+          {
+            echo "STEP_KEYSTORE=$RUNNER_TEMP/upload.keystore"
+            echo "STEP_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+            echo "STEP_KEY_ALIAS=$KEY_ALIAS"
+            echo "STEP_KEY_PASSWORD=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+          } >> "$GITHUB_ENV"
+
       - name: APK derle
         run: ./gradlew --no-daemon assembleRelease
+
+      - name: Google Play paketi (AAB) derle
+        if: env.STEP_KEYSTORE != ''
+        run: ./gradlew --no-daemon bundleRelease
 
       - name: APK kontrolü
         run: |
@@ -90,9 +114,18 @@ jobs:
           "$LLVM/llvm-readelf" -d "$SO" | grep NEEDED
           echo "--- 16 KB sayfa hizalaması"
           "$LLVM/llvm-readelf" -lW "$SO" | grep LOAD
+          echo "--- İmza"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep -i "SHA-256" || true
 
       - uses: actions/upload-artifact@v4
         with:
           name: step-viewer-apk
           path: step-viewer-android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: env.STEP_KEYSTORE != ''
+        with:
+          name: step-viewer-play-aab
+          path: step-viewer-android/app/build/outputs/bundle/release/*.aab
           if-no-files-found: error
