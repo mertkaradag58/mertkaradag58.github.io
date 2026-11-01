@@ -57,6 +57,7 @@
     <string name="menu_model_info">Model info</string>
     <string name="menu_share">Share image</string>
     <string name="menu_about">About and licenses</string>
+    <string name="menu_privacy">Privacy options</string>
     <string name="share_title">Share image</string>
     <string name="share_failed">Could not capture the image</string>
 

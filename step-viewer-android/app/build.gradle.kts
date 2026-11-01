@@ -22,6 +22,19 @@ android {
         versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
         versionName = "1.0.0"
 
+        // AdMob kimlikleri gizli değildir. Gerçek kimlikler verilmezse Google'ın test reklamları kullanılır.
+        // -PadmobAppId=... veya ADMOB_APP_ID ortam değişkeniyle de değiştirilebilir.
+        fun admob(prop: String, env: String, testId: String): String =
+            (project.findProperty(prop) as String?)?.takeIf { it.isNotBlank() }
+                ?: System.getenv(env)?.takeIf { it.isNotBlank() }
+                ?: testId
+        manifestPlaceholders["admobAppId"] =
+            admob("admobAppId", "ADMOB_APP_ID", "ca-app-pub-3940256099942544~3347511713")
+        buildConfigField("String", "ADMOB_BANNER_ID",
+            "\"" + admob("admobBannerId", "ADMOB_BANNER_ID", "ca-app-pub-3940256099942544/9214589741") + "\"")
+        buildConfigField("String", "ADMOB_INTERSTITIAL_ID",
+            "\"" + admob("admobInterstitialId", "ADMOB_INTERSTITIAL_ID", "ca-app-pub-3940256099942544/1033173712") + "\"")
+
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -64,6 +77,10 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -86,4 +103,6 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("com.google.android.material:material:1.12.0")
+    implementation("com.google.android.gms:play-services-ads:24.9.0")
+    implementation("com.google.android.ump:user-messaging-platform:3.2.0")
 }

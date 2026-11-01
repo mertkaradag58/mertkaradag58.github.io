@@ -590,6 +590,16 @@
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
+
+        <!-- Reklam (banner); yanlışlıkla dokunmayı önlemek için araç çubuğundan biraz uzakta -->
+        <FrameLayout
+            android:id="@+id/ad_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginLeft="-12dp"
+            android:layout_marginRight="-12dp"
+            android:visibility="gone" />
     </LinearLayout>
 
     <!-- Yükleniyor -->

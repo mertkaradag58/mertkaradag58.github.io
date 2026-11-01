@@ -39,6 +39,9 @@ import java.util.concurrent.Executors
 class MainActivity : AppCompatActivity() {
 
     private lateinit var modelView: ModelView
+    private lateinit var ads: Ads
+    /** Paylaşım ekranından dönünce tam ekran reklam gösterilsin. */
+    private var adAfterShare = false
     private lateinit var titleText: TextView
     private lateinit var subtitleText: TextView
     private lateinit var emptyState: View
@@ -125,6 +128,9 @@ class MainActivity : AppCompatActivity() {
         setupBackHandling()
         showRecentFiles()
 
+        ads = Ads(this, findViewById(R.id.ad_container))
+        ads.start()
+
         if (savedInstanceState == null) handleIntent(intent)
     }
 
@@ -169,7 +175,8 @@ class MainActivity : AppCompatActivity() {
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             topBar.updatePadding(top = bars.top + (8 * density).toInt(), left = bars.left + (20 * density).toInt(), right = bars.right + (4 * density).toInt())
             bottomArea.updatePadding(bottom = bars.bottom + (12 * density).toInt(), left = bars.left + (12 * density).toInt(), right = bars.right + (12 * density).toInt())
-            emptyContent.updatePadding(top = bars.top + (96 * density).toInt(), bottom = bars.bottom + (48 * density).toInt())
+            // Altta reklam alanı olduğu için boş ekran içeriği yukarıda biter
+            emptyContent.updatePadding(top = bars.top + (96 * density).toInt(), bottom = bars.bottom + (130 * density).toInt())
             sideButtons.updatePadding(right = bars.right)
             insets
         }
@@ -227,11 +234,13 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(Menu.NONE, MENU_INFO, 0, R.string.menu_model_info).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_SHARE, 1, R.string.menu_share).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
+        if (ads.privacyOptionsRequired) popup.menu.add(Menu.NONE, MENU_PRIVACY, 3, R.string.menu_privacy)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_INFO -> showModelInfo()
                 MENU_SHARE -> shareScreenshot()
                 MENU_ABOUT -> showAbout()
+                MENU_PRIVACY -> ads.showPrivacyOptions()
             }
             true
         }
@@ -303,14 +312,21 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         modelView.onResume()
+        ads.onResume()
+        if (adAfterShare) {
+            adAfterShare = false
+            ads.showInterstitial()
+        }
     }
 
     override fun onPause() {
+        ads.onPause()
         modelView.onPause()
         super.onPause()
     }
 
     override fun onDestroy() {
+        ads.onDestroy()
         executor.shutdownNow()
         super.onDestroy()
     }
@@ -368,6 +384,7 @@ class MainActivity : AppCompatActivity() {
                 result.onSuccess { mesh ->
                     onModelLoaded(mesh, name, seconds)
                     if (hasPersistedPermission(uri)) recentFiles.add(uri, name)
+                    ads.showInterstitial()
                 }.onFailure { e ->
                     showRecentFiles()
                     showError(localizedError(e.message))
@@ -812,6 +829,7 @@ class MainActivity : AppCompatActivity() {
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 startActivity(Intent.createChooser(send, getString(R.string.share_title)))
+                adAfterShare = true
             } catch (e: Exception) {
                 Toast.makeText(this, R.string.share_failed, Toast.LENGTH_SHORT).show()
             }
@@ -883,6 +901,7 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_INFO = 1
         private const val MENU_SHARE = 2
         private const val MENU_ABOUT = 3
+        private const val MENU_PRIVACY = 4
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
     }
