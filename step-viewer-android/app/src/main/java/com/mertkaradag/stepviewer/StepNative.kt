@@ -2,31 +2,53 @@ package com.mertkaradag.stepviewer
 
 import java.io.IOException
 
-/** OCCT tabanlı yerel kütüphaneye erişim. */
+/** OCCT tabanlı yerel kütüphaneye erişim. Tüm çağrılar arka plan iş parçacığında yapılmalıdır. */
 object StepNative {
     init {
         System.loadLibrary("stepviewer")
     }
 
+    const val KIND_EDGE = 0
+    const val KIND_FACE = 1
+
     /**
-     * STEP dosyasını okur ve üçgenler. Uzun sürebilir; arka plan iş parçacığında çağırın.
+     * STEP / IGES / BREP dosyasını okur ve üçgenler (biçim içerikten algılanır).
      *
-     * @param path dosyanın yerel yolu
      * @param relativeDeflection üçgenleme hassasiyeti (model köşegenine oranla); 0 = varsayılan
      * @throws IOException dosya okunamazsa veya geometri yoksa
      */
     @Throws(IOException::class)
-    external fun loadStep(path: String, relativeDeflection: Double): StepMesh
+    external fun loadModel(path: String, relativeDeflection: Double): StepMesh
 
     /**
-     * Kenar bilgisi: [tip, uzunluk, yarıçap, merkezX, merkezY, merkezZ]; bulunamazsa null.
-     * Tip: 0 diğer, 1 doğru, 2 çember, 3 elips, 4 eğri (B-spline).
+     * Kenar veya yüzey bilgisi:
+     * [tür, uzunluk, alan, yarıçap, yarıçap2, açı, cx, cy, cz, dx, dy, dz]; bulunamazsa null.
+     * Tür: [GeomKind] sabitleri.
      */
-    external fun edgeInfo(edgeId: Int): DoubleArray?
+    external fun shapeInfo(kind: Int, id: Int): DoubleArray?
 
     /**
-     * İki kenar arası en kısa mesafe:
-     * [mesafe, p1x, p1y, p1z, p2x, p2y, p2z, açı° (yoksa -1), çember merkezleri arası (yoksa -1)]
+     * İki şekil arası ölçüm:
+     * [mesafe, p1x, p1y, p1z, p2x, p2y, p2z, açı°, merkez/eksen mesafesi, paralel düzlem mesafesi]
+     * (olmayan değerler -1); başarısızsa null.
      */
-    external fun measureEdges(edgeA: Int, edgeB: Int): DoubleArray?
+    external fun measurePair(kindA: Int, idA: Int, kindB: Int, idB: Int): DoubleArray?
+
+    /** Hacim/alan/ağırlık merkezi: [hacim mm³, alan mm², cx, cy, cz, katı var mı]. null = tüm model. */
+    external fun massProps(partIds: IntArray?): DoubleArray?
+}
+
+/** C++ GeomKind ile aynı değerler. */
+object GeomKind {
+    const val OTHER = 0
+    const val LINE = 1
+    const val CIRCLE = 2
+    const val ELLIPSE = 3
+    const val CURVE = 4
+    const val PLANE = 10
+    const val CYLINDER = 11
+    const val CONE = 12
+    const val SPHERE = 13
+    const val TORUS = 14
+    const val SURFACE = 15
 }

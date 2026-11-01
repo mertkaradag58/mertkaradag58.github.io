@@ -1,24 +1,38 @@
 # STEP Görüntüleyici (Android)
 
-STEP (`.step` / `.stp`) dosyalarını telefonda **tamamen çevrimdışı** açıp 3B olarak gösteren yerel (native) Android uygulaması.
+STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) dosyalarını telefonda **tamamen çevrimdışı** açıp 3B olarak gösteren yerel (native) Android uygulaması.
 
 - **Geometri çekirdeği:** [Open CASCADE Technology (OCCT)](https://dev.opencascade.org/) 7.8.1, Android NDK ile statik derlenir
 - **Köprü:** JNI (C++ → Kotlin)
-- **Çizim:** OpenGL ES 3.0, `GLSurfaceView`
-- **Arayüz:** Kotlin
+- **Çizim:** OpenGL ES 3.0, `GLSurfaceView`, 4x MSAA
+- **Arayüz:** Kotlin, Material 3 (koyu tema, kenardan kenara)
 
-## Özellikler (v0.1)
+## Özellikler (v0.2)
 
-- Dosya seçiciden veya dosya yöneticisinde **"Birlikte aç"** ile STEP dosyası açma
-- Montajlar: parça yerleşimleri (konum/dönüş) doğru uygulanır
-- STEP içindeki yüzey/parça renkleri
-- Kenar çizgileri (açılıp kapatılabilir)
-- Tek parmak döndür, iki parmak yakınlaştır/kaydır, çift dokunma ile görünümü sıfırla
-- **Ölçüm** ("Ölç" düğmesi): kenara dokununca uzunluk / çap; ikinci kenarla aralarındaki en kısa
-  mesafe (OCCT `BRepExtrema` ile tam geometri), iki doğru arasındaki açı, iki çember merkezi arası mesafe.
-  Gizli (yüzeyin arkasında kalan) kenarlar seçilmez.
+**Dosya**
+- Dosya seçiciden veya dosya yöneticisinde **"Birlikte aç"** ile STEP / IGES / BREP açma
+- Son açılan dosyalar listesi (açılış ekranında)
+- Montajlar: parça yerleşimleri ve STEP renkleri doğru uygulanır
 
-Sıradakiler: yüzey ölçümleri (delik çapı, düzlem mesafesi), parça ağacı, kesit görünümü, model bilgisi (hacim/kütle).
+**Görünüm**
+- Tek parmak döndür (döner tabla mantığı, model yan yatmaz), bırakınca ataletle devam eder
+- İki parmak yakınlaştır / kaydır
+- **Çift dokunma: modeli 360° döndürür**
+- Standart görünümler (ön, arka, üst, alt, sol, sağ, izometrik) yumuşak geçişle
+- Perspektif / ortografik, Z-yukarı / Y-yukarı
+- Görüntü modu: gölgeli + kenarlar, sadece gölgeli, tel kafes
+- **Kesit görünümü:** X / Y / Z düzlemi, kaydırıcı ile konum, yön çevirme; kesilen iç yüzeyler ayrı renkte
+
+**Mühendislik**
+- **Ölçüm:** kenar veya yüzeye dokun
+  - Tek seçim: kenar uzunluğu, çember çapı, düzlem alanı, silindir/delik çapı, koni açısı, küre çapı
+  - İki seçim: en kısa mesafe (`BRepExtrema`, tam geometri), ΔX/ΔY/ΔZ, açı, paralel düzlemler arası mesafe,
+    çember merkezleri / eksenler arası mesafe
+- **Parça ağacı:** gizle / göster, tek parçayı izole et, dokunarak vurgula
+- **Model bilgisi:** boyutlar, hacim, yüzey alanı, kütle merkezi; malzeme seçimi veya özel yoğunluk ile kütle
+- **Ekran görüntüsü paylaşma** (ölçüm sonucu ve dosya adı resmin üstüne yazılır)
+
+Sonra: PMI / GD&T (STEP AP242 içindeki toleranslar) ayrı bir iş olarak planlandı.
 
 ## Mimari
 

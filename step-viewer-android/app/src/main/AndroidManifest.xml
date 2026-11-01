@@ -38,6 +38,9 @@
                 <data android:mimeType="application/x-step" />
                 <data android:mimeType="application/x-stp" />
                 <data android:mimeType="application/p21" />
+                <data android:mimeType="model/iges" />
+                <data android:mimeType="application/iges" />
+                <data android:mimeType="application/x-iges" />
             </intent-filter>
 
             <!-- Çoğu dosya yöneticisi .step dosyalarını genel tür olarak bildirir -->
@@ -65,7 +68,24 @@
                 <data android:pathPattern=".*\\.STP" />
                 <data android:pathPattern=".*\\..*\\.step" />
                 <data android:pathPattern=".*\\..*\\.stp" />
+                <data android:pathPattern=".*\\.igs" />
+                <data android:pathPattern=".*\\.IGS" />
+                <data android:pathPattern=".*\\.iges" />
+                <data android:pathPattern=".*\\.IGES" />
+                <data android:pathPattern=".*\\.brep" />
+                <data android:pathPattern=".*\\.BREP" />
             </intent-filter>
         </activity>
+
+        <!-- Ekran görüntüsü paylaşımı için -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

@@ -2,6 +2,7 @@ package com.mertkaradag.stepviewer
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.opengl.GLSurfaceView
 import android.util.AttributeSet
 import android.view.GestureDetector
@@ -13,10 +14,10 @@ import javax.microedition.khronos.egl.EGLDisplay
 
 /**
  * 3B model görünümü.
- * - Tek parmak: döndür
+ * - Tek parmak: döndür (bırakınca ataletle devam eder)
  * - İki parmak: kıstırarak yakınlaştır, sürükleyerek kaydır
- * - Çift dokunma: görünümü sıfırla
- * - Tek dokunma: [onTap] ile bildirilir (ölçüm modunda kenar seçimi)
+ * - Çift dokunma: modeli 360° döndür
+ * - Tek dokunma: [onTap] ile bildirilir (ölçüm / seçim)
  */
 class ModelView @JvmOverloads constructor(
     context: Context,
@@ -24,16 +25,15 @@ class ModelView @JvmOverloads constructor(
 ) : GLSurfaceView(context, attrs) {
 
     val camera = Camera()
-    private val renderer = ModelRenderer(camera)
+    private val renderer = ModelRenderer(camera) { requestRender() }
 
     /** Sürükleme olmadan yapılan tek dokunuş (piksel koordinatları). */
     var onTap: ((x: Float, y: Float) -> Unit)? = null
 
     private var lastX = 0f
     private var lastY = 0f
-    private var lastFocusX = 0f
-    private var lastFocusY = 0f
     private var activePointers = 0
+    private var multiTouchHappened = false
 
     private val scaleDetector = ScaleGestureDetector(context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
@@ -44,15 +44,23 @@ class ModelView @JvmOverloads constructor(
             }
         })
 
-    private val tapDetector = GestureDetector(context,
+    private val gestureDetector = GestureDetector(context,
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                resetView()
+                spin360()
                 return true
             }
 
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
                 onTap?.invoke(e.x, e.y)
+                return true
+            }
+
+            override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
+                if (!multiTouchHappened) {
+                    camera.fling(vx, vy)
+                    requestRender()
+                }
                 return true
             }
         })
@@ -71,9 +79,56 @@ class ModelView @JvmOverloads constructor(
         requestRender()
     }
 
-    /** Seçili kenarları ve ölçü çizgisini çizdirir (null = temizle). */
-    fun setSelection(highlight: FloatArray?, measure: FloatArray?) {
-        queueEvent { renderer.setSelection(highlight, measure) }
+    fun setOverlay(overlay: ModelRenderer.Overlay) {
+        queueEvent { renderer.setOverlay(overlay) }
+        requestRender()
+    }
+
+    fun setVisibility(triRanges: IntArray?, segRanges: IntArray?) {
+        queueEvent { renderer.setVisibility(triRanges, segRanges) }
+        requestRender()
+    }
+
+    fun setDisplayMode(mode: ModelRenderer.DisplayMode) {
+        queueEvent { renderer.setDisplayMode(mode) }
+        requestRender()
+    }
+
+    fun setClipPlane(plane: FloatArray?) {
+        queueEvent { renderer.setClipPlane(plane) }
+        requestRender()
+    }
+
+    /** Görüntüyü alır; callback ana iş parçacığında çağrılır. */
+    fun captureScreenshot(callback: (Bitmap?) -> Unit) {
+        queueEvent {
+            renderer.captureScreenshot { bmp -> post { callback(bmp) } }
+        }
+        requestRender()
+    }
+
+    fun animateTo(view: Camera.View) {
+        camera.animateTo(view)
+        requestRender()
+    }
+
+    fun fit() {
+        camera.animateFit()
+        requestRender()
+    }
+
+    fun spin360() {
+        camera.spin360()
+        requestRender()
+    }
+
+    fun setOrthographic(ortho: Boolean) {
+        camera.orthographic = ortho
+        requestRender()
+    }
+
+    fun setUpAxis(axis: Camera.UpAxis) {
+        camera.upAxis = axis
         requestRender()
     }
 
@@ -85,36 +140,26 @@ class ModelView @JvmOverloads constructor(
         return mvp
     }
 
-    fun setShowEdges(show: Boolean) {
-        renderer.showEdges = show
-        requestRender()
-    }
-
-    fun resetView() {
-        camera.reset()
-        requestRender()
-    }
-
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        tapDetector.onTouchEvent(event)
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            // Dokunulunca animasyon, tur ve atalet durur
+            camera.stopMotion()
+            multiTouchHappened = false
+        }
+        gestureDetector.onTouchEvent(event)
         scaleDetector.onTouchEvent(event)
 
-        // Parmak sayısı değişince referans noktalarını yenile; aksi halde sıçrama olur.
         val pointerCount = event.pointerCount
-        val focusX = (0 until pointerCount).map { event.getX(it) }.average().toFloat()
-        val focusY = (0 until pointerCount).map { event.getY(it) }.average().toFloat()
-
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN,
             MotionEvent.ACTION_POINTER_DOWN,
             MotionEvent.ACTION_POINTER_UP -> {
-                activePointers = if (event.actionMasked == MotionEvent.ACTION_POINTER_UP) {
-                    pointerCount - 1
-                } else {
-                    pointerCount
-                }
-                val upIndex = if (event.actionMasked == MotionEvent.ACTION_POINTER_UP) event.actionIndex else -1
+                val isUp = event.actionMasked == MotionEvent.ACTION_POINTER_UP
+                activePointers = if (isUp) pointerCount - 1 else pointerCount
+                if (activePointers > 1) multiTouchHappened = true
+                // Parmak sayısı değişince referans noktasını yenile; aksi halde sıçrama olur.
+                val upIndex = if (isUp) event.actionIndex else -1
                 var sx = 0f
                 var sy = 0f
                 var n = 0
@@ -127,21 +172,25 @@ class ModelView @JvmOverloads constructor(
                 if (n > 0) {
                     lastX = sx / n
                     lastY = sy / n
-                    lastFocusX = lastX
-                    lastFocusY = lastY
                 }
             }
 
             MotionEvent.ACTION_MOVE -> {
-                if (activePointers == 1 && pointerCount == 1) {
-                    camera.rotate(focusX - lastX, focusY - lastY)
-                    lastX = focusX
-                    lastY = focusY
-                } else if (activePointers >= 2) {
-                    camera.pan(focusX - lastFocusX, focusY - lastFocusY)
-                    lastFocusX = focusX
-                    lastFocusY = focusY
+                var sx = 0f
+                var sy = 0f
+                for (i in 0 until pointerCount) {
+                    sx += event.getX(i)
+                    sy += event.getY(i)
                 }
+                val fx = sx / pointerCount
+                val fy = sy / pointerCount
+                if (activePointers == 1 && pointerCount == 1 && !multiTouchHappened) {
+                    camera.rotate(fx - lastX, fy - lastY)
+                } else if (activePointers >= 2) {
+                    camera.pan(fx - lastX, fy - lastY)
+                }
+                lastX = fx
+                lastY = fy
                 requestRender()
             }
 
