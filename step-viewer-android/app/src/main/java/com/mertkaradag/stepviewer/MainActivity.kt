@@ -370,7 +370,7 @@ class MainActivity : AppCompatActivity() {
                     if (hasPersistedPermission(uri)) recentFiles.add(uri, name)
                 }.onFailure { e ->
                     showRecentFiles()
-                    showError(e.message ?: getString(R.string.error_unknown))
+                    showError(localizedError(e.message))
                 }
             }
         }
@@ -419,6 +419,22 @@ class MainActivity : AppCompatActivity() {
                     DateFormat.getTimeFormat(this).format(item.time)
             row.setOnClickListener { loadModel(item.uri, persist = false) }
             recentList.addView(row)
+        }
+    }
+
+    /** Yerel çekirdeğin hata kodlarını (ör. "read_failed:STEP") cihaz diline çevirir. */
+    private fun localizedError(message: String?): String {
+        if (message.isNullOrBlank()) return getString(R.string.error_unknown)
+        val code = message.substringBefore(':')
+        val arg = message.substringAfter(':', "")
+        return when (code) {
+            "read_failed" -> getString(R.string.error_read_format, arg)
+            "transfer_failed" -> getString(R.string.error_transfer_format, arg)
+            "unsupported_format" -> getString(R.string.error_unsupported)
+            "no_geometry" -> getString(R.string.error_no_geometry)
+            "out_of_memory" -> getString(R.string.error_oom)
+            "unknown_error" -> getString(R.string.error_unknown)
+            else -> message
         }
     }
 

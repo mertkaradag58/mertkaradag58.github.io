@@ -233,7 +233,7 @@ class ModelView @JvmOverloads constructor(
                     configs[0]?.let { return it }
                 }
             }
-            throw IllegalStateException("Uygun bir OpenGL ES 3 yapılandırması bulunamadı")
+            throw IllegalStateException("No suitable OpenGL ES 3 config found")
         }
     }
 }

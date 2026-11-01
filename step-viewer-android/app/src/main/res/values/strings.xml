@@ -1,128 +1,133 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Varsayılan dil İngilizce; Türkçe metinler values-tr/strings.xml içinde. -->
 <resources>
     <string name="app_name">Cepte CAD</string>
-    <string name="untitled">Adsız</string>
+    <string name="untitled">Untitled</string>
 
     <!-- Araç çubuğu -->
-    <string name="open">Aç</string>
-    <string name="measure">Ölç</string>
-    <string name="section">Kesit</string>
-    <string name="parts">Parçalar</string>
-    <string name="select">Seç</string>
-    <string name="display_shaded_edges">Kenarlı</string>
-    <string name="display_shaded">Gölgeli</string>
-    <string name="display_wireframe">Tel kafes</string>
-    <string name="fit">Sığdır</string>
-    <string name="spin">360° döndür</string>
-    <string name="views">Görünümler</string>
-    <string name="more">Diğer</string>
+    <string name="open">Open</string>
+    <string name="measure">Measure</string>
+    <string name="section">Section</string>
+    <string name="parts">Parts</string>
+    <string name="select">Select</string>
+    <string name="display_shaded_edges">Edges</string>
+    <string name="display_shaded">Shaded</string>
+    <string name="display_wireframe">Wireframe</string>
+    <string name="fit">Fit</string>
+    <string name="spin">Spin 360°</string>
+    <string name="views">Views</string>
+    <string name="more">More</string>
 
     <!-- Boş ekran -->
-    <string name="empty_title">Bir CAD dosyası açın</string>
-    <string name="empty_subtitle">STEP (.step, .stp), IGES (.igs, .iges) ve BREP (.brep) dosyaları internet olmadan açılır.</string>
-    <string name="empty_open">Dosya seç</string>
-    <string name="recent_files">Son açılanlar</string>
-    <string name="gesture_hint">Tek parmak döndür · iki parmak yakınlaştır ve kaydır · çift dokun: 360° tur · uzun bas: parça seç</string>
+    <string name="empty_title">Open a CAD file</string>
+    <string name="empty_subtitle">STEP (.step, .stp), IGES (.igs, .iges) and BREP (.brep) files open without an internet connection.</string>
+    <string name="empty_open">Choose file</string>
+    <string name="recent_files">Recent files</string>
+    <string name="gesture_hint">One finger rotates · two fingers zoom and pan · double tap: 360° spin · long press: select part</string>
 
     <!-- Yükleme -->
-    <string name="loading_file">%1$s okunuyor…</string>
-    <string name="meshing_file">%1$s işleniyor…\nBüyük montajlar biraz sürebilir.</string>
-    <string name="model_info_line">%1$s · %2$d parça · %3$,d üçgen · %4$.1f sn</string>
-    <string name="busy">Bir dosya zaten yükleniyor</string>
+    <string name="loading_file">Reading %1$s…</string>
+    <string name="meshing_file">Processing %1$s…\nLarge assemblies may take a while.</string>
+    <string name="model_info_line">%1$s · %2$d parts · %3$,d triangles · %4$.1f s</string>
+    <string name="busy">A file is already loading</string>
 
     <!-- Hatalar -->
-    <string name="error_title">Dosya açılamadı</string>
-    <string name="error_open">Dosya açılamadı.</string>
-    <string name="error_oom">Bellek yetersiz: model bu cihaz için çok büyük.</string>
-    <string name="error_permission">Bu dosyayı okuma izni yok. Dosyayı yeniden seçin.</string>
-    <string name="error_unknown">Bilinmeyen bir hata oluştu.</string>
+    <string name="error_title">Could not open file</string>
+    <string name="error_open">Could not open the file.</string>
+    <string name="error_oom">Out of memory: the model is too large for this device.</string>
+    <string name="error_permission">No permission to read this file. Please choose it again.</string>
+    <string name="error_unknown">An unknown error occurred.</string>
+    <string name="error_read_format">Could not read the %1$s file (invalid or corrupt file).</string>
+    <string name="error_transfer_format">Could not convert the %1$s data.</string>
+    <string name="error_unsupported">Unsupported file format. Choose a STEP (.step/.stp), IGES (.igs/.iges) or BREP (.brep) file.</string>
+    <string name="error_no_geometry">The file contains no displayable geometry.</string>
 
     <!-- Görünümler -->
-    <string name="view_iso">İzometrik</string>
-    <string name="view_front">Ön</string>
-    <string name="view_back">Arka</string>
-    <string name="view_top">Üst</string>
-    <string name="view_bottom">Alt</string>
-    <string name="view_left">Sol</string>
-    <string name="view_right">Sağ</string>
-    <string name="view_ortho">Ortografik izdüşüm</string>
-    <string name="view_y_up">Y ekseni yukarı</string>
+    <string name="view_iso">Isometric</string>
+    <string name="view_front">Front</string>
+    <string name="view_back">Back</string>
+    <string name="view_top">Top</string>
+    <string name="view_bottom">Bottom</string>
+    <string name="view_left">Left</string>
+    <string name="view_right">Right</string>
+    <string name="view_ortho">Orthographic projection</string>
+    <string name="view_y_up">Y axis up</string>
 
     <!-- Menü -->
-    <string name="menu_model_info">Model bilgisi</string>
-    <string name="menu_share">Görüntüyü paylaş</string>
-    <string name="menu_about">Hakkında ve lisanslar</string>
-    <string name="share_title">Görüntüyü paylaş</string>
-    <string name="share_failed">Görüntü alınamadı</string>
+    <string name="menu_model_info">Model info</string>
+    <string name="menu_share">Share image</string>
+    <string name="menu_about">About and licenses</string>
+    <string name="share_title">Share image</string>
+    <string name="share_failed">Could not capture the image</string>
 
     <!-- Ölçüm -->
-    <string name="measure_hint_first">Ölçmek için bir kenara veya yüzeye dokunun</string>
-    <string name="measure_hint_second">İkinci kenara veya yüzeye dokunun · boş yere dokunmak seçimi temizler</string>
-    <string name="measure_busy">Hesaplanıyor…</string>
+    <string name="measure_hint_first">Tap an edge or face to measure</string>
+    <string name="measure_hint_second">Tap a second edge or face · tap empty space to clear</string>
+    <string name="measure_busy">Calculating…</string>
     <string name="sel_label">%1$d) %2$s</string>
-    <string name="geom_line">Doğru · L = %1$s mm</string>
-    <string name="geom_circle">Çember · Ø %1$s mm (R %2$s)</string>
-    <string name="geom_arc">Yay · Ø %1$s mm (R %2$s) · L = %3$s mm</string>
-    <string name="geom_ellipse">Elips · %1$s × %2$s mm · L = %3$s mm</string>
-    <string name="geom_curve">Eğri · L = %1$s mm</string>
-    <string name="geom_plane">Düzlem · alan %1$s mm²</string>
-    <string name="geom_cylinder">Silindir · Ø %1$s mm (R %2$s) · alan %3$s mm²</string>
-    <string name="geom_cone">Koni · yarı açı %1$s° · alan %2$s mm²</string>
-    <string name="geom_sphere">Küre · Ø %1$s mm · alan %2$s mm²</string>
+    <string name="geom_line">Line · L = %1$s mm</string>
+    <string name="geom_circle">Circle · Ø %1$s mm (R %2$s)</string>
+    <string name="geom_arc">Arc · Ø %1$s mm (R %2$s) · L = %3$s mm</string>
+    <string name="geom_ellipse">Ellipse · %1$s × %2$s mm · L = %3$s mm</string>
+    <string name="geom_curve">Curve · L = %1$s mm</string>
+    <string name="geom_plane">Plane · area %1$s mm²</string>
+    <string name="geom_cylinder">Cylinder · Ø %1$s mm (R %2$s) · area %3$s mm²</string>
+    <string name="geom_cone">Cone · half angle %1$s° · area %2$s mm²</string>
+    <string name="geom_sphere">Sphere · Ø %1$s mm · area %2$s mm²</string>
     <string name="geom_torus">Torus · R %1$s / r %2$s mm</string>
-    <string name="geom_surface">Serbest yüzey · alan %1$s mm²</string>
-    <string name="geom_unknown">Bilgi alınamadı</string>
-    <string name="measure_distance">Mesafe: %1$s mm</string>
-    <string name="measure_parallel">Paralel düzlemler arası: %1$s mm</string>
-    <string name="measure_angle">Açı: %1$s°</string>
-    <string name="measure_center">Merkezler / eksenler arası: %1$s mm</string>
+    <string name="geom_surface">Freeform surface · area %1$s mm²</string>
+    <string name="geom_unknown">No information available</string>
+    <string name="measure_distance">Distance: %1$s mm</string>
+    <string name="measure_parallel">Between parallel planes: %1$s mm</string>
+    <string name="measure_angle">Angle: %1$s°</string>
+    <string name="measure_center">Between centers / axes: %1$s mm</string>
     <string name="measure_delta">ΔX %1$s · ΔY %2$s · ΔZ %3$s mm</string>
 
     <!-- Kesit -->
-    <string name="section_axis">Kesit ekseni</string>
-    <string name="section_flip">Ters çevir</string>
-    <string name="section_close">Kesiti kapat</string>
+    <string name="section_axis">Section axis</string>
+    <string name="section_flip">Flip</string>
+    <string name="section_close">Close section</string>
     <string name="section_position">%1$s = %2$s mm</string>
 
     <!-- Parçalar -->
-    <string name="parts_title">Parçalar (%1$d)</string>
-    <string name="parts_show_all">Tümünü göster</string>
-    <string name="part_fallback">Parça %1$d</string>
-    <string name="assembly_fallback">Montaj</string>
-    <string name="part_isolate">Yalnız bunu göster</string>
-    <string name="part_toggle">Göster / gizle</string>
-    <string name="parts_search">Parça ara</string>
-    <string name="parts_no_match">Eşleşen parça yok</string>
+    <string name="parts_title">Parts (%1$d)</string>
+    <string name="parts_show_all">Show all</string>
+    <string name="part_fallback">Part %1$d</string>
+    <string name="assembly_fallback">Assembly</string>
+    <string name="part_isolate">Show only this</string>
+    <string name="part_toggle">Show / hide</string>
+    <string name="parts_search">Search parts</string>
+    <string name="parts_no_match">No matching parts</string>
 
     <!-- Parça seçme -->
-    <string name="select_hint">Bir parçaya dokunun · herhangi bir modda parçaya uzun basmak da seçer</string>
-    <string name="select_hide">Gizle</string>
-    <string name="select_isolate">Yalnız bu</string>
-    <string name="select_info">Bilgi</string>
-    <string name="select_close">Seçimi kapat</string>
-    <string name="select_part_index">Parça %1$d / %2$d</string>
-    <string name="hidden_count">%1$d parça gizli</string>
-    <string name="undo">Geri al</string>
-    <string name="part_info_title">Parça bilgisi</string>
-    <string name="info_part_counts">%1$,d yüzey · %2$,d üçgen</string>
+    <string name="select_hint">Tap a part · a long press on a part selects it in any mode</string>
+    <string name="select_hide">Hide</string>
+    <string name="select_isolate">Only this</string>
+    <string name="select_info">Info</string>
+    <string name="select_close">Clear selection</string>
+    <string name="select_part_index">Part %1$d / %2$d</string>
+    <string name="hidden_count">%1$d parts hidden</string>
+    <string name="undo">Undo</string>
+    <string name="part_info_title">Part info</string>
+    <string name="info_part_counts">%1$,d faces · %2$,d triangles</string>
 
     <!-- Model bilgisi -->
-    <string name="info_title">Model bilgisi</string>
-    <string name="info_scope_all">Tüm model (%1$d parça)</string>
-    <string name="info_scope_visible">Görünen parçalar (%1$d / %2$d)</string>
-    <string name="info_format">Biçim: %1$s</string>
-    <string name="info_size">Boyutlar: %1$s × %2$s × %3$s mm</string>
-    <string name="info_counts">%1$d parça · %2$,d yüzey · %3$,d üçgen</string>
-    <string name="info_volume">Hacim: %1$s cm³</string>
-    <string name="info_area">Yüzey alanı: %1$s cm²</string>
-    <string name="info_center">Ağırlık merkezi: (%1$s, %2$s, %3$s) mm</string>
-    <string name="info_mass">Kütle: %1$s</string>
-    <string name="info_no_solid">Modelde katı cisim yok; hacim ve kütle hesaplanamaz.</string>
-    <string name="info_material">Malzeme</string>
-    <string name="info_density">Yoğunluk (g/cm³)</string>
+    <string name="info_title">Model info</string>
+    <string name="info_scope_all">Whole model (%1$d parts)</string>
+    <string name="info_scope_visible">Visible parts (%1$d / %2$d)</string>
+    <string name="info_format">Format: %1$s</string>
+    <string name="info_size">Size: %1$s × %2$s × %3$s mm</string>
+    <string name="info_counts">%1$d parts · %2$,d faces · %3$,d triangles</string>
+    <string name="info_volume">Volume: %1$s cm³</string>
+    <string name="info_area">Surface area: %1$s cm²</string>
+    <string name="info_center">Center of mass: (%1$s, %2$s, %3$s) mm</string>
+    <string name="info_mass">Mass: %1$s</string>
+    <string name="info_no_solid">The model has no solid bodies; volume and mass cannot be calculated.</string>
+    <string name="info_material">Material</string>
+    <string name="info_density">Density (g/cm³)</string>
 
     <!-- Hakkında -->
     <string name="about_title">Cepte CAD %1$s</string>
-    <string name="about_text">CAD dosyalarını telefonda internet olmadan görüntüleme ve ölçme uygulaması.\n\nBu uygulama Open CASCADE Technology (OCCT) 7.8.1 kullanır. OCCT, GNU Lesser General Public License (LGPL) 2.1 ve Open CASCADE istisnası ile lisanslıdır. OCCT kaynak kodu: https://github.com/Open-Cascade-SAS/OCCT\n\nUygulamanın kaynak kodu: https://github.com/mertkaradag58/mertkaradag58.github.io/tree/main/step-viewer-android\n\nGizlilik politikası: https://mertkaradag58.github.io/step-goruntuleyici/gizlilik.html</string>
-    <string name="ok">Tamam</string>
+    <string name="about_text">View and measure CAD files on your phone, without an internet connection.\n\nThis app uses Open CASCADE Technology (OCCT) 7.8.1. OCCT is licensed under the GNU Lesser General Public License (LGPL) 2.1 with the Open CASCADE exception. OCCT source code: https://github.com/Open-Cascade-SAS/OCCT\n\nApp source code: https://github.com/mertkaradag58/mertkaradag58.github.io/tree/main/step-viewer-android\n\nPrivacy policy: https://mertkaradag58.github.io/step-goruntuleyici/gizlilik.html</string>
+    <string name="ok">OK</string>
 </resources>

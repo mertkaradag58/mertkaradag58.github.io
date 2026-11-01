@@ -154,11 +154,11 @@ bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Doc
       reader.SetMatMode(false);
       reader.SetViewMode(false);
       if (reader.ReadFile(path.c_str()) != IFSelect_RetDone) {
-        error = "STEP dosyası okunamadı (geçersiz veya bozuk dosya).";
+        error = "read_failed:STEP";
         return false;
       }
       if (!reader.Transfer(doc)) {
-        error = "STEP verisi aktarılamadı.";
+        error = "transfer_failed:STEP";
         return false;
       }
       return true;
@@ -169,11 +169,11 @@ bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Doc
       reader.SetNameMode(true);
       reader.SetLayerMode(false);
       if (reader.ReadFile(path.c_str()) != IFSelect_RetDone) {
-        error = "IGES dosyası okunamadı (geçersiz veya bozuk dosya).";
+        error = "read_failed:IGES";
         return false;
       }
       if (!reader.Transfer(doc)) {
-        error = "IGES verisi aktarılamadı.";
+        error = "transfer_failed:IGES";
         return false;
       }
       return true;
@@ -182,7 +182,7 @@ bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Doc
       TopoDS_Shape shape;
       BRep_Builder builder;
       if (!BRepTools::Read(shape, path.c_str(), builder) || shape.IsNull()) {
-        error = "BREP dosyası okunamadı.";
+        error = "read_failed:BREP";
         return false;
       }
       Handle(XCAFDoc_ShapeTool) shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
@@ -190,7 +190,7 @@ bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Doc
       return true;
     }
     default:
-      error = "Desteklenmeyen dosya biçimi. STEP, IGES veya BREP dosyası seçin.";
+      error = "unsupported_format";
       return false;
   }
 }
@@ -199,8 +199,7 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
               std::string& error) {
   out.format = DetectFormat(path);
   if (out.format == FileFormat::Unknown) {
-    error = "Desteklenmeyen dosya biçimi. STEP (.step/.stp), IGES (.igs/.iges) veya BREP "
-            "(.brep) dosyası seçin.";
+    error = "unsupported_format";
     return false;
   }
 
@@ -218,7 +217,7 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
   TDF_LabelSequence freeShapes;
   shapeTool->GetFreeShapes(freeShapes);
   if (freeShapes.IsEmpty()) {
-    error = "Dosyada geometri bulunamadı.";
+    error = "no_geometry";
     app->Close(doc);
     return false;
   }
@@ -237,7 +236,7 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
   Bnd_Box box;
   BRepBndLib::Add(compound, box, false);
   if (box.IsVoid()) {
-    error = "Dosyada görüntülenebilir geometri yok.";
+    error = "no_geometry";
     app->Close(doc);
     return false;
   }
@@ -345,7 +344,7 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
   }
 
   if (out.indices.empty()) {
-    error = "Model üçgenlenemedi (yüzey bulunamadı).";
+    error = "no_geometry";
     return false;
   }
   for (int i = 0; i < 3; ++i) {
@@ -386,13 +385,13 @@ bool LoadModelFile(const std::string& path, const MeshOptions& options, MeshData
   try {
     if (LoadImpl(path, options, out, error)) return true;
   } catch (const Standard_Failure& e) {
-    error = std::string("OCCT hatası: ") + e.GetMessageString();
+    error = std::string("OCCT: ") + e.GetMessageString();
   } catch (const std::bad_alloc&) {
-    error = "Bellek yetersiz: model bu cihaz için çok büyük.";
+    error = "out_of_memory";
   } catch (const std::exception& e) {
-    error = std::string("Hata: ") + e.what();
+    error = std::string("Error: ") + e.what();
   } catch (...) {
-    error = "Bilinmeyen bir hata oluştu.";
+    error = "unknown_error";
   }
   out = MeshData();
   return false;

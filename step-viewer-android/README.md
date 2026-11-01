@@ -7,7 +7,7 @@ STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) dosyalarını
 - **Çizim:** OpenGL ES 3.0, `GLSurfaceView`, 4x MSAA
 - **Arayüz:** Kotlin, Material 3 (koyu tema, kenardan kenara)
 
-## Özellikler (v0.3)
+## Özellikler (v1.0)
 
 **Dosya**
 - Dosya seçiciden veya dosya yöneticisinde **"Birlikte aç"** ile STEP / IGES / BREP açma
@@ -34,6 +34,7 @@ STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) dosyalarını
 - Gizli parça varken "Geri al" ve "Tümünü göster" kısayolları
 - **Model bilgisi:** boyutlar, hacim, yüzey alanı, kütle merkezi; malzeme seçimi veya özel yoğunluk ile kütle
 - **Ekran görüntüsü paylaşma** (ölçüm sonucu ve dosya adı resmin üstüne yazılır)
+- **İki dil:** telefon Türkçeyse Türkçe, değilse İngilizce (`res/values-tr` ve `res/values`); yerel çekirdek hata kodu döner, metin Kotlin tarafında çevrilir
 
 Sonra: PMI / GD&T (STEP AP242 içindeki toleranslar) ayrı bir iş olarak planlandı.
 
