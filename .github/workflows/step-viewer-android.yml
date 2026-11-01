@@ -85,7 +85,7 @@ jobs:
           SO=/tmp/apk/lib/arm64-v8a/libstepviewer.so
           LLVM="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           echo "--- JNI sembolü"
-          "$LLVM/llvm-nm" -D --defined-only "$SO" | grep Java_com_mertkaradag_stepviewer_StepNative_loadStep
+          "$LLVM/llvm-nm" -D --defined-only "$SO" | grep Java_com_mertkaradag_stepviewer_StepNative_loadModel
           echo "--- Bağımlılıklar"
           "$LLVM/llvm-readelf" -d "$SO" | grep NEEDED
           echo "--- 16 KB sayfa hizalaması"
