@@ -82,7 +82,7 @@ class Ads(private val activity: Activity, private val bannerContainer: ViewGroup
         view.adUnitId = BuildConfig.ADMOB_BANNER_ID
         val metrics = activity.resources.displayMetrics
         val widthDp = (bannerContainer.width.takeIf { it > 0 } ?: metrics.widthPixels) / metrics.density
-        view.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerSize(activity, widthDp.toInt()))
+        view.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(activity, widthDp.toInt()))
         view.adListener = object : AdListener() {
             override fun onAdLoaded() {
                 bannerContainer.visibility = View.VISIBLE
