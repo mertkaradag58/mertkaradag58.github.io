@@ -66,8 +66,8 @@ class MeasureController(
             val infoA = StepNative.shapeInfo(a.kind, a.id)
             val infoB = b?.let { StepNative.shapeInfo(it.kind, it.id) }
             val pair = b?.let { StepNative.measurePair(a.kind, a.id, it.kind, it.id) }
-            runOnUi {
-                if (req != request) return@runOnUi  // daha yeni bir seçim var
+            runOnUi(fun() {
+                if (req != request) return  // daha yeni bir seçim var
                 val lines = mutableListOf(context.getString(R.string.sel_label, 1, describe(infoA)))
                 var line: FloatArray? = null
                 if (b == null) {
@@ -90,7 +90,7 @@ class MeasureController(
                 }
                 lastText = lines.joinToString("\n")
                 onResult(lastText, buildOverlay(m, listOfNotNull(a, b), line))
-            }
+            })
         }
     }
 

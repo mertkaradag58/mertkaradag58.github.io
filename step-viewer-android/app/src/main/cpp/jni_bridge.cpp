@@ -175,7 +175,7 @@ Java_com_mertkaradag_stepviewer_StepNative_shapeInfo(JNIEnv* env, jobject /*thiz
   TopoDS_Shape shape;
   stepviewer::ShapeInfo i;
   if (!GetStoredShape(kind, id, shape) || !stepviewer::GetShapeInfo(shape, i)) return nullptr;
-  return ToJava(env, {static_cast<double>(i.kind), i.length, i.area, i.radius, i.radius2,
+  return ToJava(env, std::vector<double>{static_cast<double>(i.kind), i.length, i.area, i.radius, i.radius2,
                       i.angleDeg, i.center[0], i.center[1], i.center[2], i.dir[0], i.dir[1],
                       i.dir[2]});
 }
@@ -192,7 +192,7 @@ Java_com_mertkaradag_stepviewer_StepNative_measurePair(JNIEnv* env, jobject /*th
       !stepviewer::MeasurePair(a, b, m)) {
     return nullptr;
   }
-  return ToJava(env, {m.distance, m.p1[0], m.p1[1], m.p1[2], m.p2[0], m.p2[1], m.p2[2],
+  return ToJava(env, std::vector<double>{m.distance, m.p1[0], m.p1[1], m.p1[2], m.p2[0], m.p2[1], m.p2[2],
                       m.angleDeg, m.centerDistance, m.parallelDistance});
 }
 
@@ -218,6 +218,6 @@ Java_com_mertkaradag_stepviewer_StepNative_massProps(JNIEnv* env, jobject /*thiz
   }
   stepviewer::MassProps p;
   if (shapes.empty() || !stepviewer::ComputeMassProps(shapes, p)) return nullptr;
-  return ToJava(env, {p.volume, p.area, p.center[0], p.center[1], p.center[2],
+  return ToJava(env, std::vector<double>{p.volume, p.area, p.center[0], p.center[1], p.center[2],
                       p.hasSolids ? 1.0 : 0.0});
 }
