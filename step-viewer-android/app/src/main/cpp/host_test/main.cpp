@@ -1,5 +1,6 @@
-// Masaüstü testi: step_mesher çekirdeğini Android olmadan dener.
-// Kullanım: step_host_test dosya.step [cikti.obj] [--info] [--measure i j]...
+// Masaüstü testi: çekirdeği Android olmadan dener.
+// Kullanım: step_host_test dosya [cikti.obj] [--tree] [--info] [--faces]
+//           [--measure e|f i e|f j]... [--mass]
 #include "../step_mesher.h"
 
 #include <chrono>
@@ -7,58 +8,105 @@
 #include <cstdlib>
 #include <cstring>
 
-static const char* TypeName(stepviewer::EdgeType t) {
-  switch (t) {
-    case stepviewer::EdgeType::Line: return "dogru";
-    case stepviewer::EdgeType::Circle: return "cember";
-    case stepviewer::EdgeType::Ellipse: return "elips";
-    case stepviewer::EdgeType::BSpline: return "bspline";
+using namespace stepviewer;
+
+static const char* KindName(GeomKind k) {
+  switch (k) {
+    case GeomKind::Line: return "dogru";
+    case GeomKind::Circle: return "cember";
+    case GeomKind::Ellipse: return "elips";
+    case GeomKind::Curve: return "egri";
+    case GeomKind::Plane: return "duzlem";
+    case GeomKind::Cylinder: return "silindir";
+    case GeomKind::Cone: return "koni";
+    case GeomKind::Sphere: return "kure";
+    case GeomKind::Torus: return "torus";
+    case GeomKind::Surface: return "yuzey";
     default: return "diger";
   }
 }
 
+static const TopoDS_Shape* Pick(const MeshData& m, const char* kind, size_t id) {
+  if (kind[0] == 'e' && id < m.edgeShapes.size()) return &m.edgeShapes[id];
+  if (kind[0] == 'f' && id < m.faceShapes.size()) return &m.faceShapes[id];
+  return nullptr;
+}
+
+static void PrintInfo(const char* label, size_t id, const TopoDS_Shape& s) {
+  ShapeInfo i;
+  if (!GetShapeInfo(s, i)) {
+    std::printf("%s %zu: bilgi yok\n", label, id);
+    return;
+  }
+  std::printf("%s %zu: %s L=%.4f A=%.4f R=%.4f R2=%.4f aci=%.2f merkez=(%.3f %.3f %.3f) "
+              "yon=(%.3f %.3f %.3f)\n",
+              label, id, KindName(i.kind), i.length, i.area, i.radius, i.radius2, i.angleDeg,
+              i.center[0], i.center[1], i.center[2], i.dir[0], i.dir[1], i.dir[2]);
+}
+
 int main(int argc, char** argv) {
   if (argc < 2) {
-    std::fprintf(stderr, "Kullanim: %s dosya.step [cikti.obj]\n", argv[0]);
+    std::fprintf(stderr, "Kullanim: %s dosya [cikti.obj] [--tree] [--info] [--faces] "
+                         "[--measure e|f i e|f j] [--mass]\n", argv[0]);
     return 2;
   }
-  stepviewer::MeshData mesh;
+  MeshData mesh;
   std::string error;
   const auto t0 = std::chrono::steady_clock::now();
-  if (!stepviewer::LoadStepFile(argv[1], stepviewer::MeshOptions(), mesh, error)) {
+  if (!LoadModelFile(argv[1], MeshOptions(), mesh, error)) {
     std::fprintf(stderr, "HATA: %s\n", error.c_str());
     return 1;
   }
-  const double ms = std::chrono::duration<double, std::milli>(
-                        std::chrono::steady_clock::now() - t0).count();
-  std::printf("parca=%d yuzey=%d kose=%zu ucgen=%zu kenar_segment=%zu sure=%.0fms\n",
-              mesh.partCount, mesh.faceCount, mesh.vertexCount(), mesh.triangleCount(),
-              mesh.edges.size() / 6, ms);
+  const double ms =
+      std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+  std::printf("bicim=%d parca=%d yuzey=%d kenar=%zu kose=%zu ucgen=%zu sure=%.0fms\n",
+              static_cast<int>(mesh.format), mesh.partCount(), mesh.faceCount(),
+              mesh.edgeShapes.size(), mesh.vertexCount(), mesh.triangleCount(), ms);
   std::printf("bbox=(%.3f %.3f %.3f)-(%.3f %.3f %.3f)\n", mesh.bboxMin[0], mesh.bboxMin[1],
               mesh.bboxMin[2], mesh.bboxMax[0], mesh.bboxMax[1], mesh.bboxMax[2]);
 
-  std::printf("kenar_sayisi=%zu (offset=%zu)\n", mesh.edgeShapes.size(), mesh.edgeOffsets.size());
+  // Tutarlılık kontrolleri
+  bool ok = mesh.faceOffsets.size() == mesh.faceShapes.size() + 1 &&
+            mesh.edgeOffsets.size() == mesh.edgeShapes.size() + 1 &&
+            mesh.partFaceOffsets.size() == mesh.partShapes.size() + 1 &&
+            mesh.partEdgeOffsets.size() == mesh.partShapes.size() + 1 &&
+            mesh.faceOffsets.back() == static_cast<int32_t>(mesh.triangleCount()) &&
+            mesh.edgeOffsets.back() == static_cast<int32_t>(mesh.edges.size() / 6);
+  std::printf("tutarlilik=%s\n", ok ? "OK" : "HATALI");
+
   for (int a = 2; a < argc; ++a) {
-    if (std::strcmp(argv[a], "--info") == 0) {
-      for (size_t e = 0; e < mesh.edgeShapes.size(); ++e) {
-        stepviewer::EdgeInfo info;
-        if (!stepviewer::GetEdgeInfo(mesh.edgeShapes[e], info)) continue;
-        std::printf("kenar %zu: %s L=%.4f R=%.4f merkez=(%.3f %.3f %.3f) seg=%d..%d\n", e,
-                    TypeName(info.type), info.length, info.radius, info.center[0],
-                    info.center[1], info.center[2], mesh.edgeOffsets[e], mesh.edgeOffsets[e + 1]);
+    if (std::strcmp(argv[a], "--tree") == 0) {
+      for (const auto& n : mesh.tree) {
+        std::printf("%*s%s [%s] parcalar=%d..%d\n", n.depth * 2, "",
+                    n.name.empty() ? "(isimsiz)" : n.name.c_str(),
+                    n.isAssembly ? "montaj" : "parca", n.leafStart, n.leafEnd);
       }
-    } else if (std::strcmp(argv[a], "--measure") == 0 && a + 2 < argc) {
-      const size_t i = std::strtoul(argv[a + 1], nullptr, 10);
-      const size_t j = std::strtoul(argv[a + 2], nullptr, 10);
-      a += 2;
-      stepviewer::EdgeDistance d;
-      if (i < mesh.edgeShapes.size() && j < mesh.edgeShapes.size() &&
-          stepviewer::MeasureEdges(mesh.edgeShapes[i], mesh.edgeShapes[j], d)) {
-        std::printf("olcum %zu-%zu: mesafe=%.4f p1=(%.3f %.3f %.3f) p2=(%.3f %.3f %.3f) aci=%.2f merkez_mesafe=%.4f\n",
-                    i, j, d.distance, d.p1[0], d.p1[1], d.p1[2], d.p2[0], d.p2[1], d.p2[2],
-                    d.angleDeg, d.centerDistance);
+    } else if (std::strcmp(argv[a], "--info") == 0) {
+      for (size_t e = 0; e < mesh.edgeShapes.size(); ++e) PrintInfo("kenar", e, mesh.edgeShapes[e]);
+    } else if (std::strcmp(argv[a], "--faces") == 0) {
+      for (size_t f = 0; f < mesh.faceShapes.size(); ++f) PrintInfo("yuzey", f, mesh.faceShapes[f]);
+    } else if (std::strcmp(argv[a], "--measure") == 0 && a + 4 < argc) {
+      const char* ka = argv[a + 1];
+      const size_t ia = std::strtoul(argv[a + 2], nullptr, 10);
+      const char* kb = argv[a + 3];
+      const size_t ib = std::strtoul(argv[a + 4], nullptr, 10);
+      a += 4;
+      const TopoDS_Shape* sa = Pick(mesh, ka, ia);
+      const TopoDS_Shape* sb = Pick(mesh, kb, ib);
+      PairMeasure m;
+      if (sa && sb && MeasurePair(*sa, *sb, m)) {
+        std::printf("olcum %s%zu-%s%zu: mesafe=%.4f p1=(%.3f %.3f %.3f) p2=(%.3f %.3f %.3f) "
+                    "aci=%.2f merkez=%.4f paralel=%.4f\n",
+                    ka, ia, kb, ib, m.distance, m.p1[0], m.p1[1], m.p1[2], m.p2[0], m.p2[1],
+                    m.p2[2], m.angleDeg, m.centerDistance, m.parallelDistance);
       } else {
-        std::printf("olcum %zu-%zu: basarisiz\n", i, j);
+        std::printf("olcum %s%zu-%s%zu: basarisiz\n", ka, ia, kb, ib);
+      }
+    } else if (std::strcmp(argv[a], "--mass") == 0) {
+      MassProps p;
+      if (ComputeMassProps(mesh.partShapes, p)) {
+        std::printf("hacim=%.3f alan=%.3f merkez=(%.3f %.3f %.3f) kati=%d\n", p.volume, p.area,
+                    p.center[0], p.center[1], p.center[2], p.hasSolids ? 1 : 0);
       }
     }
   }
@@ -66,7 +114,7 @@ int main(int argc, char** argv) {
   if (argc >= 3 && argv[2][0] != '-') {
     FILE* f = std::fopen(argv[2], "w");
     if (!f) return 1;
-    const int k = stepviewer::kFloatsPerVertex;
+    const int k = kFloatsPerVertex;
     for (size_t i = 0; i < mesh.vertexCount(); ++i) {
       const float* v = &mesh.vertices[i * k];
       std::fprintf(f, "v %f %f %f %f %f %f\n", v[0], v[1], v[2], v[6], v[7], v[8]);
@@ -82,5 +130,5 @@ int main(int argc, char** argv) {
     }
     std::fclose(f);
   }
-  return 0;
+  return ok ? 0 : 3;
 }

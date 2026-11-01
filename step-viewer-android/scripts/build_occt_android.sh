@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Open CASCADE Technology'yi (OCCT) Android NDK ile statik kütüphane olarak derler.
 #
-# Yalnızca STEP okuma + üçgenleme için gereken araç takımları (ve bağımlılıkları)
-# derlenir: TKDESTEP, TKXCAF, TKMesh, TKRWMesh (+ TKBinXCAF, STEPCAFControl başlığı için).
+# Yalnızca STEP/IGES okuma + üçgenleme için gereken araç takımları (ve bağımlılıkları)
+# derlenir: TKDESTEP, TKDEIGES, TKXCAF, TKMesh, TKRWMesh (+ TKBinXCAF, STEPCAFControl başlığı için).
 # FreeType, OpenGL, Tcl/Tk, Draw, TBB gibi isteğe bağlı bileşenler kapalıdır.
 #
 # Kullanım:
@@ -38,7 +38,7 @@ if [[ ! -f "$SRC_DIR/CMakeLists.txt" ]]; then
     https://github.com/Open-Cascade-SAS/OCCT.git "$SRC_DIR"
 fi
 
-TOOLKITS="TKDESTEP;TKXCAF;TKMesh;TKRWMesh;TKBinXCAF"
+TOOLKITS="TKDESTEP;TKDEIGES;TKXCAF;TKMesh;TKRWMesh;TKBinXCAF"
 
 for ABI in $ABIS; do
   BUILD_DIR="$WORK_DIR/build-$ABI"
