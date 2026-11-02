@@ -239,11 +239,11 @@
     <string name="holes_h_cbore">Kaçak (mm)</string>
     <string name="holes_h_csink">Konik havşa</string>
     <string name="holes_h_note">Not</string>
-    <string name="menu_dxf">Yüzeyi DXF'e aktar (lazer kesim)</string>
+    <string name="menu_dxf">Yüzeyi DXF\'e aktar (lazer kesim)</string>
     <string name="dxf_cad_only">DXF aktarma STEP, IGES ve BREP dosyalarında çalışır.</string>
     <string name="dxf_pick_hint">Kesilecek düz yüze dokunun</string>
     <string name="dxf_not_planar">Bu yüz düz değil. Düz bir yüze dokunun.</string>
-    <string name="dxf_title">Yüzeyi DXF'e aktar</string>
+    <string name="dxf_title">Yüzeyi DXF\'e aktar</string>
     <string name="dxf_info">Ölçü: %1$s × %2$s mm
 İç kesim: %3$d
 

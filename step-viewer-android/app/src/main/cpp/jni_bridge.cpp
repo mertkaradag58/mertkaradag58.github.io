@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "drawing_views.h"
 #include "dxf_export.h"
 #include "hole_finder.h"
 #include "step_mesher.h"
@@ -375,5 +376,57 @@ Java_com_mertkaradag_stepviewer_StepNative_faceDxf(JNIEnv* env, jobject /*thiz*/
                           reinterpret_cast<const jbyte*>(r.text.data()));
   env->SetObjectArrayElement(result, 0, jtext);
   env->SetObjectArrayElement(result, 1, jinfo);
+  return result;
+}
+
+// Teknik resim görünüşleri (yalnızca CAD). partIds null ise tüm parçalar.
+// Dönüş: [float[] segmentler (x1, y1, x2, y2), int[] görünüş başına (görünenBaş, görünenAdet,
+// gizliBaş, gizliAdet) * 4] veya null.
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_com_mertkaradag_stepviewer_StepNative_drawingViews(JNIEnv* env, jobject /*thiz*/,
+                                                        jintArray jpartIds, jboolean zUp,
+                                                        jboolean hidden) {
+  std::vector<TopoDS_Shape> shapes;
+  {
+    std::lock_guard<std::mutex> lock(gStore.mutex);
+    if (gStore.mesh || gStore.parts.empty()) return nullptr;
+    if (jpartIds == nullptr) {
+      shapes = gStore.parts;
+    } else {
+      const jsize n = env->GetArrayLength(jpartIds);
+      std::vector<jint> ids(static_cast<size_t>(n));
+      env->GetIntArrayRegion(jpartIds, 0, n, ids.data());
+      for (jint id : ids) {
+        if (id >= 0 && static_cast<size_t>(id) < gStore.parts.size()) {
+          shapes.push_back(gStore.parts[static_cast<size_t>(id)]);
+        }
+      }
+    }
+  }
+  std::vector<stepviewer::DrawingView> views;
+  try {
+    if (!stepviewer::MakeDrawingViews(shapes, zUp, hidden, views)) return nullptr;
+  } catch (const Standard_Failure&) {
+    return nullptr;
+  }
+  std::vector<float> segs;
+  std::vector<int32_t> ranges;
+  for (const auto& v : views) {
+    ranges.push_back(static_cast<int32_t>(segs.size() / 4));
+    ranges.push_back(static_cast<int32_t>(v.visible.size() / 4));
+    segs.insert(segs.end(), v.visible.begin(), v.visible.end());
+    ranges.push_back(static_cast<int32_t>(segs.size() / 4));
+    ranges.push_back(static_cast<int32_t>(v.hidden.size() / 4));
+    segs.insert(segs.end(), v.hidden.begin(), v.hidden.end());
+  }
+  jclass objClass = env->FindClass("java/lang/Object");
+  if (objClass == nullptr) return nullptr;
+  jobjectArray result = env->NewObjectArray(2, objClass, nullptr);
+  if (result == nullptr) return nullptr;
+  jfloatArray js = ToJava(env, segs.data(), segs.size());
+  jintArray jr = ToJava(env, ranges);
+  if (!js || !jr) return nullptr;
+  env->SetObjectArrayElement(result, 0, js);
+  env->SetObjectArrayElement(result, 1, jr);
   return result;
 }

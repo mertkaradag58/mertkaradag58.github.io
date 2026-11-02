@@ -9,7 +9,7 @@ if(NOT OCCT_PREFIX)
 endif()
 file(GLOB OCCT_LIBS "${OCCT_PREFIX}/lib/libTK*.a")
 find_package(Threads REQUIRED)
-add_executable(step_host_test main.cpp ../step_mesher.cpp ../mesh_model.cpp ../mesh_import.cpp ../pmi_extract.cpp ../hole_finder.cpp ../dxf_export.cpp)
+add_executable(step_host_test main.cpp ../step_mesher.cpp ../mesh_model.cpp ../mesh_import.cpp ../pmi_extract.cpp ../hole_finder.cpp ../dxf_export.cpp ../drawing_views.cpp)
 target_include_directories(step_host_test PRIVATE "${OCCT_PREFIX}/include/opencascade")
 target_link_libraries(step_host_test PRIVATE
   -Wl,--start-group ${OCCT_LIBS} -Wl,--end-group Threads::Threads ${CMAKE_DL_LIBS})

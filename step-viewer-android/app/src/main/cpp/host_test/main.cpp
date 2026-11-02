@@ -3,11 +3,13 @@
 //           [--measure e|f i e|f j]... [--mass] [--holes]
 // --as-mesh: CAD modelinin üçgenlerini STL gibi (köşeleri kaynaşmamış) ham mesh'e çevirip mesh
 //            hattından geçirir; yüzey/kenar ayırma ve ölçüm mesh dosyası gibi denenir.
+#include "../drawing_views.h"
 #include "../dxf_export.h"
 #include "../hole_finder.h"
 #include "../mesh_model.h"
 #include "../step_mesher.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -161,6 +163,40 @@ int main(int argc, char** argv) {
         std::printf("dxf yuzey %zu: duz degil\n", fi);
       }
       a += 2;
+    } else if (std::strcmp(argv[a], "--drawing") == 0 && a + 1 < argc) {
+      std::vector<DrawingView> views;
+      const auto t0 = std::chrono::steady_clock::now();
+      const bool ok2 = MakeDrawingViews(mesh.partShapes, true, true, views);
+      const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      std::printf("teknik resim: %s (%.0f ms)\n", ok2 ? "OK" : "HATA", ms);
+      // Basit SVG: görünüşler yan yana
+      FILE* sf = std::fopen(argv[a + 1], "w");
+      if (sf) {
+        std::fprintf(sf, "<svg xmlns='http://www.w3.org/2000/svg' viewBox='-10 -10 900 400' width='1800' height='800'>\n<rect x='-10' y='-10' width='900' height='400' fill='white'/>\n");
+        for (size_t v = 0; v < views.size(); ++v) {
+          float mn[2] = {1e30f, 1e30f}, mx[2] = {-1e30f, -1e30f};
+          for (const auto* lst : {&views[v].visible, &views[v].hidden}) {
+            for (size_t i = 0; i + 1 < lst->size(); i += 2) {
+              mn[0] = std::min(mn[0], (*lst)[i]); mx[0] = std::max(mx[0], (*lst)[i]);
+              mn[1] = std::min(mn[1], (*lst)[i + 1]); mx[1] = std::max(mx[1], (*lst)[i + 1]);
+            }
+          }
+          std::printf("  gorunus %zu: gorunen=%zu gizli=%zu  bbox=(%.1f %.1f)-(%.1f %.1f)\n", v,
+                      views[v].visible.size() / 4, views[v].hidden.size() / 4, mn[0], mn[1], mx[0], mx[1]);
+          const float ox = 10.0f + v * 220.0f - mn[0], oy = 200.0f + mx[1];
+          for (int k = 0; k < 2; ++k) {
+            const auto& lst = k == 0 ? views[v].visible : views[v].hidden;
+            for (size_t i = 0; i + 3 < lst.size(); i += 4) {
+              std::fprintf(sf, "<line x1='%.2f' y1='%.2f' x2='%.2f' y2='%.2f' stroke='%s' stroke-width='0.4' %s/>\n",
+                           ox + lst[i], oy - lst[i + 1], ox + lst[i + 2], oy - lst[i + 3], k == 0 ? "black" : "gray",
+                           k == 0 ? "" : "stroke-dasharray='2,1'");
+            }
+          }
+        }
+        std::fprintf(sf, "</svg>\n");
+        std::fclose(sf);
+      }
+      a += 1;
     } else if (std::strcmp(argv[a], "--holes") == 0) {
       std::vector<HoleInfo> holes;
       const auto t0 = std::chrono::steady_clock::now();

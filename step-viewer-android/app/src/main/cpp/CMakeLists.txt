@@ -43,7 +43,8 @@ add_library(stepviewer SHARED
   mesh_import.cpp
   pmi_extract.cpp
   hole_finder.cpp
-  dxf_export.cpp)
+  dxf_export.cpp
+  drawing_views.cpp)
 
 target_include_directories(stepviewer PRIVATE ${OCCT_INCLUDE_DIR} "${ASSIMP_PREFIX}/include")
 
