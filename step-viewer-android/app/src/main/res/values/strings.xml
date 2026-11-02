@@ -206,4 +206,10 @@
     <string name="ar_reset">Back to real size</string>
     <string name="ar_unsupported">This phone does not support augmented reality (Google Play Services for AR).</string>
     <string name="ar_camera_needed">AR needs camera permission. The camera image is not saved or sent anywhere.</string>
+    <string name="ar_intro">Augmented reality places the model on your table or floor through the camera, at its real size (1:1). Move the phone slowly until an orange area appears, then tap it. One finger rotates, two fingers scale.\n\nThe camera image is not saved or sent anywhere.</string>
+    <string name="ar_start">Start</string>
+    <string name="ar_error">AR could not continue (%1$s). A report was saved.</string>
+    <string name="crash_title">The app closed unexpectedly</string>
+    <string name="crash_message">Sorry! An error report was saved on this phone. Sharing it with the developer helps fix the problem. It contains only technical details (phone model, Android version, error lines).</string>
+    <string name="crash_send">Share report</string>
 </resources>

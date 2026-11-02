@@ -87,6 +87,7 @@ class ArActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     private var indexCount = 0
     private val quadCoords: FloatBuffer = floatBuffer(floatArrayOf(-1f, -1f, 1f, -1f, -1f, 1f, 1f, 1f))
     private val quadTexCoords: FloatBuffer = floatBuffer(FloatArray(8))
+    private var planeBuffer: FloatBuffer = ByteBuffer.allocateDirect(256 * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
     private var uMvp = 0
     private var uModelView = 0
     private var uPlaneMvp = 0
@@ -108,6 +109,7 @@ class ArActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashLog.install(this)
         mesh = pendingMesh
         ranges = pendingRanges
         if (mesh == null) {
@@ -211,6 +213,15 @@ class ArActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             session?.resume()
         } catch (e: CameraNotAvailableException) {
             Toast.makeText(this, R.string.ar_camera_needed, Toast.LENGTH_LONG).show()
+            session?.close()
+            session = null
+            finish()
+            return
+        } catch (e: Exception) {
+            Log.w(TAG, "AR oturumu başlatılamadı", e)
+            CrashLog.record(this, "ArActivity.onResume", e)
+            Toast.makeText(this, getString(R.string.ar_error, e.javaClass.simpleName), Toast.LENGTH_LONG).show()
+            session?.close()
             session = null
             finish()
             return
@@ -222,12 +233,20 @@ class ArActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         super.onPause()
         if (session != null) {
             surface.onPause()
-            session?.pause()
+            try {
+                session?.pause()
+            } catch (e: Exception) {
+                Log.w(TAG, "pause", e)
+            }
         }
     }
 
     override fun onDestroy() {
-        session?.close()
+        try {
+            session?.close()
+        } catch (e: Exception) {
+            Log.w(TAG, "close", e)
+        }
         session = null
         if (isFinishing) {
             pendingMesh = null
@@ -282,7 +301,30 @@ class ArActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         viewportChanged = true
     }
 
+    /** Çizimde hata olursa uygulama çökmesin: kaydet, tekrarlarsa AR'ı kapat. */
+    private var frameErrors = 0
+    @Volatile private var failed = false
+
     override fun onDrawFrame(gl: GL10?) {
+        if (failed) return
+        try {
+            drawFrame()
+            frameErrors = 0
+        } catch (e: Throwable) {
+            Log.e(TAG, "AR çizim hatası", e)
+            frameErrors++
+            if (frameErrors >= 10) {
+                failed = true
+                CrashLog.record(this, "ArActivity.onDrawFrame", e)
+                runOnUiThread {
+                    Toast.makeText(this, getString(R.string.ar_error, e.javaClass.simpleName), Toast.LENGTH_LONG).show()
+                    finish()
+                }
+            }
+        }
+    }
+
+    private fun drawFrame() {
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT or GLES30.GL_DEPTH_BUFFER_BIT)
         val s = session ?: return
         if (viewportChanged) {
@@ -336,13 +378,18 @@ class ArActivity : AppCompatActivity(), GLSurfaceView.Renderer {
 
     private fun handleTap(frame: Frame) {
         val tap = taps.poll() ?: return
-        for (hit in frame.hitTest(tap[0], tap[1])) {
-            val t = hit.trackable
-            if (t is Plane && t.isPoseInPolygon(hit.hitPose)) {
-                anchor?.detach()
-                anchor = hit.createAnchor()
-                break
+        try {
+            for (hit in frame.hitTest(tap[0], tap[1])) {
+                val t = hit.trackable
+                if (t is Plane && t.isPoseInPolygon(hit.hitPose)) {
+                    val newAnchor = hit.createAnchor()
+                    anchor?.detach()
+                    anchor = newAnchor
+                    break
+                }
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Yerleştirilemedi", e)
         }
     }
 
@@ -385,15 +432,22 @@ class ArActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         for (plane in s.getAllTrackables(Plane::class.java)) {
             if (plane.trackingState != TrackingState.TRACKING || plane.subsumedBy != null) continue
             val poly = plane.polygon ?: continue
-            val n = poly.limit() / 2
+            poly.rewind()
+            val n = poly.remaining() / 2
             if (n < 3) continue
+            // ARCore'un tamponu doğrudan (direct) olmayabilir; GL doğrudan tampon ister
+            if (planeBuffer.capacity() < n * 2) {
+                planeBuffer = ByteBuffer.allocateDirect(n * 2 * 4 * 2).order(ByteOrder.nativeOrder()).asFloatBuffer()
+            }
+            planeBuffer.clear()
+            planeBuffer.put(poly)
+            planeBuffer.flip()
             plane.centerPose.toMatrix(model, 0)
             Matrix.multiplyMM(tmp, 0, view, 0, model, 0)
             Matrix.multiplyMM(mvp, 0, projection, 0, tmp, 0)
             GLES30.glUniformMatrix4fv(uPlaneMvp, 1, false, mvp, 0)
-            poly.rewind()
             GLES30.glEnableVertexAttribArray(0)
-            GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, poly)
+            GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 0, planeBuffer)
             GLES30.glDrawArrays(GLES30.GL_TRIANGLE_FAN, 0, n)
             GLES30.glDisableVertexAttribArray(0)
         }

@@ -171,4 +171,10 @@
     <string name="ar_reset">Voltar ao tamanho real</string>
     <string name="ar_unsupported">Este celular não suporta realidade aumentada (Google Play Services para RA).</string>
     <string name="ar_camera_needed">A RA precisa da permissão da câmera. A imagem não é salva nem enviada.</string>
+    <string name="ar_intro">A realidade aumentada coloca o modelo na sua mesa ou no chão pela câmera, em tamanho real (1:1). Mova o telefone devagar até aparecer uma área laranja e toque nela. Um dedo gira, dois dedos mudam a escala.\n\nA imagem da câmera não é salva nem enviada.</string>
+    <string name="ar_start">Começar</string>
+    <string name="ar_error">A RA não pôde continuar (%1$s). Um relatório foi salvo.</string>
+    <string name="crash_title">O app fechou inesperadamente</string>
+    <string name="crash_message">Desculpe! Um relatório de erro foi salvo neste telefone. Compartilhá-lo com o desenvolvedor ajuda a corrigir o problema. Ele contém apenas dados técnicos (modelo, versão do Android, linhas do erro).</string>
+    <string name="crash_send">Compartilhar relatório</string>
 </resources>

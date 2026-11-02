@@ -172,4 +172,10 @@
     <string name="ar_reset">Zurück zur Originalgröße</string>
     <string name="ar_unsupported">Dieses Telefon unterstützt keine erweiterte Realität (Google Play-Dienste für AR).</string>
     <string name="ar_camera_needed">AR benötigt die Kameraberechtigung. Das Kamerabild wird weder gespeichert noch gesendet.</string>
+    <string name="ar_intro">Augmented Reality stellt das Modell über die Kamera in Originalgröße (1:1) auf Ihren Tisch oder Boden. Bewegen Sie das Telefon langsam, bis eine orange Fläche erscheint, und tippen Sie darauf. Ein Finger dreht, zwei Finger skalieren.\n\nDas Kamerabild wird weder gespeichert noch gesendet.</string>
+    <string name="ar_start">Starten</string>
+    <string name="ar_error">AR konnte nicht fortfahren (%1$s). Ein Bericht wurde gespeichert.</string>
+    <string name="crash_title">Die App wurde unerwartet beendet</string>
+    <string name="crash_message">Entschuldigung! Auf diesem Telefon wurde ein Fehlerbericht gespeichert. Wenn Sie ihn mit dem Entwickler teilen, kann das Problem schneller behoben werden. Er enthält nur technische Angaben (Modell, Android-Version, Fehlerzeilen).</string>
+    <string name="crash_send">Bericht teilen</string>
 </resources>

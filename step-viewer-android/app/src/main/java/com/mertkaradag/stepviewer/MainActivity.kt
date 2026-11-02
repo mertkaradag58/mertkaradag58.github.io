@@ -22,6 +22,7 @@ import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
+import androidx.appcompat.widget.TooltipCompat
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -160,6 +161,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CrashLog.install(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
 
@@ -195,7 +197,10 @@ class MainActivity : AppCompatActivity() {
         if (billing.adFree) ads.disable() else ads.start()
         billing.start()
 
-        if (savedInstanceState == null) handleIntent(intent)
+        if (savedInstanceState == null) {
+            handleIntent(intent)
+            CrashLog.showPendingReport(this)
+        }
     }
 
     private fun bindViews() {
@@ -287,6 +292,11 @@ class MainActivity : AppCompatActivity() {
         pmiButton.setOnClickListener { showPmiDialog() }
         findViewById<View>(R.id.ar_button).setOnClickListener { openAr() }
         findViewById<View>(R.id.explode_close).setOnClickListener { closeExplode() }
+        // Uzun basınca düğmenin ne işe yaradığı yazsın
+        for (id in intArrayOf(R.id.views_button, R.id.spin_button, R.id.fit_button, R.id.ar_button, R.id.pmi_button, R.id.explode_button)) {
+            val b = findViewById<View>(id)
+            TooltipCompat.setTooltipText(b, b.contentDescription)
+        }
         explodeSlider.addOnChangeListener { _, value, fromUser ->
             if (fromUser) setExplodeFactor(value / 100f * Explode.MAX_FACTOR)
         }
@@ -1108,6 +1118,18 @@ class MainActivity : AppCompatActivity() {
 
     private fun openAr() {
         val mesh = currentMesh ?: return
+        if (!settings.getBoolean("ar_intro_seen", false)) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.ar)
+                .setMessage(R.string.ar_intro)
+                .setPositiveButton(R.string.ar_start) { _, _ ->
+                    settings.edit().putBoolean("ar_intro_seen", true).apply()
+                    openAr()
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+            return
+        }
         ArActivity.pendingMesh = mesh
         ArActivity.pendingRanges = visibleTriangleRanges(mesh)
         startActivity(Intent(this, ArActivity::class.java))
