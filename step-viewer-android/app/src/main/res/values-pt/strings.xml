@@ -177,4 +177,42 @@
     <string name="crash_title">O app fechou inesperadamente</string>
     <string name="crash_message">Desculpe! Um relatório de erro foi salvo neste telefone. Compartilhá-lo com o desenvolvedor ajuda a corrigir o problema. Ele contém apenas dados técnicos (modelo, versão do Android, linhas do erro).</string>
     <string name="crash_send">Compartilhar relatório</string>
+    <string name="menu_holes">Tabela de furos</string>
+    <string name="holes_busy">Procurando furos…</string>
+    <string name="holes_none">Nenhum furo encontrado nas peças visíveis.</string>
+    <string name="holes_cad_only">A tabela de furos funciona com arquivos STEP, IGES e BREP.</string>
+    <string name="holes_summary">%1$d furos, %2$d tipos</string>
+    <string name="holes_hint">Toque em uma linha para ver esses furos no modelo.</string>
+    <string name="holes_through">Passante</string>
+    <string name="holes_blind">Profundidade %1$s mm</string>
+    <string name="holes_kind_blind">Cego</string>
+    <string name="holes_cbore">Rebaixo Ø%1$s × %2$s</string>
+    <string name="holes_csink">Escareado Ø%1$s × %2$s°</string>
+    <string name="holes_tap">Furo para rosca %1$s?</string>
+    <string name="holes_clear">Passagem %1$s</string>
+    <string name="holes_shcs">Alojamento parafuso Allen %1$s</string>
+    <string name="holes_flat">Parafuso escareado %1$s</string>
+    <string name="holes_count">×%1$d</string>
+    <string name="holes_save_csv">CSV</string>
+    <string name="holes_back">Tabela</string>
+    <string name="holes_selected">%1$s: %2$d furos</string>
+    <string name="holes_done">Tabela de furos salva: %1$s</string>
+    <string name="holes_h_hole">Furo</string>
+    <string name="holes_h_type">Tipo</string>
+    <string name="holes_h_dia">Diâmetro (mm)</string>
+    <string name="holes_h_kind">Tipo de furo</string>
+    <string name="holes_h_depth">Profundidade (mm)</string>
+    <string name="holes_h_cbore">Rebaixo (mm)</string>
+    <string name="holes_h_csink">Escareado</string>
+    <string name="holes_h_note">Nota</string>
+    <string name="menu_dxf">Face para DXF (corte a laser)</string>
+    <string name="dxf_cad_only">A exportação DXF funciona com arquivos STEP, IGES e BREP.</string>
+    <string name="dxf_pick_hint">Toque na face plana a ser cortada</string>
+    <string name="dxf_not_planar">Esta face não é plana. Toque em uma face plana.</string>
+    <string name="dxf_title">Face para DXF</string>
+    <string name="dxf_info">Tamanho: %1$s × %2$s mm
+Recortes internos: %3$d
+
+Escala 1:1 em mm, vista de fora, canto inferior esquerdo em 0,0. Contorno externo na camada OUTER, furos em INNER.</string>
+    <string name="dxf_done">DXF salvo: %1$s</string>
 </resources>

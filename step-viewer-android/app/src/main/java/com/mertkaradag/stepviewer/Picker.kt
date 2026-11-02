@@ -153,6 +153,22 @@ object Picker {
         return floatArrayOf(o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t)
     }
 
+    /** Dokunulan yüzeyin kimliği (kenarlar yok sayılır); boşluk ise -1. */
+    fun pickFace(
+        mesh: StepMesh,
+        mvp: FloatArray,
+        viewWidth: Int,
+        viewHeight: Int,
+        x: Float,
+        y: Float,
+        partVisible: BooleanArray?,
+        clip: FloatArray?,
+    ): Int {
+        val ray = ray(mvp, viewWidth, viewHeight, x, y) ?: return -1
+        val hit = raycastSurface(mesh, ray[0], ray[1], partVisible, clip, null) ?: return -1
+        return mesh.faceOfTriangle(hit.first)
+    }
+
     /** Dokunma noktasından çıkan ışın: [başlangıç, birim yön] veya null. */
     private fun ray(mvp: FloatArray, w: Int, h: Int, x: Float, y: Float): Array<FloatArray>? {
         val inv = FloatArray(16)

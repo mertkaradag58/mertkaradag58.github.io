@@ -177,4 +177,42 @@
     <string name="crash_title">L\'application s\'est fermée de façon inattendue</string>
     <string name="crash_message">Désolé ! Un rapport d\'erreur a été enregistré sur ce téléphone. Le partager avec le développeur aide à corriger le problème. Il ne contient que des informations techniques (modèle, version d\'Android, lignes d\'erreur).</string>
     <string name="crash_send">Partager le rapport</string>
+    <string name="menu_holes">Tableau des perçages</string>
+    <string name="holes_busy">Recherche des perçages…</string>
+    <string name="holes_none">Aucun perçage trouvé dans les pièces visibles.</string>
+    <string name="holes_cad_only">Le tableau des perçages fonctionne avec les fichiers STEP, IGES et BREP.</string>
+    <string name="holes_summary">%1$d perçages, %2$d types</string>
+    <string name="holes_hint">Touchez une ligne pour voir ces perçages sur le modèle.</string>
+    <string name="holes_through">Débouchant</string>
+    <string name="holes_blind">Profondeur %1$s mm</string>
+    <string name="holes_kind_blind">Borgne</string>
+    <string name="holes_cbore">Lamage Ø%1$s × %2$s</string>
+    <string name="holes_csink">Fraisure Ø%1$s × %2$s°</string>
+    <string name="holes_tap">Avant-trou %1$s ?</string>
+    <string name="holes_clear">Passage %1$s</string>
+    <string name="holes_shcs">Logement vis CHC %1$s</string>
+    <string name="holes_flat">Vis à tête fraisée %1$s</string>
+    <string name="holes_count">×%1$d</string>
+    <string name="holes_save_csv">CSV</string>
+    <string name="holes_back">Tableau</string>
+    <string name="holes_selected">%1$s : %2$d perçages</string>
+    <string name="holes_done">Tableau des perçages enregistré : %1$s</string>
+    <string name="holes_h_hole">Perçage</string>
+    <string name="holes_h_type">Type</string>
+    <string name="holes_h_dia">Diamètre (mm)</string>
+    <string name="holes_h_kind">Genre</string>
+    <string name="holes_h_depth">Profondeur (mm)</string>
+    <string name="holes_h_cbore">Lamage (mm)</string>
+    <string name="holes_h_csink">Fraisure</string>
+    <string name="holes_h_note">Remarque</string>
+    <string name="menu_dxf">Face en DXF (découpe laser)</string>
+    <string name="dxf_cad_only">L\'export DXF fonctionne avec les fichiers STEP, IGES et BREP.</string>
+    <string name="dxf_pick_hint">Touchez la face plane à découper</string>
+    <string name="dxf_not_planar">Cette face n\'est pas plane. Touchez une face plane.</string>
+    <string name="dxf_title">Face en DXF</string>
+    <string name="dxf_info">Taille : %1$s × %2$s mm
+Découpes intérieures : %3$d
+
+Échelle 1:1 en mm, vue de l\'extérieur, coin inférieur gauche en 0,0. Contour extérieur sur le calque OUTER, perçages sur INNER.</string>
+    <string name="dxf_done">DXF enregistré : %1$s</string>
 </resources>

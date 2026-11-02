@@ -177,4 +177,42 @@
     <string name="crash_title">La aplicación se cerró inesperadamente</string>
     <string name="crash_message">¡Lo sentimos! Se guardó un informe de error en este teléfono. Compartirlo con el desarrollador ayuda a solucionar el problema. Solo contiene datos técnicos (modelo, versión de Android, líneas del error).</string>
     <string name="crash_send">Compartir informe</string>
+    <string name="menu_holes">Tabla de agujeros</string>
+    <string name="holes_busy">Buscando agujeros…</string>
+    <string name="holes_none">No se encontraron agujeros en las piezas visibles.</string>
+    <string name="holes_cad_only">La tabla de agujeros funciona con archivos STEP, IGES y BREP.</string>
+    <string name="holes_summary">%1$d agujeros, %2$d tipos</string>
+    <string name="holes_hint">Toca una fila para ver esos agujeros en el modelo.</string>
+    <string name="holes_through">Pasante</string>
+    <string name="holes_blind">Profundidad %1$s mm</string>
+    <string name="holes_kind_blind">Ciego</string>
+    <string name="holes_cbore">Avellanado recto Ø%1$s × %2$s</string>
+    <string name="holes_csink">Avellanado cónico Ø%1$s × %2$s°</string>
+    <string name="holes_tap">¿Broca para rosca %1$s?</string>
+    <string name="holes_clear">Paso %1$s</string>
+    <string name="holes_shcs">Alojamiento tornillo Allen %1$s</string>
+    <string name="holes_flat">Tornillo avellanado %1$s</string>
+    <string name="holes_count">×%1$d</string>
+    <string name="holes_save_csv">CSV</string>
+    <string name="holes_back">Tabla</string>
+    <string name="holes_selected">%1$s: %2$d agujeros</string>
+    <string name="holes_done">Tabla de agujeros guardada: %1$s</string>
+    <string name="holes_h_hole">Agujero</string>
+    <string name="holes_h_type">Tipo</string>
+    <string name="holes_h_dia">Diámetro (mm)</string>
+    <string name="holes_h_kind">Clase</string>
+    <string name="holes_h_depth">Profundidad (mm)</string>
+    <string name="holes_h_cbore">Avellanado recto (mm)</string>
+    <string name="holes_h_csink">Avellanado cónico</string>
+    <string name="holes_h_note">Nota</string>
+    <string name="menu_dxf">Cara a DXF (corte láser)</string>
+    <string name="dxf_cad_only">La exportación DXF funciona con archivos STEP, IGES y BREP.</string>
+    <string name="dxf_pick_hint">Toca la cara plana que quieres cortar</string>
+    <string name="dxf_not_planar">Esta cara no es plana. Toca una cara plana.</string>
+    <string name="dxf_title">Cara a DXF</string>
+    <string name="dxf_info">Tamaño: %1$s × %2$s mm
+Recortes interiores: %3$d
+
+Escala 1:1 en mm, vista desde fuera, esquina inferior izquierda en 0,0. Contorno exterior en la capa OUTER, agujeros en INNER.</string>
+    <string name="dxf_done">DXF guardado: %1$s</string>
 </resources>

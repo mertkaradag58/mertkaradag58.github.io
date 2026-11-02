@@ -33,6 +33,8 @@ import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.slider.Slider
+import com.google.android.material.snackbar.BaseTransientBottomBar
+import com.google.android.material.snackbar.Snackbar
 import java.io.File
 import java.io.IOException
 import java.util.Locale
@@ -128,6 +130,16 @@ class MainActivity : AppCompatActivity() {
     private val exportGlb = registerForActivityResult(ActivityResultContracts.CreateDocument("model/gltf-binary")) { uri ->
         if (uri != null) runExport(uri)
     }
+    private val exportHolesCsv = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) runHolesExport(uri)
+    }
+
+    private val exportDxf = registerForActivityResult(ActivityResultContracts.CreateDocument("application/dxf")) { uri ->
+        val data = pendingDxf
+        pendingDxf = null
+        if (uri != null && data != null) runDxfSave(uri, data)
+    }
+
     private val exportCsv = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) runBomExport(uri)
     }
@@ -325,6 +337,8 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(Menu.NONE, MENU_MARKUP, 1, R.string.menu_markup).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_EXPORT, 1, R.string.menu_export).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_BOM, 1, R.string.menu_bom).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_HOLES, 1, R.string.menu_holes).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_DXF, 1, R.string.menu_dxf).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_QUALITY, 2, R.string.menu_quality)
         popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
         if (!billing.adFree) {
@@ -342,6 +356,8 @@ class MainActivity : AppCompatActivity() {
                 MENU_MARKUP -> startMarkup()
                 MENU_EXPORT -> showExportDialog()
                 MENU_BOM -> showBomDialog()
+                MENU_HOLES -> showHoleTable()
+                MENU_DXF -> startDxfPick()
                 MENU_ABOUT -> showAbout()
                 MENU_QUALITY -> showQualityDialog()
                 MENU_PRIVACY -> ads.showPrivacyOptions()
@@ -620,6 +636,10 @@ class MainActivity : AppCompatActivity() {
         measureOverlay = ModelRenderer.Overlay()
         selStart = -1
         selEnd = -1
+        clearHoleSelection()
+        holeCache = null
+        holeCacheMesh = null
+        stopDxfPick()
 
         modelView.setMesh(mesh)
         modelView.setDisplayMode(displayMode)
@@ -733,6 +753,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.explode_measure_off, Toast.LENGTH_SHORT).show()
         }
         if (enabled && selectMode) setSelectMode(false)
+        if (enabled) stopDxfPick()
         measureMode = enabled
         toolMeasure.isActivated = enabled
         measureCard.visibility = if (enabled && currentMesh != null) View.VISIBLE else View.GONE
@@ -745,6 +766,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun onModelTap(x: Float, y: Float) {
         if (loading) return
+        if (dxfPickMode) {
+            pickDxfFace(x, y)
+            return
+        }
         if (selectMode) {
             pickPartAt(x, y)
             return
@@ -770,6 +795,7 @@ class MainActivity : AppCompatActivity() {
     private fun setSelectMode(enabled: Boolean) {
         val on = enabled && currentMesh != null
         if (on && measureMode) setMeasureMode(false)
+        if (on) stopDxfPick()
         selectMode = on
         toolSelect.isActivated = on
         if (!on) setSelection(-1, -1) else updateSelectCard()
@@ -912,7 +938,7 @@ class MainActivity : AppCompatActivity() {
         val o = measureOverlay
         modelView.setOverlay(
             ModelRenderer.Overlay(
-                faceRanges = o.faceRanges,
+                faceRanges = if (holeHighlight.isEmpty()) o.faceRanges else o.faceRanges + holeHighlight,
                 edgeSegments = o.edgeSegments,
                 measureLine = o.measureLine,
                 partRanges = partHighlight,
@@ -1342,6 +1368,272 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Delik tablosu
+    // -----------------------------------------------------------------------
+
+    private var holeCache: List<Holes.Hole>? = null
+    private var holeCacheMesh: StepMesh? = null
+    private var holeGroups: List<Holes.Group> = emptyList()
+    private var holeHighlight = IntArray(0)
+    private var holeSnackbar: Snackbar? = null
+
+    private fun showHoleTable() {
+        val mesh = currentMesh ?: return
+        if (mesh.isMeshFormat) {
+            Toast.makeText(this, R.string.holes_cad_only, Toast.LENGTH_LONG).show()
+            return
+        }
+        val cached = holeCache
+        if (cached != null && holeCacheMesh === mesh) {
+            openHoleSheet(mesh, cached)
+            return
+        }
+        showBusy(getString(R.string.holes_busy))
+        executor.execute {
+            val holes = try {
+                Holes.load()
+            } catch (_: Throwable) {
+                null
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                hideBusy()
+                if (currentMesh !== mesh) return@runOnUiThread
+                if (holes == null) {
+                    Toast.makeText(this, R.string.holes_cad_only, Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                holeCache = holes
+                holeCacheMesh = mesh
+                openHoleSheet(mesh, holes)
+            }
+        }
+    }
+
+    private fun openHoleSheet(mesh: StepMesh, holes: List<Holes.Hole>) {
+        clearHoleSelection()
+        val visible = partVisible
+        val groups = Holes.group(holes) { p -> p < visible.size && visible[p] }
+        if (groups.isEmpty()) {
+            Toast.makeText(this, R.string.holes_none, Toast.LENGTH_LONG).show()
+            return
+        }
+        holeGroups = groups
+        HoleTableSheet(
+            context = this,
+            groups = groups,
+            totalHoles = groups.sumOf { it.holes.size },
+            onSelect = { selectHoleGroup(mesh, it) },
+            onSaveCsv = { exportHolesCsv.launch(baseFileName() + "_delik_tablosu.csv") },
+        ).show()
+    }
+
+    private fun selectHoleGroup(mesh: StepMesh, g: Holes.Group) {
+        val ranges = ArrayList<Int>()
+        for (h in g.holes) {
+            for (f in h.faces) {
+                if (f < 0 || f + 1 >= mesh.faceOffsets.size) continue
+                val a = mesh.faceOffsets[f]
+                val b = mesh.faceOffsets[f + 1]
+                if (b > a) {
+                    ranges += a
+                    ranges += b - a
+                }
+            }
+        }
+        holeHighlight = ranges.toIntArray()
+        pushOverlay()
+        if (g.holes.size == 1) modelView.focusOn(g.first.entry)
+        holeSnackbar?.dismiss()
+        val text = getString(R.string.holes_selected, g.label, g.holes.size) + "  " + Holes.title(this, g.first)
+        val bar = Snackbar.make(findViewById(R.id.model_view), text, Snackbar.LENGTH_INDEFINITE)
+        bar.setAction(R.string.holes_back) {
+            val holes = holeCache
+            if (holes != null && currentMesh === mesh) openHoleSheet(mesh, holes)
+        }
+        bar.addCallback(object : Snackbar.Callback() {
+            override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                if (holeSnackbar === transientBottomBar) {
+                    holeSnackbar = null
+                    if (event != BaseTransientBottomBar.BaseCallback.DISMISS_EVENT_CONSECUTIVE) {
+                        holeHighlight = IntArray(0)
+                        pushOverlay()
+                    }
+                }
+            }
+        })
+        holeSnackbar = bar
+        bar.show()
+    }
+
+    private fun clearHoleSelection() {
+        val bar = holeSnackbar
+        holeSnackbar = null
+        bar?.dismiss()
+        if (holeHighlight.isNotEmpty()) {
+            holeHighlight = IntArray(0)
+            pushOverlay()
+        }
+    }
+
+    private fun runHolesExport(uri: Uri) {
+        val mesh = currentMesh ?: return
+        val groups = holeGroups
+        if (groups.isEmpty()) return
+        val name = displayName(uri)
+        val headers = Holes.CsvHeaders(
+            hole = getString(R.string.holes_h_hole),
+            type = getString(R.string.holes_h_type),
+            diameter = getString(R.string.holes_h_dia),
+            kind = getString(R.string.holes_h_kind),
+            depth = getString(R.string.holes_h_depth),
+            cbore = getString(R.string.holes_h_cbore),
+            csink = getString(R.string.holes_h_csink),
+            note = getString(R.string.holes_h_note),
+            part = getString(R.string.bom_h_name),
+            through = getString(R.string.holes_through),
+            blind = getString(R.string.holes_kind_blind),
+        )
+        showBusy(getString(R.string.export_busy))
+        executor.execute {
+            val result = runCatching {
+                val csv = Holes.csv(this, groups, { exportPartName(mesh, it) }, headers)
+                contentResolver.openOutputStream(uri, "w")?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+                    ?: throw IOException("open")
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                hideBusy()
+                result.onSuccess {
+                    Toast.makeText(this, getString(R.string.holes_done, name), Toast.LENGTH_LONG).show()
+                }.onFailure {
+                    Toast.makeText(this, R.string.export_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Yüzeyi DXF'e aktar (lazer / plazma kesim)
+    // -----------------------------------------------------------------------
+
+    private var dxfPickMode = false
+    private var dxfSnackbar: Snackbar? = null
+    private var pendingDxf: ByteArray? = null
+
+    private fun startDxfPick() {
+        val mesh = currentMesh ?: return
+        if (mesh.isMeshFormat) {
+            Toast.makeText(this, R.string.dxf_cad_only, Toast.LENGTH_LONG).show()
+            return
+        }
+        if (measureMode) setMeasureMode(false)
+        if (selectMode) setSelectMode(false)
+        if (explodeFactor > 0f) closeExplode()
+        clearHoleSelection()
+        dxfPickMode = true
+        dxfSnackbar?.dismiss()
+        val bar = Snackbar.make(findViewById(R.id.model_view), R.string.dxf_pick_hint, Snackbar.LENGTH_INDEFINITE)
+        bar.setAction(R.string.cancel) { }
+        bar.addCallback(object : Snackbar.Callback() {
+            override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                if (dxfSnackbar === transientBottomBar) {
+                    dxfSnackbar = null
+                    dxfPickMode = false
+                }
+            }
+        })
+        dxfSnackbar = bar
+        bar.show()
+    }
+
+    private fun stopDxfPick() {
+        dxfPickMode = false
+        val bar = dxfSnackbar
+        dxfSnackbar = null
+        bar?.dismiss()
+    }
+
+    private fun pickDxfFace(x: Float, y: Float) {
+        val mesh = currentMesh ?: return
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val visible = if (partVisible.all { it }) null else partVisible.copyOf()
+        val clip = if (sectionOn) clipPlane(mesh) else null
+        executor.execute {
+            val face = Picker.pickFace(mesh, mvp, w, h, x, y, visible, clip)
+            val data = if (face >= 0) {
+                try {
+                    StepNative.faceDxf(face)
+                } catch (_: Throwable) {
+                    null
+                }
+            } else {
+                null
+            }
+            runOnUiThread {
+                if (mesh !== currentMesh || !dxfPickMode || face < 0) return@runOnUiThread
+                if (data == null) {
+                    Toast.makeText(this, R.string.dxf_not_planar, Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
+                stopDxfPick()
+                val a = mesh.faceOffsets[face]
+                val b = mesh.faceOffsets[face + 1]
+                holeHighlight = if (b > a) intArrayOf(a, b - a) else IntArray(0)
+                pushOverlay()
+                val info = data[1] as DoubleArray
+                val text = data[0] as ByteArray
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.dxf_title)
+                    .setMessage(getString(R.string.dxf_info, Holes.mm(info[0]), Holes.mm(info[1]), info[2].toInt()))
+                    .setPositiveButton(R.string.markup_save) { _, _ ->
+                        pendingDxf = text
+                        exportDxf.launch(baseFileName() + "_kesim.dxf")
+                    }
+                    .setNeutralButton(R.string.menu_share) { _, _ -> shareDxf(text) }
+                    .setNegativeButton(R.string.cancel, null)
+                    .setOnDismissListener {
+                        holeHighlight = IntArray(0)
+                        pushOverlay()
+                    }
+                    .show()
+            }
+        }
+    }
+
+    private fun runDxfSave(uri: Uri, data: ByteArray) {
+        val name = displayName(uri)
+        try {
+            contentResolver.openOutputStream(uri, "w")?.use { it.write(data) } ?: throw IOException("open")
+            Toast.makeText(this, getString(R.string.dxf_done, name), Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, R.string.export_failed, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun shareDxf(data: ByteArray) {
+        try {
+            val dir = File(cacheDir, "shared").apply { mkdirs() }
+            dir.listFiles()?.forEach { it.delete() }
+            val file = File(dir, baseFileName() + "_kesim.dxf")
+            file.writeBytes(data)
+            val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "application/dxf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_TEXT, currentName)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(send, getString(R.string.share_title)))
+            adAfterShare = true
+        } catch (e: Exception) {
+            Toast.makeText(this, R.string.share_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun showBusy(text: String) {
         progressText.text = text
         progressOverlay.visibility = View.VISIBLE
@@ -1492,6 +1784,8 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_BOM = 8
         private const val MENU_MARKUP = 9
         private const val MENU_QUALITY = 10
+        private const val MENU_HOLES = 11
+        private const val MENU_DXF = 12
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
     }

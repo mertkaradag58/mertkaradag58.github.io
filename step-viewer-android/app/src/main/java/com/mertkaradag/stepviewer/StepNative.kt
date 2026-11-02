@@ -42,6 +42,19 @@ object StepNative {
      * FloatArray konumlar, ByteArray UTF-8 metinler ('\n' ayrılmış)]; yoksa null. Bkz. [Pmi.load].
      */
     external fun pmiData(): Array<Any>?
+
+    /**
+     * Delik tablosu (yalnızca CAD): [DoubleArray delik başına 17 değer, IntArray yüzey kimlikleri];
+     * mesh dosyalarında null. Bkz. [Holes.load]. Arka planda çağrılmalı.
+     */
+    external fun holes(): Array<Any>?
+
+    /**
+     * Düz yüzü lazer kesim için DXF'e çevirir (yalnızca CAD):
+     * [ByteArray DXF metni, DoubleArray {genişlik mm, yükseklik mm, iç kontur sayısı}];
+     * yüz düz değilse null.
+     */
+    external fun faceDxf(faceId: Int): Array<Any>?
 }
 
 /** C++ GeomKind ile aynı değerler. */

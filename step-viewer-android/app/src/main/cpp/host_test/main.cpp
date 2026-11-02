@@ -1,8 +1,10 @@
 // Masaüstü testi: çekirdeği Android olmadan dener.
 // Kullanım: step_host_test dosya [cikti.obj] [--as-mesh] [--tree] [--info] [--faces]
-//           [--measure e|f i e|f j]... [--mass]
+//           [--measure e|f i e|f j]... [--mass] [--holes]
 // --as-mesh: CAD modelinin üçgenlerini STL gibi (köşeleri kaynaşmamış) ham mesh'e çevirip mesh
 //            hattından geçirir; yüzey/kenar ayırma ve ölçüm mesh dosyası gibi denenir.
+#include "../dxf_export.h"
+#include "../hole_finder.h"
 #include "../mesh_model.h"
 #include "../step_mesher.h"
 
@@ -144,6 +146,33 @@ int main(int argc, char** argv) {
                     m.p2[2], m.angleDeg, m.centerDistance, m.parallelDistance);
       } else {
         std::printf("olcum %s%zu-%s%zu: basarisiz\n", ka, ia, kb, ib);
+      }
+    } else if (std::strcmp(argv[a], "--dxf") == 0 && a + 2 < argc) {
+      const size_t fi = std::strtoul(argv[a + 1], nullptr, 10);
+      DxfResult r;
+      if (fi < mesh.faceShapes.size() && ExportFaceDxf(mesh.faceShapes[fi], r)) {
+        FILE* df = std::fopen(argv[a + 2], "w");
+        if (df) {
+          std::fwrite(r.text.data(), 1, r.text.size(), df);
+          std::fclose(df);
+        }
+        std::printf("dxf yuzey %zu: %.3f x %.3f mm, ic kontur=%d\n", fi, r.width, r.height, r.innerLoops);
+      } else {
+        std::printf("dxf yuzey %zu: duz degil\n", fi);
+      }
+      a += 2;
+    } else if (std::strcmp(argv[a], "--holes") == 0) {
+      std::vector<HoleInfo> holes;
+      const auto t0 = std::chrono::steady_clock::now();
+      FindHoles(mesh.faceShapes, mesh.partFaceOffsets, mesh.partShapes, holes);
+      const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      std::printf("delik sayisi=%zu (%.1f ms)\n", holes.size(), ms);
+      for (const auto& h : holes) {
+        std::printf("  parca=%d cap=%.3f derinlik=%.3f boydan=%d uc=%d kacak=%.2fx%.2f havsa=%.2f/%.0f "
+                    "giris=(%.2f %.2f %.2f) yon=(%.2f %.2f %.2f) yuzey=%zu\n",
+                    h.part, h.diameter, h.depth, h.through ? 1 : 0, h.drillPoint ? 1 : 0, h.cboreDiameter,
+                    h.cboreDepth, h.csinkDiameter, h.csinkAngle, h.entry[0], h.entry[1], h.entry[2],
+                    h.dir[0], h.dir[1], h.dir[2], h.faces.size());
       }
     } else if (std::strcmp(argv[a], "--mass") == 0) {
       MassProps p;

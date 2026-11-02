@@ -212,4 +212,42 @@
     <string name="crash_title">The app closed unexpectedly</string>
     <string name="crash_message">Sorry! An error report was saved on this phone. Sharing it with the developer helps fix the problem. It contains only technical details (phone model, Android version, error lines).</string>
     <string name="crash_send">Share report</string>
+    <string name="menu_holes">Hole table</string>
+    <string name="holes_busy">Finding holes…</string>
+    <string name="holes_none">No holes found in the visible parts.</string>
+    <string name="holes_cad_only">The hole table works with STEP, IGES and BREP files.</string>
+    <string name="holes_summary">%1$d holes, %2$d types</string>
+    <string name="holes_hint">Tap a row to show those holes on the model.</string>
+    <string name="holes_through">Through</string>
+    <string name="holes_blind">Depth %1$s mm</string>
+    <string name="holes_kind_blind">Blind</string>
+    <string name="holes_cbore">Counterbore Ø%1$s × %2$s</string>
+    <string name="holes_csink">Countersink Ø%1$s × %2$s°</string>
+    <string name="holes_tap">%1$s tap drill?</string>
+    <string name="holes_clear">%1$s clearance</string>
+    <string name="holes_shcs">%1$s socket head screw seat</string>
+    <string name="holes_flat">%1$s countersunk screw</string>
+    <string name="holes_count">×%1$d</string>
+    <string name="holes_save_csv">CSV</string>
+    <string name="holes_back">Table</string>
+    <string name="holes_selected">%1$s: %2$d holes</string>
+    <string name="holes_done">Hole table saved: %1$s</string>
+    <string name="holes_h_hole">Hole</string>
+    <string name="holes_h_type">Type</string>
+    <string name="holes_h_dia">Diameter (mm)</string>
+    <string name="holes_h_kind">Kind</string>
+    <string name="holes_h_depth">Depth (mm)</string>
+    <string name="holes_h_cbore">Counterbore (mm)</string>
+    <string name="holes_h_csink">Countersink</string>
+    <string name="holes_h_note">Note</string>
+    <string name="menu_dxf">Face to DXF (laser cutting)</string>
+    <string name="dxf_cad_only">DXF export works with STEP, IGES and BREP files.</string>
+    <string name="dxf_pick_hint">Tap the flat face to cut</string>
+    <string name="dxf_not_planar">This face is not flat. Tap a flat face.</string>
+    <string name="dxf_title">Face to DXF</string>
+    <string name="dxf_info">Size: %1$s × %2$s mm
+Inner cutouts: %3$d
+
+1:1 scale in mm, seen from outside, bottom-left corner at 0,0. Outer contour on layer OUTER, holes on INNER.</string>
+    <string name="dxf_done">DXF saved: %1$s</string>
 </resources>

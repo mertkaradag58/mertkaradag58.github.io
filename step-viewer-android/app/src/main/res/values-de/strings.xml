@@ -178,4 +178,42 @@
     <string name="crash_title">Die App wurde unerwartet beendet</string>
     <string name="crash_message">Entschuldigung! Auf diesem Telefon wurde ein Fehlerbericht gespeichert. Wenn Sie ihn mit dem Entwickler teilen, kann das Problem schneller behoben werden. Er enthält nur technische Angaben (Modell, Android-Version, Fehlerzeilen).</string>
     <string name="crash_send">Bericht teilen</string>
+    <string name="menu_holes">Bohrungstabelle</string>
+    <string name="holes_busy">Bohrungen werden gesucht…</string>
+    <string name="holes_none">In den sichtbaren Teilen wurden keine Bohrungen gefunden.</string>
+    <string name="holes_cad_only">Die Bohrungstabelle funktioniert mit STEP-, IGES- und BREP-Dateien.</string>
+    <string name="holes_summary">%1$d Bohrungen, %2$d Typen</string>
+    <string name="holes_hint">Tippen Sie auf eine Zeile, um diese Bohrungen im Modell zu zeigen.</string>
+    <string name="holes_through">Durchgehend</string>
+    <string name="holes_blind">Tiefe %1$s mm</string>
+    <string name="holes_kind_blind">Sackloch</string>
+    <string name="holes_cbore">Senkung Ø%1$s × %2$s</string>
+    <string name="holes_csink">Kegelsenkung Ø%1$s × %2$s°</string>
+    <string name="holes_tap">%1$s Kernloch?</string>
+    <string name="holes_clear">%1$s Durchgangsloch</string>
+    <string name="holes_shcs">%1$s Zylinderkopfsenkung</string>
+    <string name="holes_flat">%1$s Senkkopfschraube</string>
+    <string name="holes_count">×%1$d</string>
+    <string name="holes_save_csv">CSV</string>
+    <string name="holes_back">Tabelle</string>
+    <string name="holes_selected">%1$s: %2$d Bohrungen</string>
+    <string name="holes_done">Bohrungstabelle gespeichert: %1$s</string>
+    <string name="holes_h_hole">Bohrung</string>
+    <string name="holes_h_type">Typ</string>
+    <string name="holes_h_dia">Durchmesser (mm)</string>
+    <string name="holes_h_kind">Art</string>
+    <string name="holes_h_depth">Tiefe (mm)</string>
+    <string name="holes_h_cbore">Senkung (mm)</string>
+    <string name="holes_h_csink">Kegelsenkung</string>
+    <string name="holes_h_note">Hinweis</string>
+    <string name="menu_dxf">Fläche als DXF (Laserschneiden)</string>
+    <string name="dxf_cad_only">Der DXF-Export funktioniert mit STEP-, IGES- und BREP-Dateien.</string>
+    <string name="dxf_pick_hint">Tippen Sie auf die ebene Fläche zum Schneiden</string>
+    <string name="dxf_not_planar">Diese Fläche ist nicht eben. Tippen Sie auf eine ebene Fläche.</string>
+    <string name="dxf_title">Fläche als DXF</string>
+    <string name="dxf_info">Größe: %1$s × %2$s mm
+Innere Ausschnitte: %3$d
+
+Maßstab 1:1 in mm, Ansicht von außen, linke untere Ecke bei 0,0. Außenkontur auf Ebene OUTER, Bohrungen auf INNER.</string>
+    <string name="dxf_done">DXF gespeichert: %1$s</string>
 </resources>

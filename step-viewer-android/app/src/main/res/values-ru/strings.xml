@@ -183,4 +183,42 @@
     <string name="crash_title">Приложение неожиданно закрылось</string>
     <string name="crash_message">Извините! На этом телефоне сохранён отчёт об ошибке. Если отправить его разработчику, проблему исправят быстрее. В нём только технические данные (модель, версия Android, строки ошибки).</string>
     <string name="crash_send">Поделиться отчётом</string>
+    <string name="menu_holes">Таблица отверстий</string>
+    <string name="holes_busy">Поиск отверстий…</string>
+    <string name="holes_none">В видимых деталях отверстия не найдены.</string>
+    <string name="holes_cad_only">Таблица отверстий работает с файлами STEP, IGES и BREP.</string>
+    <string name="holes_summary">Отверстий: %1$d, типов: %2$d</string>
+    <string name="holes_hint">Коснитесь строки, чтобы показать эти отверстия на модели.</string>
+    <string name="holes_through">Сквозное</string>
+    <string name="holes_blind">Глубина %1$s мм</string>
+    <string name="holes_kind_blind">Глухое</string>
+    <string name="holes_cbore">Цековка Ø%1$s × %2$s</string>
+    <string name="holes_csink">Зенковка Ø%1$s × %2$s°</string>
+    <string name="holes_tap">Под резьбу %1$s?</string>
+    <string name="holes_clear">Проход %1$s</string>
+    <string name="holes_shcs">Под винт %1$s с цилиндрической головкой</string>
+    <string name="holes_flat">Под винт %1$s с потайной головкой</string>
+    <string name="holes_count">×%1$d</string>
+    <string name="holes_save_csv">CSV</string>
+    <string name="holes_back">Таблица</string>
+    <string name="holes_selected">%1$s: %2$d отв.</string>
+    <string name="holes_done">Таблица отверстий сохранена: %1$s</string>
+    <string name="holes_h_hole">Отверстие</string>
+    <string name="holes_h_type">Тип</string>
+    <string name="holes_h_dia">Диаметр (мм)</string>
+    <string name="holes_h_kind">Вид</string>
+    <string name="holes_h_depth">Глубина (мм)</string>
+    <string name="holes_h_cbore">Цековка (мм)</string>
+    <string name="holes_h_csink">Зенковка</string>
+    <string name="holes_h_note">Примечание</string>
+    <string name="menu_dxf">Грань в DXF (лазерная резка)</string>
+    <string name="dxf_cad_only">Экспорт DXF работает с файлами STEP, IGES и BREP.</string>
+    <string name="dxf_pick_hint">Коснитесь плоской грани для резки</string>
+    <string name="dxf_not_planar">Эта грань не плоская. Коснитесь плоской грани.</string>
+    <string name="dxf_title">Грань в DXF</string>
+    <string name="dxf_info">Размер: %1$s × %2$s мм
+Внутренних вырезов: %3$d
+
+Масштаб 1:1 в мм, вид снаружи, левый нижний угол в 0,0. Внешний контур на слое OUTER, отверстия на INNER.</string>
+    <string name="dxf_done">DXF сохранён: %1$s</string>
 </resources>
