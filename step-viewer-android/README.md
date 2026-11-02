@@ -37,6 +37,7 @@ Mesh dosyalarında yüzey bilgisi olmadığı için üçgenler düz ve eğri bö
 - **Model bilgisi:** boyutlar, hacim, yüzey alanı, kütle merkezi; malzeme seçimi veya özel yoğunluk ile kütle
 - **Ekran görüntüsü paylaşma** (ölçüm sonucu ve dosya adı resmin üstüne yazılır)
 - **Reklamlar:** Google AdMob, altta uyarlanabilir banner, dosya açılınca ve paylaşımdan sonra geçiş reklamı (en az 60 sn arayla), Avrupa için UMP onay formu. Kimlikler `app/build.gradle.kts` içinde (verilmezse test reklamları)
+- **Reklamsız satın alma:** Google Play Billing 8, tek seferlik ürün `reklamsiz` (fiyat Play Console'da, ör. 299 TL). Menüde "Reklamları kaldır" ve "Satın alımı geri yükle"; durum cihazda önbelleklenir, açılışta Play'den doğrulanır (`Billing.kt`)
 - **İki dil:** telefon Türkçeyse Türkçe, değilse İngilizce (`res/values-tr` ve `res/values`); yerel çekirdek hata kodu döner, metin Kotlin tarafında çevrilir
 
 Sonra: PMI / GD&T (STEP AP242 içindeki toleranslar) ayrı bir iş olarak planlandı.

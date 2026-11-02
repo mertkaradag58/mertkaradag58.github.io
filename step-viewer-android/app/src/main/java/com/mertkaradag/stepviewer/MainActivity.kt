@@ -41,6 +41,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var modelView: ModelView
     private lateinit var ads: Ads
+    private lateinit var billing: Billing
     /** Paylaşım ekranından dönünce tam ekran reklam gösterilsin. */
     private var adAfterShare = false
     private lateinit var titleText: TextView
@@ -130,7 +131,14 @@ class MainActivity : AppCompatActivity() {
         showRecentFiles()
 
         ads = Ads(this, findViewById(R.id.ad_container))
-        ads.start()
+        billing = Billing(
+            context = this,
+            onAdFreeChanged = { adFree -> if (adFree) ads.disable() else ads.enable() },
+            onMessage = { res -> if (!isDestroyed) Toast.makeText(this, res, Toast.LENGTH_LONG).show() },
+        )
+        // Reklamsız alınmışsa reklam altyapısı (ve onay formu) hiç başlatılmaz
+        if (billing.adFree) ads.disable() else ads.start()
+        billing.start()
 
         if (savedInstanceState == null) handleIntent(intent)
     }
@@ -235,13 +243,22 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(Menu.NONE, MENU_INFO, 0, R.string.menu_model_info).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_SHARE, 1, R.string.menu_share).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
-        if (ads.privacyOptionsRequired) popup.menu.add(Menu.NONE, MENU_PRIVACY, 3, R.string.menu_privacy)
+        if (!billing.adFree) {
+            val price = billing.formattedPrice
+            val title = if (price != null) getString(R.string.menu_remove_ads_price, price)
+            else getString(R.string.menu_remove_ads)
+            popup.menu.add(Menu.NONE, MENU_REMOVE_ADS, 3, title)
+            popup.menu.add(Menu.NONE, MENU_RESTORE, 4, R.string.menu_restore_purchase)
+            if (ads.privacyOptionsRequired) popup.menu.add(Menu.NONE, MENU_PRIVACY, 5, R.string.menu_privacy)
+        }
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_INFO -> showModelInfo()
                 MENU_SHARE -> shareScreenshot()
                 MENU_ABOUT -> showAbout()
                 MENU_PRIVACY -> ads.showPrivacyOptions()
+                MENU_REMOVE_ADS -> billing.buyAdFree(this)
+                MENU_RESTORE -> billing.restore()
             }
             true
         }
@@ -328,6 +345,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         ads.onDestroy()
+        billing.destroy()
         executor.shutdownNow()
         super.onDestroy()
     }
@@ -909,6 +927,8 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_SHARE = 2
         private const val MENU_ABOUT = 3
         private const val MENU_PRIVACY = 4
+        private const val MENU_REMOVE_ADS = 5
+        private const val MENU_RESTORE = 6
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
     }

@@ -57,6 +57,15 @@
     <string name="menu_share">Görüntüyü paylaş</string>
     <string name="menu_about">Hakkında ve lisanslar</string>
     <string name="menu_privacy">Gizlilik seçenekleri</string>
+    <string name="menu_remove_ads">Reklamları kaldır</string>
+    <string name="menu_remove_ads_price">Reklamları kaldır (%1$s)</string>
+    <string name="menu_restore_purchase">Satın alımı geri yükle</string>
+    <string name="billing_thanks">Teşekkürler! Reklamlar kaldırıldı.</string>
+    <string name="billing_restored">Satın alımınız geri yüklendi, reklamlar kaldırıldı.</string>
+    <string name="billing_nothing_to_restore">Bu Google hesabında Reklamsız satın alımı bulunamadı.</string>
+    <string name="billing_pending">Ödemeniz bekleniyor. Onaylanınca reklamlar kendiliğinden kalkacak.</string>
+    <string name="billing_unavailable">Google Play mağazasına şu anda ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.</string>
+    <string name="billing_failed">Satın alma tamamlanamadı. Lütfen tekrar deneyin.</string>
     <string name="share_title">Görüntüyü paylaş</string>
     <string name="share_failed">Görüntü alınamadı</string>
 

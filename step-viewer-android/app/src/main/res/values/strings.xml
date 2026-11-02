@@ -58,6 +58,15 @@
     <string name="menu_share">Share image</string>
     <string name="menu_about">About and licenses</string>
     <string name="menu_privacy">Privacy options</string>
+    <string name="menu_remove_ads">Remove ads</string>
+    <string name="menu_remove_ads_price">Remove ads (%1$s)</string>
+    <string name="menu_restore_purchase">Restore purchase</string>
+    <string name="billing_thanks">Thank you! Ads have been removed.</string>
+    <string name="billing_restored">Your purchase was restored and ads have been removed.</string>
+    <string name="billing_nothing_to_restore">No Ad-free purchase was found for this Google account.</string>
+    <string name="billing_pending">Your payment is pending. Ads will be removed once it is confirmed.</string>
+    <string name="billing_unavailable">Google Play can\'t be reached right now. Check your internet connection and try again.</string>
+    <string name="billing_failed">The purchase could not be completed. Please try again.</string>
     <string name="share_title">Share image</string>
     <string name="share_failed">Could not capture the image</string>
 

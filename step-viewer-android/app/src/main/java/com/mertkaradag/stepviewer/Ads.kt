@@ -34,6 +34,9 @@ class Ads(private val activity: Activity, private val bannerContainer: ViewGroup
     private var loadingInterstitial = false
     private var lastInterstitialAt = 0L
 
+    /** "Reklamsız" satın alındıysa false: hiçbir reklam istenmez veya gösterilmez. */
+    private var enabled = true
+
     /** Onay durumunu günceller, gerekirse formu gösterir, sonra reklamları başlatır. */
     fun start() {
         val params = ConsentRequestParameters.Builder().build()
@@ -65,12 +68,35 @@ class Ads(private val activity: Activity, private val bannerContainer: ViewGroup
         }
     }
 
+    /** Reklamsız satın alındı: banner kaldırılır, tam ekran reklam bir daha gösterilmez. */
+    fun disable() {
+        enabled = false
+        interstitial = null
+        banner?.destroy()
+        banner = null
+        bannerContainer.removeAllViews()
+        bannerContainer.visibility = View.GONE
+    }
+
+    /** Satın alma iade edildiyse reklamlar geri gelir. */
+    fun enable() {
+        if (enabled) return
+        enabled = true
+        if (started.get()) {
+            loadBanner()
+            loadInterstitial()
+        } else {
+            start()
+        }
+    }
+
     private fun initAds() {
+        if (!enabled) return
         if (!started.compareAndSet(false, true)) return
         Thread {
             MobileAds.initialize(activity) {}
             activity.runOnUiThread {
-                if (activity.isDestroyed) return@runOnUiThread
+                if (activity.isDestroyed || !enabled) return@runOnUiThread
                 loadBanner()
                 loadInterstitial()
             }
@@ -85,7 +111,7 @@ class Ads(private val activity: Activity, private val bannerContainer: ViewGroup
         view.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(activity, widthDp.toInt()))
         view.adListener = object : AdListener() {
             override fun onAdLoaded() {
-                bannerContainer.visibility = View.VISIBLE
+                if (enabled) bannerContainer.visibility = View.VISIBLE
             }
         }
         bannerContainer.removeAllViews()
@@ -95,7 +121,7 @@ class Ads(private val activity: Activity, private val bannerContainer: ViewGroup
     }
 
     private fun loadInterstitial() {
-        if (loadingInterstitial || interstitial != null || !started.get()) return
+        if (!enabled || loadingInterstitial || interstitial != null || !started.get()) return
         loadingInterstitial = true
         InterstitialAd.load(
             activity,
@@ -104,7 +130,7 @@ class Ads(private val activity: Activity, private val bannerContainer: ViewGroup
             object : InterstitialAdLoadCallback() {
                 override fun onAdLoaded(ad: InterstitialAd) {
                     loadingInterstitial = false
-                    interstitial = ad
+                    interstitial = if (enabled) ad else null
                 }
 
                 override fun onAdFailedToLoad(error: LoadAdError) {
@@ -120,6 +146,7 @@ class Ads(private val activity: Activity, private val bannerContainer: ViewGroup
      * uymak) için iki reklam arasında en az [MIN_INTERVAL_MS] geçer.
      */
     fun showInterstitial() {
+        if (!enabled) return
         val ad = interstitial
         if (ad == null) {
             loadInterstitial()
