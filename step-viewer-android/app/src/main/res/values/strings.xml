@@ -172,4 +172,21 @@
     <string name="bom_h_total_mass">Total mass (kg)</string>
     <string name="bom_h_total">TOTAL</string>
     <string name="cancel">Cancel</string>
+    <string name="menu_markup">Mark up and share</string>
+    <string name="markup_pen">Pen</string>
+    <string name="markup_arrow">Arrow</string>
+    <string name="markup_rect">Box</string>
+    <string name="markup_text">Add text</string>
+    <string name="markup_text_hint">Type a note</string>
+    <string name="markup_save">Save</string>
+    <string name="markup_saved">Image saved: %1$s</string>
+    <string name="menu_quality">Mesh quality</string>
+    <string name="quality_fast">Fast (large assemblies, less memory)</string>
+    <string name="quality_normal">Normal</string>
+    <string name="quality_fine">Fine (smooth curves, slower)</string>
+    <string name="quality_reload">Reopening the model with the new quality.</string>
+    <string name="elapsed">%1$d s · %2$s</string>
+    <string name="load_cancelled">Opening was cancelled.</string>
+    <string name="oom_retry">Out of memory, reopening the model in fast quality…</string>
+    <string name="oom_retried">The model was opened in fast quality because memory ran out.</string>
 </resources>

@@ -171,4 +171,21 @@
     <string name="bom_h_total_mass">Toplam kütle (kg)</string>
     <string name="bom_h_total">TOPLAM</string>
     <string name="cancel">Vazgeç</string>
+    <string name="menu_markup">İşaretle ve paylaş</string>
+    <string name="markup_pen">Kalem</string>
+    <string name="markup_arrow">Ok</string>
+    <string name="markup_rect">Çerçeve</string>
+    <string name="markup_text">Yazı ekle</string>
+    <string name="markup_text_hint">Not yazın</string>
+    <string name="markup_save">Kaydet</string>
+    <string name="markup_saved">Görüntü kaydedildi: %1$s</string>
+    <string name="menu_quality">Ağ kalitesi</string>
+    <string name="quality_fast">Hızlı (büyük montajlar, az bellek)</string>
+    <string name="quality_normal">Normal</string>
+    <string name="quality_fine">Hassas (yumuşak eğriler, yavaş)</string>
+    <string name="quality_reload">Model yeni kaliteyle yeniden açılıyor.</string>
+    <string name="elapsed">%1$d sn · %2$s</string>
+    <string name="load_cancelled">Açma iptal edildi.</string>
+    <string name="oom_retry">Bellek yetmedi, model hızlı kalitede yeniden açılıyor…</string>
+    <string name="oom_retried">Model bellek yetmediği için hızlı kalitede açıldı.</string>
 </resources>

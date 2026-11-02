@@ -58,6 +58,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sectionSlider: Slider
     private lateinit var progressOverlay: View
     private lateinit var progressText: TextView
+    private lateinit var progressElapsed: TextView
+    private lateinit var progressCancel: View
     private lateinit var toolMeasure: View
     private lateinit var toolSection: View
     private lateinit var toolDisplayLabel: TextView
@@ -123,6 +125,28 @@ class MainActivity : AppCompatActivity() {
         if (uri != null) runBomExport(uri)
     }
 
+    private var pendingImage: Bitmap? = null
+    private val saveImage = registerForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
+        val bmp = pendingImage
+        pendingImage = null
+        if (uri != null && bmp != null) {
+            val name = displayName(uri)
+            executor.execute {
+                val ok = runCatching {
+                    contentResolver.openOutputStream(uri, "w")?.use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                        ?: throw IOException("open")
+                }.isSuccess
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        if (ok) getString(R.string.markup_saved, name) else getString(R.string.export_failed),
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
+        }
+    }
+
     private val openDocument =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri != null) loadModel(uri, persist = true)
@@ -182,6 +206,9 @@ class MainActivity : AppCompatActivity() {
         sectionSlider = findViewById(R.id.section_slider)
         progressOverlay = findViewById(R.id.progress_overlay)
         progressText = findViewById(R.id.progress_text)
+        progressElapsed = findViewById(R.id.progress_elapsed)
+        progressCancel = findViewById(R.id.progress_cancel)
+        progressCancel.setOnClickListener { cancelLoad() }
         toolMeasure = findViewById(R.id.tool_measure)
         toolSection = findViewById(R.id.tool_section)
         toolDisplayLabel = findViewById(R.id.tool_display_label)
@@ -274,8 +301,10 @@ class MainActivity : AppCompatActivity() {
         val hasModel = currentMesh != null
         popup.menu.add(Menu.NONE, MENU_INFO, 0, R.string.menu_model_info).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_SHARE, 1, R.string.menu_share).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_MARKUP, 1, R.string.menu_markup).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_EXPORT, 1, R.string.menu_export).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_BOM, 1, R.string.menu_bom).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_QUALITY, 2, R.string.menu_quality)
         popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
         if (!billing.adFree) {
             val price = billing.formattedPrice
@@ -289,9 +318,11 @@ class MainActivity : AppCompatActivity() {
             when (item.itemId) {
                 MENU_INFO -> showModelInfo()
                 MENU_SHARE -> shareScreenshot()
+                MENU_MARKUP -> startMarkup()
                 MENU_EXPORT -> showExportDialog()
                 MENU_BOM -> showBomDialog()
                 MENU_ABOUT -> showAbout()
+                MENU_QUALITY -> showQualityDialog()
                 MENU_PRIVACY -> ads.showPrivacyOptions()
                 MENU_REMOVE_ADS -> billing.buyAdFree(this)
                 MENU_RESTORE -> billing.restore()
@@ -380,6 +411,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        tickHandler.removeCallbacks(tick)
         ads.onDestroy()
         billing.destroy()
         executor.shutdownNow()
@@ -398,15 +430,50 @@ class MainActivity : AppCompatActivity() {
         openDocument.launch(arrayOf("*/*"))
     }
 
+    // Yükleme durumu: iptal edilen işin sonucu jetonla ayırt edilir
+    private var loadToken = 0
+    private var currentUri: Uri? = null
+    private val tickHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var tickStarted = 0L
+    private var tickInfo = ""
+    private val tick = object : Runnable {
+        override fun run() {
+            val sec = ((SystemClock.elapsedRealtime() - tickStarted) / 1000).toInt()
+            progressElapsed.text = getString(R.string.elapsed, sec, tickInfo)
+            tickHandler.postDelayed(this, 1000)
+        }
+    }
+
+    private val settings by lazy { getSharedPreferences("settings", MODE_PRIVATE) }
+
+    /** 0 = hızlı, 1 = normal, 2 = hassas. */
+    private var meshQuality: Int
+        get() = settings.getInt("mesh_quality", 1)
+        set(v) = settings.edit().putInt("mesh_quality", v).apply()
+
+    private fun deflectionFor(quality: Int): Double = when (quality) {
+        0 -> 0.004
+        2 -> 0.0003
+        else -> 0.001
+    }
+
     private fun loadModel(uri: Uri, persist: Boolean) {
         if (loading) {
             Toast.makeText(this, R.string.busy, Toast.LENGTH_SHORT).show()
             return
         }
         loading = true
+        val token = ++loadToken
         val name = displayName(uri)
         progressText.text = getString(R.string.loading_file, name)
         progressOverlay.visibility = View.VISIBLE
+        progressCancel.visibility = View.VISIBLE
+        tickInfo = ""
+        tickStarted = SystemClock.elapsedRealtime()
+        progressElapsed.text = ""
+        progressElapsed.visibility = View.VISIBLE
+        tickHandler.removeCallbacks(tick)
+        tickHandler.postDelayed(tick, 1000)
 
         if (persist) {
             // Son açılanlar listesinden tekrar açabilmek için kalıcı izin (mümkünse)
@@ -416,12 +483,29 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        val quality = meshQuality
         executor.execute {
             val started = SystemClock.elapsedRealtime()
+            var fellBack = false
             val result: Result<StepMesh> = try {
                 val file = copyToCache(uri, name)
-                runOnUiThread { progressText.text = getString(R.string.meshing_file, name) }
-                Result.success(StepNative.loadModel(file.absolutePath, 0.0))
+                val mb = file.length() / (1024.0 * 1024.0)
+                runOnUiThread {
+                    if (token != loadToken) return@runOnUiThread
+                    tickInfo = String.format(Locale.getDefault(), "%.1f MB", mb)
+                    progressText.text = getString(R.string.meshing_file, name)
+                }
+                try {
+                    Result.success(StepNative.loadModel(file.absolutePath, deflectionFor(quality)))
+                } catch (e: Throwable) {
+                    val oom = e is OutOfMemoryError || (e is IOException && e.message?.startsWith("out_of_memory") == true)
+                    if (!oom || quality == 0 || token != loadToken) throw e
+                    // Bellek yetmedi: daha kaba ağla bir kez daha dene
+                    System.gc()
+                    runOnUiThread { if (token == loadToken) progressText.text = getString(R.string.oom_retry) }
+                    fellBack = true
+                    Result.success(StepNative.loadModel(file.absolutePath, deflectionFor(0)))
+                }
             } catch (e: IOException) {
                 Result.failure(e)
             } catch (e: OutOfMemoryError) {
@@ -433,12 +517,14 @@ class MainActivity : AppCompatActivity() {
             val seconds = (SystemClock.elapsedRealtime() - started) / 1000.0
 
             runOnUiThread {
-                if (isDestroyed) return@runOnUiThread
+                if (isDestroyed || token != loadToken) return@runOnUiThread // iptal edildi
                 loading = false
-                progressOverlay.visibility = View.GONE
+                stopProgress()
                 result.onSuccess { mesh ->
+                    currentUri = uri
                     onModelLoaded(mesh, name, seconds)
                     if (hasPersistedPermission(uri)) recentFiles.add(uri, name)
+                    if (fellBack) Toast.makeText(this, R.string.oom_retried, Toast.LENGTH_LONG).show()
                     ads.showInterstitial()
                 }.onFailure { e ->
                     showRecentFiles()
@@ -446,6 +532,61 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Yüklemeyi iptal eder. Yerel okuma yarıda kesilemez; biter bitmez sonucu atılır.
+     * Yerel taraf artık başka bir modeli tuttuğu için ekran boş duruma döner.
+     */
+    private fun cancelLoad() {
+        if (!loading) return
+        loadToken++
+        loading = false
+        stopProgress()
+        currentMesh = null
+        currentUri = null
+        modelView.visibility = View.VISIBLE
+        setMeasureMode(false)
+        setSelectMode(false)
+        setSection(false)
+        explodeCard.visibility = View.GONE
+        toolbarCard.visibility = View.GONE
+        sideButtons.visibility = View.GONE
+        subtitleText.visibility = View.GONE
+        titleText.setText(R.string.app_name)
+        hiddenCard.visibility = View.GONE
+        emptyState.visibility = View.VISIBLE
+        showRecentFiles()
+        Toast.makeText(this, R.string.load_cancelled, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun stopProgress() {
+        tickHandler.removeCallbacks(tick)
+        progressOverlay.visibility = View.GONE
+        progressCancel.visibility = View.GONE
+        progressElapsed.visibility = View.GONE
+    }
+
+    private fun showQualityDialog() {
+        val labels = arrayOf(
+            getString(R.string.quality_fast),
+            getString(R.string.quality_normal),
+            getString(R.string.quality_fine),
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.menu_quality)
+            .setSingleChoiceItems(labels, meshQuality) { d, which ->
+                d.dismiss()
+                if (which == meshQuality) return@setSingleChoiceItems
+                meshQuality = which
+                val uri = currentUri
+                if (uri != null && currentMesh != null) {
+                    Toast.makeText(this, R.string.quality_reload, Toast.LENGTH_SHORT).show()
+                    loadModel(uri, persist = false)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     private fun onModelLoaded(mesh: StepMesh, name: String, seconds: Double) {
@@ -1094,6 +1235,27 @@ class MainActivity : AppCompatActivity() {
         ).show()
     }
 
+    /** Ekran görüntüsünü alıp işaretleme ekranını açar. */
+    private fun startMarkup() {
+        val overlayText = if (measureMode) measure.lastText else ""
+        modelView.captureScreenshot { bmp ->
+            if (bmp == null || isDestroyed) {
+                Toast.makeText(this, R.string.share_failed, Toast.LENGTH_SHORT).show()
+                return@captureScreenshot
+            }
+            val annotated = annotate(bmp, currentName, overlayText)
+            MarkupDialog(
+                context = this,
+                image = annotated,
+                onShare = { shareBitmap(it) },
+                onSave = { marked ->
+                    pendingImage = marked
+                    saveImage.launch(baseFileName() + "_not.png")
+                },
+            ).show()
+        }
+    }
+
     private fun shareScreenshot() {
         val overlayText = if (measureMode) measure.lastText else ""
         modelView.captureScreenshot { bmp ->
@@ -1101,8 +1263,13 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, R.string.share_failed, Toast.LENGTH_SHORT).show()
                 return@captureScreenshot
             }
+            shareBitmap(annotate(bmp, currentName, overlayText))
+        }
+    }
+
+    private fun shareBitmap(annotated: Bitmap) {
+        run {
             try {
-                val annotated = annotate(bmp, currentName, overlayText)
                 val dir = File(cacheDir, "shared").apply { mkdirs() }
                 dir.listFiles()?.forEach { it.delete() }
                 val file = File(dir, "ekran_${System.currentTimeMillis()}.png")
@@ -1192,6 +1359,8 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_RESTORE = 6
         private const val MENU_EXPORT = 7
         private const val MENU_BOM = 8
+        private const val MENU_MARKUP = 9
+        private const val MENU_QUALITY = 10
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
     }
