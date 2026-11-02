@@ -13,6 +13,9 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#ifdef HOLE_DEBUG
+#include <cstdio>
+#endif
 
 namespace stepviewer {
 namespace {
@@ -60,6 +63,9 @@ bool AnalyseFace(const TopoDS_Face& face, int id, AxisFace& out) {
   const gp_Vec radial = ap - ad * ap.Dot(ad);
   if (radial.SquareMagnitude() < 1e-18) return false;
   // Malzeme dışarıda (yüzey normali eksene bakıyor) ise delik; dışbükey ise mil/göbek.
+#ifdef HOLE_DEBUG
+  std::fprintf(stderr, "yuzey %d tur=%d u=[%.3f %.3f] v=[%.3f %.3f] n.r=%.3f\n", id, (int)type, u1, u2, v1, v2, n.Dot(radial));
+#endif
   if (n.Dot(radial) >= 0) return false;
 
   out.id = id;
@@ -68,7 +74,7 @@ bool AnalyseFace(const TopoDS_Face& face, int id, AxisFace& out) {
   out.dir = axis.Direction();
   out.semiAngle = out.cone ? std::abs(s.Cone().SemiAngle()) : 0.0;
   const double span = std::min(u2 - u1, 2 * kPi);
-  const int samples = std::max(4, static_cast<int>(std::ceil(span / (2 * kPi / 180.0))));
+  const int samples = std::max(4, static_cast<int>(std::ceil(span / (kPi / 360.0))));
   out.ring.reserve(static_cast<size_t>(samples) + 1);
   for (int i = 0; i <= samples; ++i) {
     out.ring.push_back(s.Value(u1 + span * i / samples, vm));

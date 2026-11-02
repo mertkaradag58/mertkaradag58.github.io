@@ -195,6 +195,19 @@ int main(int argc, char** argv) {
         }
         std::fprintf(sf, "</svg>\n");
         std::fclose(sf);
+        // Ham segmentler (Kotlin yerleşimini denemek için): satır başına görünüş tür x1 y1 x2 y2
+        const std::string raw = std::string(argv[a + 1]) + ".txt";
+        FILE* rf = std::fopen(raw.c_str(), "w");
+        if (rf) {
+          for (size_t v = 0; v < views.size(); ++v) {
+            for (int k = 0; k < 2; ++k) {
+              const auto& lst = k == 0 ? views[v].visible : views[v].hidden;
+              for (size_t i = 0; i + 3 < lst.size(); i += 4)
+                std::fprintf(rf, "%zu %d %.4f %.4f %.4f %.4f\n", v, k, lst[i], lst[i + 1], lst[i + 2], lst[i + 3]);
+            }
+          }
+          std::fclose(rf);
+        }
       }
       a += 1;
     } else if (std::strcmp(argv[a], "--holes") == 0) {
