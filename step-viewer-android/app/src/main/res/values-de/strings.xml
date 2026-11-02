@@ -216,4 +216,19 @@ Innere Ausschnitte: %3$d
 
 Maßstab 1:1 in mm, Ansicht von außen, linke untere Ecke bei 0,0. Außenkontur auf Ebene OUTER, Bohrungen auf INNER.</string>
     <string name="dxf_done">DXF gespeichert: %1$s</string>
+    <string name="menu_drawing">Technische Zeichnung (PDF/DXF)</string>
+    <string name="drawing_cad_only">Technische Zeichnungen funktionieren mit STEP-, IGES- und BREP-Dateien.</string>
+    <string name="drawing_busy">Technische Zeichnung wird erstellt…</string>
+    <string name="drawing_failed">Die technische Zeichnung konnte nicht erstellt werden.</string>
+    <string name="drawing_t_name">Name</string>
+    <string name="drawing_t_scale">Maßstab</string>
+    <string name="drawing_t_date">Datum</string>
+    <string name="drawing_t_unit">Einheit</string>
+    <string name="drawing_t_projection">Projektion (ISO E)</string>
+    <string name="drawing_t_sheet">Blatt</string>
+    <string name="drawing_done">Zeichnung gespeichert: %1$s</string>
+    <string name="drawing_pdf">PDF</string>
+    <string name="drawing_dxf">DXF</string>
+    <string name="drawing_paper">Papierformat</string>
+    <string name="drawing_info">Technische Zeichnung · %1$s</string>
 </resources>

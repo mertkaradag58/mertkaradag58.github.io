@@ -55,6 +55,12 @@ object StepNative {
      * yüz düz değilse null.
      */
     external fun faceDxf(faceId: Int): Array<Any>?
+
+    /**
+     * Teknik resim görünüşleri (yalnızca CAD): [FloatArray segmentler, IntArray aralıklar,
+     * DoubleArray sınır kutusu]. Bkz. [TechDrawing.load]. Arka planda çağrılmalı.
+     */
+    external fun drawingViews(partIds: IntArray?, zUp: Boolean, hidden: Boolean): Array<Any>?
 }
 
 /** C++ GeomKind ile aynı değerler. */

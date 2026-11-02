@@ -250,4 +250,19 @@ Inner cutouts: %3$d
 
 1:1 scale in mm, seen from outside, bottom-left corner at 0,0. Outer contour on layer OUTER, holes on INNER.</string>
     <string name="dxf_done">DXF saved: %1$s</string>
+    <string name="menu_drawing">Technical drawing (PDF/DXF)</string>
+    <string name="drawing_cad_only">Technical drawings work with STEP, IGES and BREP files.</string>
+    <string name="drawing_busy">Preparing technical drawing…</string>
+    <string name="drawing_failed">The technical drawing could not be created.</string>
+    <string name="drawing_t_name">Name</string>
+    <string name="drawing_t_scale">Scale</string>
+    <string name="drawing_t_date">Date</string>
+    <string name="drawing_t_unit">Unit</string>
+    <string name="drawing_t_projection">Projection (ISO E)</string>
+    <string name="drawing_t_sheet">Sheet</string>
+    <string name="drawing_done">Drawing saved: %1$s</string>
+    <string name="drawing_pdf">PDF</string>
+    <string name="drawing_dxf">DXF</string>
+    <string name="drawing_paper">Paper size</string>
+    <string name="drawing_info">Technical drawing · %1$s</string>
 </resources>

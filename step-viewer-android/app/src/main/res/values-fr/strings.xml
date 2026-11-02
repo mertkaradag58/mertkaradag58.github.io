@@ -215,4 +215,19 @@ Découpes intérieures : %3$d
 
 Échelle 1:1 en mm, vue de l\'extérieur, coin inférieur gauche en 0,0. Contour extérieur sur le calque OUTER, perçages sur INNER.</string>
     <string name="dxf_done">DXF enregistré : %1$s</string>
+    <string name="menu_drawing">Dessin technique (PDF/DXF)</string>
+    <string name="drawing_cad_only">Les dessins techniques fonctionnent avec les fichiers STEP, IGES et BREP.</string>
+    <string name="drawing_busy">Préparation du dessin technique…</string>
+    <string name="drawing_failed">Impossible de créer le dessin technique.</string>
+    <string name="drawing_t_name">Nom</string>
+    <string name="drawing_t_scale">Échelle</string>
+    <string name="drawing_t_date">Date</string>
+    <string name="drawing_t_unit">Unité</string>
+    <string name="drawing_t_projection">Projection (ISO E)</string>
+    <string name="drawing_t_sheet">Format</string>
+    <string name="drawing_done">Dessin enregistré : %1$s</string>
+    <string name="drawing_pdf">PDF</string>
+    <string name="drawing_dxf">DXF</string>
+    <string name="drawing_paper">Format du papier</string>
+    <string name="drawing_info">Dessin technique · %1$s</string>
 </resources>

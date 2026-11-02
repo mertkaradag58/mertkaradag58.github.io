@@ -221,4 +221,19 @@
 
 Масштаб 1:1 в мм, вид снаружи, левый нижний угол в 0,0. Внешний контур на слое OUTER, отверстия на INNER.</string>
     <string name="dxf_done">DXF сохранён: %1$s</string>
+    <string name="menu_drawing">Чертёж (PDF/DXF)</string>
+    <string name="drawing_cad_only">Чертежи работают с файлами STEP, IGES и BREP.</string>
+    <string name="drawing_busy">Подготовка чертежа…</string>
+    <string name="drawing_failed">Не удалось создать чертёж.</string>
+    <string name="drawing_t_name">Название</string>
+    <string name="drawing_t_scale">Масштаб</string>
+    <string name="drawing_t_date">Дата</string>
+    <string name="drawing_t_unit">Единицы</string>
+    <string name="drawing_t_projection">Проекция (ISO E)</string>
+    <string name="drawing_t_sheet">Формат</string>
+    <string name="drawing_done">Чертёж сохранён: %1$s</string>
+    <string name="drawing_pdf">PDF</string>
+    <string name="drawing_dxf">DXF</string>
+    <string name="drawing_paper">Формат бумаги</string>
+    <string name="drawing_info">Чертёж · %1$s</string>
 </resources>

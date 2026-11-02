@@ -3,6 +3,8 @@
 #include <android/log.h>
 #include <jni.h>
 
+#include <BRepBndLib.hxx>
+#include <Bnd_Box.hxx>
 #include <Standard_Failure.hxx>
 #include <TopoDS.hxx>
 
@@ -381,7 +383,7 @@ Java_com_mertkaradag_stepviewer_StepNative_faceDxf(JNIEnv* env, jobject /*thiz*/
 
 // Teknik resim görünüşleri (yalnızca CAD). partIds null ise tüm parçalar.
 // Dönüş: [float[] segmentler (x1, y1, x2, y2), int[] görünüş başına (görünenBaş, görünenAdet,
-// gizliBaş, gizliAdet) * 4] veya null.
+// gizliBaş, gizliAdet) * 4, double[6] gerçek sınır kutusu (min xyz, max xyz)] veya null.
 extern "C" JNIEXPORT jobjectArray JNICALL
 Java_com_mertkaradag_stepviewer_StepNative_drawingViews(JNIEnv* env, jobject /*thiz*/,
                                                         jintArray jpartIds, jboolean zUp,
@@ -421,12 +423,24 @@ Java_com_mertkaradag_stepviewer_StepNative_drawingViews(JNIEnv* env, jobject /*t
   }
   jclass objClass = env->FindClass("java/lang/Object");
   if (objClass == nullptr) return nullptr;
-  jobjectArray result = env->NewObjectArray(2, objClass, nullptr);
+  jobjectArray result = env->NewObjectArray(3, objClass, nullptr);
   if (result == nullptr) return nullptr;
+  Bnd_Box box;
+  for (const auto& sh : shapes) {
+    try {
+      BRepBndLib::AddOptimal(sh, box, false, false);
+    } catch (const Standard_Failure&) {
+      BRepBndLib::Add(sh, box);
+    }
+  }
+  double b[6] = {0, 0, 0, 0, 0, 0};
+  if (!box.IsVoid()) box.Get(b[0], b[1], b[2], b[3], b[4], b[5]);
   jfloatArray js = ToJava(env, segs.data(), segs.size());
   jintArray jr = ToJava(env, ranges);
-  if (!js || !jr) return nullptr;
+  jdoubleArray jb = ToJava(env, std::vector<double>(b, b + 6));
+  if (!js || !jr || !jb) return nullptr;
   env->SetObjectArrayElement(result, 0, js);
   env->SetObjectArrayElement(result, 1, jr);
+  env->SetObjectArrayElement(result, 2, jb);
   return result;
 }

@@ -215,4 +215,19 @@ Recortes interiores: %3$d
 
 Escala 1:1 en mm, vista desde fuera, esquina inferior izquierda en 0,0. Contorno exterior en la capa OUTER, agujeros en INNER.</string>
     <string name="dxf_done">DXF guardado: %1$s</string>
+    <string name="menu_drawing">Plano técnico (PDF/DXF)</string>
+    <string name="drawing_cad_only">Los planos técnicos funcionan con archivos STEP, IGES y BREP.</string>
+    <string name="drawing_busy">Preparando el plano técnico…</string>
+    <string name="drawing_failed">No se pudo crear el plano técnico.</string>
+    <string name="drawing_t_name">Nombre</string>
+    <string name="drawing_t_scale">Escala</string>
+    <string name="drawing_t_date">Fecha</string>
+    <string name="drawing_t_unit">Unidad</string>
+    <string name="drawing_t_projection">Proyección (ISO E)</string>
+    <string name="drawing_t_sheet">Hoja</string>
+    <string name="drawing_done">Plano guardado: %1$s</string>
+    <string name="drawing_pdf">PDF</string>
+    <string name="drawing_dxf">DXF</string>
+    <string name="drawing_paper">Tamaño de papel</string>
+    <string name="drawing_info">Plano técnico · %1$s</string>
 </resources>

@@ -249,4 +249,19 @@
 
 1:1 ölçek, mm, dışarıdan bakış, sol alt köşe 0,0. Dış kontur OUTER katmanında, delikler INNER katmanında.</string>
     <string name="dxf_done">DXF kaydedildi: %1$s</string>
+    <string name="menu_drawing">Teknik resim (PDF/DXF)</string>
+    <string name="drawing_cad_only">Teknik resim STEP, IGES ve BREP dosyalarında çalışır.</string>
+    <string name="drawing_busy">Teknik resim hazırlanıyor…</string>
+    <string name="drawing_failed">Teknik resim oluşturulamadı.</string>
+    <string name="drawing_t_name">Ad</string>
+    <string name="drawing_t_scale">Ölçek</string>
+    <string name="drawing_t_date">Tarih</string>
+    <string name="drawing_t_unit">Birim</string>
+    <string name="drawing_t_projection">İzdüşüm (ISO E)</string>
+    <string name="drawing_t_sheet">Kâğıt</string>
+    <string name="drawing_done">Teknik resim kaydedildi: %1$s</string>
+    <string name="drawing_pdf">PDF</string>
+    <string name="drawing_dxf">DXF</string>
+    <string name="drawing_paper">Kâğıt boyutu</string>
+    <string name="drawing_info">Teknik resim · %1$s</string>
 </resources>

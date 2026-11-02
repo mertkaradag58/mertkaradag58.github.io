@@ -140,6 +140,18 @@ class MainActivity : AppCompatActivity() {
         if (uri != null && data != null) runDxfSave(uri, data)
     }
 
+    private val exportDrawingPdf = registerForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        val job = pendingDrawing
+        pendingDrawing = null
+        if (uri != null && job != null) runDrawingSave(uri, job, pdf = true)
+    }
+
+    private val exportDrawingDxf = registerForActivityResult(ActivityResultContracts.CreateDocument("application/dxf")) { uri ->
+        val job = pendingDrawing
+        pendingDrawing = null
+        if (uri != null && job != null) runDrawingSave(uri, job, pdf = false)
+    }
+
     private val exportCsv = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) runBomExport(uri)
     }
@@ -339,6 +351,7 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(Menu.NONE, MENU_BOM, 1, R.string.menu_bom).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_HOLES, 1, R.string.menu_holes).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_DXF, 1, R.string.menu_dxf).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_DRAWING, 1, R.string.menu_drawing).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_QUALITY, 2, R.string.menu_quality)
         popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
         if (!billing.adFree) {
@@ -358,6 +371,7 @@ class MainActivity : AppCompatActivity() {
                 MENU_BOM -> showBomDialog()
                 MENU_HOLES -> showHoleTable()
                 MENU_DXF -> startDxfPick()
+                MENU_DRAWING -> showDrawing()
                 MENU_ABOUT -> showAbout()
                 MENU_QUALITY -> showQualityDialog()
                 MENU_PRIVACY -> ads.showPrivacyOptions()
@@ -1634,6 +1648,113 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Teknik resim
+    // -----------------------------------------------------------------------
+
+    private class DrawingJob(val views: TechDrawing.Views, val layout: TechDrawing.Layout, val texts: TechDrawing.Texts)
+
+    private var pendingDrawing: DrawingJob? = null
+
+    private fun showDrawing() {
+        val mesh = currentMesh ?: return
+        if (mesh.isMeshFormat) {
+            Toast.makeText(this, R.string.drawing_cad_only, Toast.LENGTH_LONG).show()
+            return
+        }
+        val visible = partVisible.copyOf()
+        val ids = if (visible.all { it }) null else visible.indices.filter { visible[it] }.toIntArray()
+        if (ids != null && ids.isEmpty()) return
+        val zUp = !yUp
+        showBusy(getString(R.string.drawing_busy))
+        executor.execute {
+            val views = try {
+                TechDrawing.load(ids, zUp)
+            } catch (_: Throwable) {
+                null
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                hideBusy()
+                if (mesh !== currentMesh) return@runOnUiThread
+                if (views == null) {
+                    Toast.makeText(this, R.string.drawing_failed, Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                val texts = TechDrawing.Texts(
+                    name = baseFileName(),
+                    nameLabel = getString(R.string.drawing_t_name),
+                    scaleLabel = getString(R.string.drawing_t_scale),
+                    dateLabel = getString(R.string.drawing_t_date),
+                    date = DateFormat.getDateFormat(this).format(java.util.Date()),
+                    unitLabel = getString(R.string.drawing_t_unit),
+                    projectionLabel = getString(R.string.drawing_t_projection),
+                    sheetLabel = getString(R.string.drawing_t_sheet),
+                    app = getString(R.string.app_name),
+                )
+                DrawingDialog(
+                    context = this,
+                    views = views,
+                    texts = texts,
+                    onSavePdf = { l ->
+                        pendingDrawing = DrawingJob(views, l, texts)
+                        exportDrawingPdf.launch(baseFileName() + "_teknik_resim.pdf")
+                    },
+                    onSaveDxf = { l ->
+                        pendingDrawing = DrawingJob(views, l, texts)
+                        exportDrawingDxf.launch(baseFileName() + "_teknik_resim.dxf")
+                    },
+                    onSharePdf = { l -> shareDrawingPdf(DrawingJob(views, l, texts)) },
+                ).show()
+            }
+        }
+    }
+
+    private fun runDrawingSave(uri: Uri, job: DrawingJob, pdf: Boolean) {
+        val name = displayName(uri)
+        showBusy(getString(R.string.export_busy))
+        executor.execute {
+            val result = runCatching {
+                contentResolver.openOutputStream(uri, "w")?.use { out ->
+                    if (pdf) {
+                        TechDrawing.pdf(job.views, job.layout, job.texts, out)
+                    } else {
+                        out.write(TechDrawing.dxf(job.views, job.layout, job.texts).toByteArray(Charsets.US_ASCII))
+                    }
+                } ?: throw IOException("open")
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                hideBusy()
+                result.onSuccess {
+                    Toast.makeText(this, getString(R.string.drawing_done, name), Toast.LENGTH_LONG).show()
+                }.onFailure {
+                    Toast.makeText(this, R.string.export_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun shareDrawingPdf(job: DrawingJob) {
+        try {
+            val dir = File(cacheDir, "shared").apply { mkdirs() }
+            dir.listFiles()?.forEach { it.delete() }
+            val file = File(dir, baseFileName() + "_teknik_resim.pdf")
+            file.outputStream().use { TechDrawing.pdf(job.views, job.layout, job.texts, it) }
+            val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+            val send = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_TEXT, currentName)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(send, getString(R.string.share_title)))
+            adAfterShare = true
+        } catch (e: Exception) {
+            Toast.makeText(this, R.string.share_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     private fun showBusy(text: String) {
         progressText.text = text
         progressOverlay.visibility = View.VISIBLE
@@ -1786,6 +1907,7 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_QUALITY = 10
         private const val MENU_HOLES = 11
         private const val MENU_DXF = 12
+        private const val MENU_DRAWING = 13
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
     }

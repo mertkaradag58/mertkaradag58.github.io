@@ -215,4 +215,19 @@ Recortes internos: %3$d
 
 Escala 1:1 em mm, vista de fora, canto inferior esquerdo em 0,0. Contorno externo na camada OUTER, furos em INNER.</string>
     <string name="dxf_done">DXF salvo: %1$s</string>
+    <string name="menu_drawing">Desenho técnico (PDF/DXF)</string>
+    <string name="drawing_cad_only">Desenhos técnicos funcionam com arquivos STEP, IGES e BREP.</string>
+    <string name="drawing_busy">Preparando o desenho técnico…</string>
+    <string name="drawing_failed">Não foi possível criar o desenho técnico.</string>
+    <string name="drawing_t_name">Nome</string>
+    <string name="drawing_t_scale">Escala</string>
+    <string name="drawing_t_date">Data</string>
+    <string name="drawing_t_unit">Unidade</string>
+    <string name="drawing_t_projection">Projeção (ISO E)</string>
+    <string name="drawing_t_sheet">Folha</string>
+    <string name="drawing_done">Desenho salvo: %1$s</string>
+    <string name="drawing_pdf">PDF</string>
+    <string name="drawing_dxf">DXF</string>
+    <string name="drawing_paper">Tamanho do papel</string>
+    <string name="drawing_info">Desenho técnico · %1$s</string>
 </resources>
