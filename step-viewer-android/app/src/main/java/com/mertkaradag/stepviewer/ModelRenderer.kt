@@ -44,6 +44,11 @@ class ModelRenderer(
     private var explodeEdgeDirs: FloatArray? = null
     private var explodeDirty = false
     private var explodeFactor = 0f
+    // PMI çizimleri
+    private var pmiSegments: FloatArray? = null
+    private var pmiDirty = false
+    private var pmiVisible = false
+    private var pmiHighlight = IntArray(0) // (başlangıç segment, adet)
     private var screenshotCallback: ((Bitmap?) -> Unit)? = null
 
     private var bgProgram = 0
@@ -56,6 +61,8 @@ class ModelRenderer(
     private var measureVbo = 0
     private var explodeVbo = 0
     private var explodeEdgeVbo = 0
+    private var pmiVbo = 0
+    private var pmiVertexCount = 0
     private var hasExplodeData = false
     private var indexCount = 0
     private var edgeVertexCount = 0
@@ -93,6 +100,20 @@ class ModelRenderer(
         explodeEdgeDirs = null
         explodeDirty = true
         explodeFactor = 0f
+        pmiSegments = null
+        pmiDirty = true
+        pmiVisible = false
+        pmiHighlight = IntArray(0)
+    }
+
+    fun setPmi(segments: FloatArray?) {
+        pmiSegments = segments
+        pmiDirty = true
+    }
+
+    fun setPmiVisible(visible: Boolean, highlight: IntArray) {
+        pmiVisible = visible
+        pmiHighlight = highlight
     }
 
     /** Patlatma yönleri (köşe ve kenar köşesi başına x, y, z); bir kez verilir. */
@@ -151,8 +172,8 @@ class ModelRenderer(
         uLineClipOn = GLES30.glGetUniformLocation(lineProgram, "uClipOn")
         uLineExplode = GLES30.glGetUniformLocation(lineProgram, "uExplode")
 
-        val ids = IntArray(7)
-        GLES30.glGenBuffers(7, ids, 0)
+        val ids = IntArray(8)
+        GLES30.glGenBuffers(8, ids, 0)
         vbo = ids[0]
         ibo = ids[1]
         edgeVbo = ids[2]
@@ -160,11 +181,13 @@ class ModelRenderer(
         measureVbo = ids[4]
         explodeVbo = ids[5]
         explodeEdgeVbo = ids[6]
+        pmiVbo = ids[7]
 
         // Yeni bağlam: GPU tamponları boş, her şeyi tekrar yükle.
         meshDirty = true
         overlayDirty = true
         explodeDirty = true
+        pmiDirty = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -183,6 +206,10 @@ class ModelRenderer(
             highlightVertexCount = upload(highlightVbo, overlay.edgeSegments)
             measureVertexCount = upload(measureVbo, overlay.measureLine)
             overlayDirty = false
+        }
+        if (pmiDirty) {
+            pmiVertexCount = upload(pmiVbo, pmiSegments)
+            pmiDirty = false
         }
         if (explodeDirty) {
             val v = explodeVertexDirs
@@ -206,6 +233,7 @@ class ModelRenderer(
             if (displayMode != DisplayMode.WIREFRAME) drawFaces(clip)
             if (displayMode != DisplayMode.SHADED) drawEdges(clip)
             drawOverlay(clip)
+            drawPmi()
         }
 
         screenshotCallback?.let { cb ->
@@ -394,6 +422,35 @@ class ModelRenderer(
             GLES30.glDrawArrays(GLES30.GL_LINES, 0, 2)
             GLES30.glUniform1f(uPointSize, 14f)
             GLES30.glDrawArrays(GLES30.GL_POINTS, 0, 2)
+            GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+        }
+        GLES30.glLineWidth(1f)
+        GLES30.glDisableVertexAttribArray(0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+    }
+
+    /** PMI çizgileri: yeşil; seçili öğe sarı, kalın ve her zaman önde. */
+    private fun drawPmi() {
+        if (!pmiVisible || pmiVertexCount == 0) return
+        GLES30.glUseProgram(lineProgram)
+        GLES30.glUniformMatrix4fv(uLineMvp, 1, false, mvp, 0)
+        noExplode(1, uLineExplode)
+        setLineClip(null)
+        GLES30.glUniform1f(uPointSize, 1f)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, pmiVbo)
+        GLES30.glEnableVertexAttribArray(0)
+        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+        GLES30.glLineWidth(2f)
+        GLES30.glUniform4f(uLineColor, 0.30f, 0.90f, 0.55f, 1f)
+        GLES30.glDrawArrays(GLES30.GL_LINES, 0, pmiVertexCount)
+        val h = pmiHighlight
+        if (h.size >= 2 && h[1] > 0) {
+            GLES30.glDisable(GLES30.GL_DEPTH_TEST)
+            GLES30.glLineWidth(4f)
+            GLES30.glUniform4f(uLineColor, 1.0f, 0.85f, 0.1f, 1f)
+            val start = h[0] * 2
+            val count = minOf(h[1] * 2, pmiVertexCount - start)
+            if (start >= 0 && count > 0) GLES30.glDrawArrays(GLES30.GL_LINES, start, count)
             GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         }
         GLES30.glLineWidth(1f)

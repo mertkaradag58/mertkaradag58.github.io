@@ -40,7 +40,8 @@ add_library(stepviewer SHARED
   jni_bridge.cpp
   step_mesher.cpp
   mesh_model.cpp
-  mesh_import.cpp)
+  mesh_import.cpp
+  pmi_extract.cpp)
 
 target_include_directories(stepviewer PRIVATE ${OCCT_INCLUDE_DIR} "${ASSIMP_PREFIX}/include")
 

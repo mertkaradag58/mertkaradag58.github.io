@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PMI: iki ok uçlu ölçü çizgisi ve uzatma çizgileri -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:tint="?attr/colorControlNormal"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:fillColor="@android:color/white" android:pathData="M3,4h2v16H3zM19,4h2v16h-2z" />
+    <path android:fillColor="@android:color/white" android:pathData="M5,12l4,-3.5v2.5h6V8.5l4,3.5 -4,3.5V13H9v2.5z" />
+</vector>

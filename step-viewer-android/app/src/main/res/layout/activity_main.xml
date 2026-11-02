@@ -168,6 +168,13 @@
             app:icon="@drawable/ic_fit" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/pmi_button"
+            style="@style/SideButton"
+            android:contentDescription="@string/pmi"
+            android:visibility="gone"
+            app:icon="@drawable/ic_pmi" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/explode_button"
             style="@style/SideButton"
             android:contentDescription="@string/explode"

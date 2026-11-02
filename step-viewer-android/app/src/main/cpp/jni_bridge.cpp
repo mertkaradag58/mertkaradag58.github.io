@@ -23,9 +23,12 @@ struct ModelStore {
   std::vector<TopoDS_Shape> parts;
   // Mesh dosyalarında (OBJ, STL, ...) ölçüm bu geometriden yapılır; CAD'de boş.
   std::shared_ptr<stepviewer::MeshGeometry> mesh;
+  // STEP PMI (ölçü, tolerans, referans)
+  stepviewer::PmiData pmi;
 
   void Clear() {
     std::lock_guard<std::mutex> lock(mutex);
+    pmi = stepviewer::PmiData();
     std::vector<TopoDS_Edge>().swap(edges);
     std::vector<TopoDS_Face>().swap(faces);
     std::vector<TopoDS_Shape>().swap(parts);
@@ -173,6 +176,7 @@ Java_com_mertkaradag_stepviewer_StepNative_loadModel(JNIEnv* env, jobject /*thiz
     gStore.edges = std::move(mesh.edgeShapes);
     gStore.faces = std::move(mesh.faceShapes);
     gStore.parts = std::move(mesh.partShapes);
+    gStore.pmi = std::move(mesh.pmi);
     gStore.mesh = std::move(mesh.meshGeometry);
   }
   return result;
@@ -249,4 +253,48 @@ Java_com_mertkaradag_stepviewer_StepNative_massProps(JNIEnv* env, jobject /*thiz
   if (shapes.empty() || !stepviewer::ComputeMassProps(shapes, p)) return nullptr;
   return ToJava(env, std::vector<double>{p.volume, p.area, p.center[0], p.center[1], p.center[2],
                       p.hasSolids ? 1.0 : 0.0});
+}
+
+// PMI: [float[] segmentler, int[] (tür, segBaş, segSon, konumVar)*n, float[] konumlar, byte[] metinler]
+// Metinler UTF-8, '\n' ile ayrılmış. PMI yoksa null.
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_com_mertkaradag_stepviewer_StepNative_pmiData(JNIEnv* env, jobject /*thiz*/) {
+  stepviewer::PmiData pmi;
+  {
+    std::lock_guard<std::mutex> lock(gStore.mutex);
+    if (gStore.pmi.items.empty()) return nullptr;
+    pmi = gStore.pmi;
+  }
+  std::vector<int32_t> items;
+  std::vector<float> anchors;
+  std::string texts;
+  for (const auto& it : pmi.items) {
+    items.push_back(static_cast<int32_t>(it.kind));
+    items.push_back(it.segStart);
+    items.push_back(it.segEnd);
+    items.push_back(it.hasAnchor ? 1 : 0);
+    anchors.insert(anchors.end(), {it.anchor[0], it.anchor[1], it.anchor[2]});
+    std::string t = it.text;
+    for (char& c : t) {
+      if (c == '\n' || c == '\r') c = ' ';
+    }
+    texts += t;
+    texts += '\n';
+  }
+  jclass objClass = env->FindClass("java/lang/Object");
+  if (objClass == nullptr) return nullptr;
+  jobjectArray result = env->NewObjectArray(4, objClass, nullptr);
+  if (result == nullptr) return nullptr;
+  jfloatArray jsegs = ToJava(env, pmi.segments.data(), pmi.segments.size());
+  jintArray jitems = ToJava(env, items);
+  jfloatArray janchors = ToJava(env, anchors.data(), anchors.size());
+  jbyteArray jtexts = env->NewByteArray(static_cast<jsize>(texts.size()));
+  if (!jsegs || !jitems || !janchors || !jtexts) return nullptr;
+  env->SetByteArrayRegion(jtexts, 0, static_cast<jsize>(texts.size()),
+                          reinterpret_cast<const jbyte*>(texts.data()));
+  env->SetObjectArrayElement(result, 0, jsegs);
+  env->SetObjectArrayElement(result, 1, jitems);
+  env->SetObjectArrayElement(result, 2, janchors);
+  env->SetObjectArrayElement(result, 3, jtexts);
+  return result;
 }

@@ -189,4 +189,12 @@
     <string name="load_cancelled">Opening was cancelled.</string>
     <string name="oom_retry">Out of memory, reopening the model in fast quality…</string>
     <string name="oom_retried">The model was opened in fast quality because memory ran out.</string>
+    <string name="pmi">PMI (dimensions and tolerances)</string>
+    <string name="pmi_title">PMI: %1$d items</string>
+    <string name="pmi_found">This model has %1$d PMI items (dimensions, tolerances). Use the button on the right to list them.</string>
+    <string name="pmi_hide">Hide</string>
+    <string name="pmi_dimension">Dimension</string>
+    <string name="pmi_tolerance">Tolerance</string>
+    <string name="pmi_datum">Datum</string>
+    <string name="pmi_unnamed">(unnamed)</string>
 </resources>

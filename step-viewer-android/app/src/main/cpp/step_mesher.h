@@ -7,6 +7,8 @@
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 
+#include "pmi_extract.h"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -64,6 +66,9 @@ struct MeshData {
 
   // Mesh dosyalarında dolu; o zaman yukarıdaki şekiller boştur (yalnızca sayı tutar).
   std::shared_ptr<MeshGeometry> meshGeometry;
+
+  // STEP AP242 PMI (ölçüler, toleranslar, referanslar); yoksa boş.
+  PmiData pmi;
 
   float bboxMin[3] = {0, 0, 0};
   float bboxMax[3] = {0, 0, 0};

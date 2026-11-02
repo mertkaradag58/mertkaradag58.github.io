@@ -104,6 +104,12 @@ class MainActivity : AppCompatActivity() {
     private var explode: Explode? = null
     private var explodeFactor = 0f
 
+    // PMI (STEP AP242 ölçü ve toleransları)
+    private lateinit var pmiButton: View
+    private var pmi: Pmi? = null
+    private var pmiOn = false
+    private var pmiSelected = -1
+
     // Dışa aktarma: dosya seçildikten sonra yazılacak içerik
     private var pendingExport: Exporter.Format? = null
     private var pendingBomDensity = 0.0
@@ -220,6 +226,7 @@ class MainActivity : AppCompatActivity() {
         hiddenCard = findViewById(R.id.hidden_card)
         hiddenText = findViewById(R.id.hidden_text)
 
+        pmiButton = findViewById(R.id.pmi_button)
         explodeCard = findViewById(R.id.explode_card)
         explodeSlider = findViewById(R.id.explode_slider)
 
@@ -275,6 +282,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.spin_button).setOnClickListener { modelView.spin360() }
         findViewById<View>(R.id.views_button).setOnClickListener { showViewsMenu(it) }
         findViewById<View>(R.id.explode_button).setOnClickListener { toggleExplodeCard() }
+        pmiButton.setOnClickListener { showPmiDialog() }
         findViewById<View>(R.id.explode_close).setOnClickListener { closeExplode() }
         explodeSlider.addOnChangeListener { _, value, fromUser ->
             if (fromUser) setExplodeFactor(value / 100f * Explode.MAX_FACTOR)
@@ -607,6 +615,11 @@ class MainActivity : AppCompatActivity() {
         explodeSlider.value = 0f
         explodeCard.visibility = View.GONE
         modelView.camera.extentScale = 1f
+        pmi = null
+        pmiOn = false
+        pmiSelected = -1
+        pmiButton.visibility = View.GONE
+        if (mesh.format == StepMesh.FORMAT_STEP) loadPmi(mesh)
         measure.setMesh(mesh)
         setMeasureMode(false)
         setSelectMode(false)
@@ -1084,6 +1097,73 @@ class MainActivity : AppCompatActivity() {
     private fun currentExplodeOffsets(): FloatArray? {
         val e = explode ?: return null
         return if (explodeFactor > 0f) e.partOffsets(explodeFactor) else null
+    }
+
+    // -----------------------------------------------------------------------
+    // PMI
+    // -----------------------------------------------------------------------
+
+    private fun loadPmi(mesh: StepMesh) {
+        executor.execute {
+            val data = try {
+                Pmi.load()
+            } catch (_: Throwable) {
+                null
+            }
+            runOnUiThread {
+                if (mesh !== currentMesh || data == null) return@runOnUiThread
+                pmi = data
+                modelView.setPmi(data.segments)
+                pmiButton.visibility = View.VISIBLE
+                // Çizimi olan PMI hemen gösterilir
+                pmiOn = data.segments.isNotEmpty()
+                updatePmiDisplay()
+                Toast.makeText(this, getString(R.string.pmi_found, data.items.size), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun updatePmiDisplay() {
+        val data = pmi
+        val item = data?.items?.getOrNull(pmiSelected)
+        val highlight = if (item != null && item.segCount > 0) intArrayOf(item.segStart, item.segCount) else IntArray(0)
+        modelView.setPmiVisible(pmiOn && data != null, highlight)
+        pmiButton.isActivated = pmiOn
+    }
+
+    private fun showPmiDialog() {
+        val data = pmi ?: return
+        val labels = data.items.map { item ->
+            val kind = when (item.kind) {
+                Pmi.KIND_TOLERANCE -> getString(R.string.pmi_tolerance)
+                Pmi.KIND_DATUM -> getString(R.string.pmi_datum)
+                else -> getString(R.string.pmi_dimension)
+            }
+            "$kind: " + item.text.ifBlank { getString(R.string.pmi_unnamed) }
+        }.toTypedArray()
+        val builder = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.pmi_title, data.items.size))
+            .setItems(labels) { _, which ->
+                pmiOn = true
+                pmiSelected = which
+                updatePmiDisplay()
+                val item = data.items[which]
+                item.anchor?.let { modelView.focusOn(it) }
+                Toast.makeText(this, labels[which], Toast.LENGTH_LONG).show()
+            }
+            .setNegativeButton(R.string.ok, null)
+        if (pmiOn) {
+            builder.setNeutralButton(R.string.pmi_hide) { _, _ ->
+                pmiOn = false
+                pmiSelected = -1
+                updatePmiDisplay()
+            }
+        }
+        builder.show()
+        if (!pmiOn) {
+            pmiOn = true
+            updatePmiDisplay()
+        }
     }
 
     // -----------------------------------------------------------------------

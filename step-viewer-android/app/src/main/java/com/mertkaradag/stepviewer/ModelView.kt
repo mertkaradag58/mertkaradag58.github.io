@@ -106,6 +106,16 @@ class ModelView @JvmOverloads constructor(
         requestRender()
     }
 
+    fun setPmi(segments: FloatArray?) {
+        queueEvent { renderer.setPmi(segments) }
+        requestRender()
+    }
+
+    fun setPmiVisible(visible: Boolean, highlight: IntArray = IntArray(0)) {
+        queueEvent { renderer.setPmiVisible(visible, highlight) }
+        requestRender()
+    }
+
     fun setExplodeDirections(vertexDirs: FloatArray?, edgeDirs: FloatArray?) {
         queueEvent { renderer.setExplodeDirections(vertexDirs, edgeDirs) }
         requestRender()

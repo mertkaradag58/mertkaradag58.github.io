@@ -186,7 +186,7 @@ bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Doc
       reader.SetNameMode(true);
       reader.SetLayerMode(false);
       reader.SetPropsMode(false);
-      reader.SetGDTMode(false);
+      reader.SetGDTMode(true);  // PMI: ölçü ve tolerans bilgileri
       reader.SetMatMode(false);
       reader.SetViewMode(false);
       StepData_ConfParameters params;
@@ -296,6 +296,11 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
   // Paylaşılan geometri (örneğin montajda aynı cıvata) yalnızca bir kez üçgenlenir.
   BRepMesh_IncrementalMesh mesher(compound, linDefl, false, options.angularDeflection,
                                   /*isInParallel=*/true);
+
+  // PMI (yalnızca STEP; IGES/BREP'te yok)
+  if (out.format == FileFormat::Step) {
+    ExtractPmi(doc, linDefl, out.pmi);
+  }
 
   // --- 3) Montaj ağacını gez: parçalar, yüzeyler, kenarlar, renkler ---
   float bmin[3] = {1e30f, 1e30f, 1e30f};

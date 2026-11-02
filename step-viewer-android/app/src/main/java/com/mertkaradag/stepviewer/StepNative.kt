@@ -36,6 +36,12 @@ object StepNative {
 
     /** Hacim/alan/ağırlık merkezi: [hacim mm³, alan mm², cx, cy, cz, katı var mı]. null = tüm model. */
     external fun massProps(partIds: IntArray?): DoubleArray?
+
+    /**
+     * PMI: [FloatArray segmentler, IntArray (tür, segBaş, segSon, konumVar) * n,
+     * FloatArray konumlar, ByteArray UTF-8 metinler ('\n' ayrılmış)]; yoksa null. Bkz. [Pmi.load].
+     */
+    external fun pmiData(): Array<Any>?
 }
 
 /** C++ GeomKind ile aynı değerler. */

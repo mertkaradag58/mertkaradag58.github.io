@@ -188,4 +188,12 @@
     <string name="load_cancelled">Açma iptal edildi.</string>
     <string name="oom_retry">Bellek yetmedi, model hızlı kalitede yeniden açılıyor…</string>
     <string name="oom_retried">Model bellek yetmediği için hızlı kalitede açıldı.</string>
+    <string name="pmi">PMI (ölçü ve toleranslar)</string>
+    <string name="pmi_title">PMI: %1$d öğe</string>
+    <string name="pmi_found">Bu modelde %1$d PMI öğesi var (ölçü, tolerans). Sağdaki düğmeden listeleyin.</string>
+    <string name="pmi_hide">Gizle</string>
+    <string name="pmi_dimension">Ölçü</string>
+    <string name="pmi_tolerance">Tolerans</string>
+    <string name="pmi_datum">Referans</string>
+    <string name="pmi_unnamed">(adsız)</string>
 </resources>
