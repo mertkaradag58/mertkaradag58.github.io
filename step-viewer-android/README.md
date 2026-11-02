@@ -46,7 +46,7 @@ Mesh dosyalarında yüzey bilgisi olmadığı için üçgenler düz ve eğri bö
 - **PMI / GD&T (STEP AP242):** ölçüler (Ø, R, ±, H7 gibi tolerans sınıfları), geometrik toleranslar (sembol, değer, (M)/(L), referanslar) ve referans harfleri okunur (`pmi_extract.cpp`, `Pmi.kt`). Çizimli PMI yeşil çizgilerle gösterilir; sağdaki PMI düğmesinden listelenir, seçilen öğe sarı vurgulanır ve kamera ona odaklanır
 - **AR (gerçek boyutta gör):** ARCore ile model masaya/zemine 1:1 ölçekte konur; tek parmak döndürür, iki parmak ölçekler, dokunma yeniden yerleştirir (`ArActivity.kt`). AR isteğe bağlıdır (ARCore olmayan telefonlarda uygulama yine kurulur)
 - **Reklamsız satın alma:** Google Play Billing 8, tek seferlik ürün `reklamsiz` (fiyat Play Console'da, ör. 299 TL). Menüde "Reklamları kaldır" ve "Satın alımı geri yükle"; durum cihazda önbelleklenir, açılışta Play'den doğrulanır (`Billing.kt`)
-- **İki dil:** telefon Türkçeyse Türkçe, değilse İngilizce (`res/values-tr` ve `res/values`); yerel çekirdek hata kodu döner, metin Kotlin tarafında çevrilir
+- **Yedi dil:** Türkçe, İngilizce (varsayılan), Almanca, İspanyolca, Fransızca, Portekizce, Rusça; telefon diline göre (`res/values-*`); yerel çekirdek hata kodu döner, metin Kotlin tarafında çevrilir
 
 Sonra: PMI / GD&T (STEP AP242 içindeki toleranslar) ayrı bir iş olarak planlandı.
 

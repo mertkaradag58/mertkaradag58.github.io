@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="material_names">
+        <item>Stahl (7,85)</item>
+        <item>Edelstahl (8,00)</item>
+        <item>Gusseisen (7,20)</item>
+        <item>Aluminium (2,70)</item>
+        <item>Messing (8,50)</item>
+        <item>Kupfer (8,96)</item>
+        <item>Titan (4,51)</item>
+        <item>ABS-Kunststoff (1,05)</item>
+        <item>PLA (1,24)</item>
+        <item>Nylon PA6 (1,14)</item>
+        <item>Eigene…</item>
+    </string-array>
+</resources>

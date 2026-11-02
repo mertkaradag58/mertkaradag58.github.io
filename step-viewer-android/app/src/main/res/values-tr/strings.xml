@@ -22,7 +22,7 @@
     <string name="empty_subtitle">CAD: STEP, IGES, BREP\nMesh / mimari: OBJ, STL, glTF/GLB, DAE (SketchUp), 3DS, FBX, PLY\nİnternet gerekmez.</string>
     <string name="empty_open">Dosya seç</string>
     <string name="recent_files">Son açılanlar</string>
-    <string name="gesture_hint">Tek parmak döndür · iki parmak yakınlaştır ve kaydır · çift dokun: 360° tur · uzun bas: parça seç</string>
+    <string name="gesture_hint">Tek parmak döndür · iki parmak yakınlaştır ve kaydır · çift dokun: o noktanın etrafında döndür · uzun bas: parça seç</string>
 
     <!-- Yükleme -->
     <string name="loading_file">%1$s okunuyor…</string>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="material_names">
+        <item>Acero (7,85)</item>
+        <item>Acero inoxidable (8,00)</item>
+        <item>Fundición (7,20)</item>
+        <item>Aluminio (2,70)</item>
+        <item>Latón (8,50)</item>
+        <item>Cobre (8,96)</item>
+        <item>Titanio (4,51)</item>
+        <item>Plástico ABS (1,05)</item>
+        <item>PLA (1,24)</item>
+        <item>Nailon PA6 (1,14)</item>
+        <item>Personalizado…</item>
+    </string-array>
+</resources>

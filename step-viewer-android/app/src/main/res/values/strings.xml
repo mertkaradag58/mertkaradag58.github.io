@@ -23,7 +23,7 @@
     <string name="empty_subtitle">CAD: STEP, IGES, BREP\nMesh / architecture: OBJ, STL, glTF/GLB, DAE (SketchUp), 3DS, FBX, PLY\nNo internet connection needed.</string>
     <string name="empty_open">Choose file</string>
     <string name="recent_files">Recent files</string>
-    <string name="gesture_hint">One finger rotates · two fingers zoom and pan · double tap: 360° spin · long press: select part</string>
+    <string name="gesture_hint">One finger rotates · two fingers zoom and pan · double tap: rotate around that point · long press: select part</string>
 
     <!-- Yükleme -->
     <string name="loading_file">Reading %1$s…</string>
