@@ -196,4 +196,13 @@
     <string name="pmi_tolerance">Tolerans</string>
     <string name="pmi_datum">Referans</string>
     <string name="pmi_unnamed">(adsız)</string>
+    <string name="ar">Gerçek boyutta gör (AR)</string>
+    <string name="ar_hint_move">Telefonu yavaşça hareket ettirin; masa veya zemin aranıyor…</string>
+    <string name="ar_hint_tap">Modeli yerleştirmek için turuncu alana dokunun</string>
+    <string name="ar_gestures">Tek parmak: döndür · İki parmak: ölçekle · Dokun: yeniden yerleştir</string>
+    <string name="ar_scale_real">Gerçek boyut 1:1</string>
+    <string name="ar_scale_value">Ölçek %1$s×</string>
+    <string name="ar_reset">Gerçek boyuta dön</string>
+    <string name="ar_unsupported">Bu telefon artırılmış gerçekliği (Google Play AR hizmetleri) desteklemiyor.</string>
+    <string name="ar_camera_needed">AR için kamera izni gerekiyor. Görüntü kaydedilmez ve hiçbir yere gönderilmez.</string>
 </resources>

@@ -197,4 +197,13 @@
     <string name="pmi_tolerance">Tolerance</string>
     <string name="pmi_datum">Datum</string>
     <string name="pmi_unnamed">(unnamed)</string>
+    <string name="ar">View in real size (AR)</string>
+    <string name="ar_hint_move">Move your phone slowly; looking for a table or floor…</string>
+    <string name="ar_hint_tap">Tap the orange area to place the model</string>
+    <string name="ar_gestures">One finger: rotate · Two fingers: scale · Tap: place again</string>
+    <string name="ar_scale_real">Real size 1:1</string>
+    <string name="ar_scale_value">Scale %1$s×</string>
+    <string name="ar_reset">Back to real size</string>
+    <string name="ar_unsupported">This phone does not support augmented reality (Google Play Services for AR).</string>
+    <string name="ar_camera_needed">AR needs camera permission. The camera image is not saved or sent anywhere.</string>
 </resources>

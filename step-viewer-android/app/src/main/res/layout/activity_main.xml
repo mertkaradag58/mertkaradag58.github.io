@@ -168,6 +168,12 @@
             app:icon="@drawable/ic_fit" />
 
         <com.google.android.material.button.MaterialButton
+            android:id="@+id/ar_button"
+            style="@style/SideButton"
+            android:contentDescription="@string/ar"
+            app:icon="@drawable/ic_ar" />
+
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/pmi_button"
             style="@style/SideButton"
             android:contentDescription="@string/pmi"

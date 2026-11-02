@@ -113,4 +113,6 @@ dependencies {
     implementation("com.google.android.ump:user-messaging-platform:3.2.0")
     // Mağaza içi satın alma (Reklamsız). Play, yeni güncellemelerde Billing 8+ ister.
     implementation("com.android.billingclient:billing:8.0.0")
+    // Artırılmış gerçeklik (isteğe bağlı, ARCore olmayan telefonlarda AR düğmesi uyarı verir)
+    implementation("com.google.ar:core:1.44.0")
 }

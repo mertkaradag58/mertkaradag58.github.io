@@ -283,6 +283,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.views_button).setOnClickListener { showViewsMenu(it) }
         findViewById<View>(R.id.explode_button).setOnClickListener { toggleExplodeCard() }
         pmiButton.setOnClickListener { showPmiDialog() }
+        findViewById<View>(R.id.ar_button).setOnClickListener { openAr() }
         findViewById<View>(R.id.explode_close).setOnClickListener { closeExplode() }
         explodeSlider.addOnChangeListener { _, value, fromUser ->
             if (fromUser) setExplodeFactor(value / 100f * Explode.MAX_FACTOR)
@@ -1097,6 +1098,32 @@ class MainActivity : AppCompatActivity() {
     private fun currentExplodeOffsets(): FloatArray? {
         val e = explode ?: return null
         return if (explodeFactor > 0f) e.partOffsets(explodeFactor) else null
+    }
+
+    // -----------------------------------------------------------------------
+    // AR
+    // -----------------------------------------------------------------------
+
+    private fun openAr() {
+        val mesh = currentMesh ?: return
+        ArActivity.pendingMesh = mesh
+        ArActivity.pendingRanges = visibleTriangleRanges(mesh)
+        startActivity(Intent(this, ArActivity::class.java))
+    }
+
+    /** Görünen parçaların üçgen aralıkları (başlangıç, adet); hepsi görünüyorsa null. */
+    private fun visibleTriangleRanges(mesh: StepMesh): IntArray? {
+        if (partVisible.all { it }) return null
+        val out = ArrayList<Int>()
+        for (p in 0 until mesh.partCount) {
+            if (!partVisible[p]) continue
+            val r = mesh.partTriangleRange(p)
+            if (!r.isEmpty()) {
+                out += r.first
+                out += r.last - r.first + 1
+            }
+        }
+        return out.toIntArray()
     }
 
     // -----------------------------------------------------------------------
