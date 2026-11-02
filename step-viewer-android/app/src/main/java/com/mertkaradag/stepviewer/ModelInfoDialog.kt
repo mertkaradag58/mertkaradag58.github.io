@@ -49,10 +49,14 @@ class ModelInfoDialog(
         }
 
         val b = mesh.bbox
-        general.text = listOf(
+        // OBJ, STL, 3DS ve PLY dosyalarında birim yoktur (glTF/DAE/FBX'te birim mm'ye çevrilir).
+        val unitless = mesh.format == StepMesh.FORMAT_OBJ || mesh.format == StepMesh.FORMAT_STL ||
+            mesh.format == StepMesh.FORMAT_3DS || mesh.format == StepMesh.FORMAT_PLY
+        general.text = listOfNotNull(
             context.getString(R.string.info_format, mesh.formatName),
             context.getString(R.string.info_size, fmt(b[3] - b[0], 2), fmt(b[4] - b[1], 2), fmt(b[5] - b[2], 2)),
             context.getString(R.string.info_counts, mesh.partCount, mesh.faceCount, mesh.triangleCount),
+            if (unitless) context.getString(R.string.info_mesh_units) else null,
         ).joinToString("\n")
         if (part >= 0) {
             val pb = partBounds(part)
@@ -74,7 +78,9 @@ class ModelInfoDialog(
         fun updateMass() {
             massText.text = when {
                 !propsReady -> ""
-                !hasSolids -> context.getString(R.string.info_no_solid)
+                !hasSolids -> context.getString(
+                    if (mesh.isMeshFormat) R.string.info_no_solid_mesh else R.string.info_no_solid,
+                )
                 else -> {
                     val grams = volumeMm3 / 1000.0 * density
                     val textMass = if (grams >= 1000.0) "${fmt(grams / 1000.0, 3)} kg" else "${fmt(grams, 2)} g"

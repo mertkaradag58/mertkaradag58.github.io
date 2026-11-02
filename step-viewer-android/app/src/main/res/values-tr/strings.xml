@@ -19,7 +19,7 @@
 
     <!-- Boş ekran -->
     <string name="empty_title">Bir CAD dosyası açın</string>
-    <string name="empty_subtitle">STEP (.step, .stp), IGES (.igs, .iges) ve BREP (.brep) dosyaları internet olmadan açılır.</string>
+    <string name="empty_subtitle">CAD: STEP, IGES, BREP\nMesh / mimari: OBJ, STL, glTF/GLB, DAE (SketchUp), 3DS, FBX, PLY\nİnternet gerekmez.</string>
     <string name="empty_open">Dosya seç</string>
     <string name="recent_files">Son açılanlar</string>
     <string name="gesture_hint">Tek parmak döndür · iki parmak yakınlaştır ve kaydır · çift dokun: 360° tur · uzun bas: parça seç</string>
@@ -38,7 +38,7 @@
     <string name="error_unknown">Bilinmeyen bir hata oluştu.</string>
     <string name="error_read_format">%1$s dosyası okunamadı (geçersiz veya bozuk dosya).</string>
     <string name="error_transfer_format">%1$s verisi aktarılamadı.</string>
-    <string name="error_unsupported">Desteklenmeyen dosya biçimi. STEP (.step/.stp), IGES (.igs/.iges) veya BREP (.brep) dosyası seçin.</string>
+    <string name="error_unsupported">Desteklenmeyen dosya biçimi. Desteklenenler: STEP, IGES, BREP, OBJ, STL, glTF/GLB, DAE, 3DS, FBX, PLY. SketchUp (.skp) dosyalarını önce DAE veya OBJ olarak dışa aktarın.</string>
     <string name="error_no_geometry">Dosyada görüntülenebilir geometri yok.</string>
 
     <!-- Görünümler -->
@@ -123,11 +123,13 @@
     <string name="info_center">Ağırlık merkezi: (%1$s, %2$s, %3$s) mm</string>
     <string name="info_mass">Kütle: %1$s</string>
     <string name="info_no_solid">Modelde katı cisim yok; hacim ve kütle hesaplanamaz.</string>
+    <string name="info_no_solid_mesh">Mesh kapalı (su geçirmez) değil; hacim ve kütle hesaplanamaz.</string>
+    <string name="info_mesh_units">Bu dosyada birim bilgisi yok: 1 birim 1 mm olarak gösterilir.</string>
     <string name="info_material">Malzeme</string>
     <string name="info_density">Yoğunluk (g/cm³)</string>
 
     <!-- Hakkında -->
     <string name="about_title">Cepte CAD %1$s</string>
-    <string name="about_text">CAD dosyalarını telefonda internet olmadan görüntüleme ve ölçme uygulaması.\n\nBu uygulama Open CASCADE Technology (OCCT) 7.8.1 kullanır. OCCT, GNU Lesser General Public License (LGPL) 2.1 ve Open CASCADE istisnası ile lisanslıdır. OCCT kaynak kodu: https://github.com/Open-Cascade-SAS/OCCT\n\nUygulamanın kaynak kodu: https://github.com/mertkaradag58/mertkaradag58.github.io/tree/main/step-viewer-android\n\nGizlilik politikası: https://mertkaradag58.github.io/step-goruntuleyici/gizlilik.html</string>
+    <string name="about_text">CAD dosyalarını telefonda internet olmadan görüntüleme ve ölçme uygulaması.\n\nBu uygulama Open CASCADE Technology (OCCT) 7.8.1 kullanır. OCCT, GNU Lesser General Public License (LGPL) 2.1 ve Open CASCADE istisnası ile lisanslıdır. OCCT kaynak kodu: https://github.com/Open-Cascade-SAS/OCCT\n\nMesh dosyaları Open Asset Import Library (Assimp) 5.4.3 ile okunur; BSD 3 maddeli lisans. Telif hakkı (c) 2006-2024 assimp ekibi. https://github.com/assimp/assimp\n\nUygulamanın kaynak kodu: https://github.com/mertkaradag58/mertkaradag58.github.io/tree/main/step-viewer-android\n\nGizlilik politikası: https://mertkaradag58.github.io/step-goruntuleyici/gizlilik.html</string>
     <string name="ok">Tamam</string>
 </resources>

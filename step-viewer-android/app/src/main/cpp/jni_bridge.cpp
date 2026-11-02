@@ -3,6 +3,7 @@
 #include <android/log.h>
 #include <jni.h>
 
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -20,15 +21,23 @@ struct ModelStore {
   std::vector<TopoDS_Edge> edges;
   std::vector<TopoDS_Face> faces;
   std::vector<TopoDS_Shape> parts;
+  // Mesh dosyalarında (OBJ, STL, ...) ölçüm bu geometriden yapılır; CAD'de boş.
+  std::shared_ptr<stepviewer::MeshGeometry> mesh;
 
   void Clear() {
     std::lock_guard<std::mutex> lock(mutex);
     std::vector<TopoDS_Edge>().swap(edges);
     std::vector<TopoDS_Face>().swap(faces);
     std::vector<TopoDS_Shape>().swap(parts);
+    mesh.reset();
   }
 };
 ModelStore gStore;
+
+std::shared_ptr<stepviewer::MeshGeometry> CurrentMesh() {
+  std::lock_guard<std::mutex> lock(gStore.mutex);
+  return gStore.mesh;
+}
 
 constexpr jint kKindEdge = 0;
 constexpr jint kKindFace = 1;
@@ -164,6 +173,7 @@ Java_com_mertkaradag_stepviewer_StepNative_loadModel(JNIEnv* env, jobject /*thiz
     gStore.edges = std::move(mesh.edgeShapes);
     gStore.faces = std::move(mesh.faceShapes);
     gStore.parts = std::move(mesh.partShapes);
+    gStore.mesh = std::move(mesh.meshGeometry);
   }
   return result;
 }
@@ -174,7 +184,11 @@ Java_com_mertkaradag_stepviewer_StepNative_shapeInfo(JNIEnv* env, jobject /*thiz
                                                      jint id) {
   TopoDS_Shape shape;
   stepviewer::ShapeInfo i;
-  if (!GetStoredShape(kind, id, shape) || !stepviewer::GetShapeInfo(shape, i)) return nullptr;
+  if (auto mesh = CurrentMesh()) {
+    if (!stepviewer::MeshFeatureInfo(*mesh, kind, id, i)) return nullptr;
+  } else if (!GetStoredShape(kind, id, shape) || !stepviewer::GetShapeInfo(shape, i)) {
+    return nullptr;
+  }
   return ToJava(env, std::vector<double>{static_cast<double>(i.kind), i.length, i.area, i.radius, i.radius2,
                       i.angleDeg, i.center[0], i.center[1], i.center[2], i.dir[0], i.dir[1],
                       i.dir[2]});
@@ -188,8 +202,10 @@ Java_com_mertkaradag_stepviewer_StepNative_measurePair(JNIEnv* env, jobject /*th
                                                        jint idB) {
   TopoDS_Shape a, b;
   stepviewer::PairMeasure m;
-  if (!GetStoredShape(kindA, idA, a) || !GetStoredShape(kindB, idB, b) ||
-      !stepviewer::MeasurePair(a, b, m)) {
+  if (auto mesh = CurrentMesh()) {
+    if (!stepviewer::MeshMeasurePair(*mesh, kindA, idA, kindB, idB, m)) return nullptr;
+  } else if (!GetStoredShape(kindA, idA, a) || !GetStoredShape(kindB, idB, b) ||
+             !stepviewer::MeasurePair(a, b, m)) {
     return nullptr;
   }
   return ToJava(env, std::vector<double>{m.distance, m.p1[0], m.p1[1], m.p1[2], m.p2[0], m.p2[1], m.p2[2],
@@ -200,6 +216,19 @@ Java_com_mertkaradag_stepviewer_StepNative_measurePair(JNIEnv* env, jobject /*th
 extern "C" JNIEXPORT jdoubleArray JNICALL
 Java_com_mertkaradag_stepviewer_StepNative_massProps(JNIEnv* env, jobject /*thiz*/,
                                                      jintArray jpartIds) {
+  if (auto mesh = CurrentMesh()) {
+    std::vector<int> ids;
+    if (jpartIds != nullptr) {
+      const jsize n = env->GetArrayLength(jpartIds);
+      std::vector<jint> raw(static_cast<size_t>(n));
+      env->GetIntArrayRegion(jpartIds, 0, n, raw.data());
+      ids.assign(raw.begin(), raw.end());
+    }
+    stepviewer::MassProps p;
+    if (!stepviewer::MeshMassProps(*mesh, jpartIds != nullptr ? &ids : nullptr, p)) return nullptr;
+    return ToJava(env, std::vector<double>{p.volume, p.area, p.center[0], p.center[1], p.center[2],
+                                           p.hasSolids ? 1.0 : 0.0});
+  }
   std::vector<TopoDS_Shape> shapes;
   {
     std::lock_guard<std::mutex> lock(gStore.mutex);

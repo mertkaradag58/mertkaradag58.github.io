@@ -34,6 +34,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.slider.Slider
 import java.io.File
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
@@ -364,7 +365,7 @@ class MainActivity : AppCompatActivity() {
         executor.execute {
             val started = SystemClock.elapsedRealtime()
             val result: Result<StepMesh> = try {
-                val file = copyToCache(uri)
+                val file = copyToCache(uri, name)
                 runOnUiThread { progressText.text = getString(R.string.meshing_file, name) }
                 Result.success(StepNative.loadModel(file.absolutePath, 0.0))
             } catch (e: IOException) {
@@ -463,10 +464,16 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    /** İçerik URI'sini OCCT'nin okuyabileceği gerçek bir dosyaya kopyalar. */
+    /**
+     * İçerik URI'sini okuyucuların açabileceği gerçek bir dosyaya kopyalar. Uzantı korunur:
+     * mesh dosyalarının (OBJ, STL, FBX...) biçimi uzantısından anlaşılır.
+     */
     @Throws(IOException::class)
-    private fun copyToCache(uri: Uri): File {
-        val target = File(cacheDir, "current_model.dat")
+    private fun copyToCache(uri: Uri, name: String): File {
+        val ext = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+            .takeIf { it.length in 1..5 && it.all { c -> c.isLetterOrDigit() } } ?: "dat"
+        cacheDir.listFiles { f -> f.name.startsWith("current_model.") }?.forEach { it.delete() }
+        val target = File(cacheDir, "current_model.$ext")
         val input = contentResolver.openInputStream(uri) ?: throw IOException(getString(R.string.error_open))
         input.use { src -> target.outputStream().use { dst -> src.copyTo(dst, 1 shl 16) } }
         return target

@@ -1,5 +1,7 @@
 #include "step_mesher.h"
 
+#include "mesh_model.h"
+
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBndLib.hxx>
@@ -45,6 +47,7 @@
 #include <gp_Torus.hxx>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <exception>
@@ -240,6 +243,13 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
     return false;
   }
 
+  // Mesh dosyaları (OBJ, STL, glTF, ...) ayrı yoldan okunur.
+  if (IsMeshFormat(out.format)) {
+    RawMesh raw;
+    if (!ImportMeshFile(path, out.format, raw, error)) return false;
+    return BuildMeshModel(raw, out, error);
+  }
+
   Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
   Handle(TDocStd_Document) doc;
   app->NewDocument("MDTV-XCAF", doc);
@@ -393,7 +403,30 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
 
 }  // namespace
 
+namespace {
+
+std::string LowerExtension(const std::string& path) {
+  const size_t slash = path.find_last_of("/\\");
+  const size_t dot = path.find_last_of('.');
+  if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) return std::string();
+  std::string ext = path.substr(dot + 1);
+  for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return ext;
+}
+
+}  // namespace
+
 FileFormat DetectFormat(const std::string& path) {
+  // Mesh biçimleri önce uzantıdan tanınır (STL/OBJ gibi biçimlerin belirgin bir imzası yok).
+  const std::string ext = LowerExtension(path);
+  if (ext == "obj") return FileFormat::Obj;
+  if (ext == "stl") return FileFormat::Stl;
+  if (ext == "gltf" || ext == "glb") return FileFormat::Gltf;
+  if (ext == "dae") return FileFormat::Dae;
+  if (ext == "3ds") return FileFormat::Max3ds;
+  if (ext == "fbx") return FileFormat::Fbx;
+  if (ext == "ply") return FileFormat::Ply;
+
   std::ifstream in(path, std::ios::binary);
   if (!in) return FileFormat::Unknown;
   std::string head(4096, '\0');
@@ -409,6 +442,19 @@ FileFormat DetectFormat(const std::string& path) {
   const size_t eol = head.find_first_of("\r\n");
   const std::string first = head.substr(0, eol);
   if (first.size() >= 73 && (first[72] == 'S' || first[72] == 'G')) return FileFormat::Iges;
+
+  // Uzantısı bilinmeyen mesh dosyaları için imzalar
+  if (head.compare(0, 4, "glTF") == 0) return FileFormat::Gltf;
+  if (head.compare(0, 18, "Kaydara FBX Binary") == 0) return FileFormat::Fbx;
+  if (head.compare(0, 3, "ply") == 0) return FileFormat::Ply;
+  if (head.find("<COLLADA") != std::string::npos) return FileFormat::Dae;
+  if (head.compare(0, 5, "solid") == 0 && head.find("facet") != std::string::npos) {
+    return FileFormat::Stl;
+  }
+  if (head.size() >= 2 && static_cast<unsigned char>(head[0]) == 0x4D &&
+      static_cast<unsigned char>(head[1]) == 0x4D && ext == "dat") {
+    return FileFormat::Max3ds;  // 3DS ana parçası 0x4D4D
+  }
   return FileFormat::Unknown;
 }
 
@@ -565,6 +611,11 @@ bool GetShapeInfo(const TopoDS_Shape& shape, ShapeInfo& info) {
 }
 
 bool MeasurePair(const TopoDS_Shape& a, const TopoDS_Shape& b, PairMeasure& out) {
+  return MeasurePairWithInfo(a, nullptr, b, nullptr, out);
+}
+
+bool MeasurePairWithInfo(const TopoDS_Shape& a, const ShapeInfo* pia, const TopoDS_Shape& b,
+                         const ShapeInfo* pib, PairMeasure& out) {
   out = PairMeasure();
   try {
     BRepExtrema_DistShapeShape dist(a, b);
@@ -576,7 +627,16 @@ bool MeasurePair(const TopoDS_Shape& a, const TopoDS_Shape& b, PairMeasure& out)
     ToArray(dist.PointOnShape2(1).XYZ(), out.p2);
 
     ShapeInfo ia, ib;
-    if (!GetShapeInfo(a, ia) || !GetShapeInfo(b, ib)) return true;
+    if (pia != nullptr) {
+      ia = *pia;
+    } else if (!GetShapeInfo(a, ia)) {
+      return true;
+    }
+    if (pib != nullptr) {
+      ib = *pib;
+    } else if (!GetShapeInfo(b, ib)) {
+      return true;
+    }
 
     const bool aLine = IsLineLike(ia.kind), bLine = IsLineLike(ib.kind);
     const bool aPlane = ia.kind == GeomKind::Plane, bPlane = ib.kind == GeomKind::Plane;

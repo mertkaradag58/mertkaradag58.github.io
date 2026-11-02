@@ -1,4 +1,5 @@
-// CAD dosyası (STEP / IGES / BREP) okuma, üçgenleme ve ölçüm çekirdeği.
+// CAD dosyası (STEP / IGES / BREP) ve mesh dosyası (OBJ, STL, glTF, DAE, 3DS, FBX, PLY)
+// okuma, üçgenleme ve ölçüm çekirdeği.
 // JNI'den bağımsızdır; masaüstünde host_test ile de derlenip denenebilir.
 #pragma once
 
@@ -7,6 +8,7 @@
 #include <TopoDS_Shape.hxx>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,7 +17,23 @@ namespace stepviewer {
 // Tek bir köşe noktası için 9 float: konum (3), normal (3), renk RGB (3).
 constexpr int kFloatsPerVertex = 9;
 
-enum class FileFormat { Unknown, Step, Iges, Brep };
+// Sayısal değerler Kotlin tarafındaki StepMesh.FORMAT_* ile aynı olmalıdır.
+enum class FileFormat { Unknown, Step, Iges, Brep, Obj, Stl, Gltf, Dae, Max3ds, Fbx, Ply };
+
+inline bool IsMeshFormat(FileFormat f) { return static_cast<int>(f) >= static_cast<int>(FileFormat::Obj); }
+
+// Mesh (üçgen) dosyalarında ölçüm için saklanan geometri. CAD dosyalarında kullanılmaz.
+// Konumlar mm cinsindendir ve montaj konumu uygulanmıştır.
+struct MeshGeometry {
+  std::vector<float> pos;              // kaynaştırılmış köşe konumları (xyz)
+  std::vector<uint32_t> tris;          // üçgenler, MeshData::indices ile aynı sırada (pos indeksleri)
+  std::vector<int32_t> faceOffsets;    // yüzey i -> üçgenler
+  std::vector<int32_t> partFaceOffsets;
+  std::vector<float> edgePts;          // kenar çoklu çizgilerinin noktaları (xyz)
+  std::vector<int32_t> edgePtOffsets;  // kenar i -> noktalar [o[i], o[i+1])
+  std::vector<uint8_t> partClosed;     // parça kapalı (su geçirmez) mi: hacim hesaplanabilir
+  double tol = 1e-6;                   // geometrik tolerans (mm)
+};
 
 // Montaj ağacındaki bir düğüm (derinlik öncelikli sırada).
 struct TreeNode {
@@ -43,6 +61,9 @@ struct MeshData {
   std::vector<TopoDS_Face> faceShapes;
   std::vector<TopoDS_Edge> edgeShapes;
   std::vector<TopoDS_Shape> partShapes;
+
+  // Mesh dosyalarında dolu; o zaman yukarıdaki şekiller boştur (yalnızca sayı tutar).
+  std::shared_ptr<MeshGeometry> meshGeometry;
 
   float bboxMin[3] = {0, 0, 0};
   float bboxMax[3] = {0, 0, 0};
@@ -121,5 +142,17 @@ struct MassProps {
 };
 
 bool ComputeMassProps(const std::vector<TopoDS_Shape>& shapes, MassProps& out);
+
+// MeasurePair'in bilgileri önceden hesaplanmış hali (ia/ib null olabilir).
+bool MeasurePairWithInfo(const TopoDS_Shape& a, const ShapeInfo* ia, const TopoDS_Shape& b,
+                         const ShapeInfo* ib, PairMeasure& out);
+
+// --- Mesh dosyaları için ölçüm (kind: 0 = kenar, 1 = yüzey) ---
+
+bool MeshFeatureInfo(const MeshGeometry& g, int kind, int id, ShapeInfo& info);
+bool MeshMeasurePair(const MeshGeometry& g, int kindA, int idA, int kindB, int idB,
+                     PairMeasure& out);
+// partIds null ise tüm model.
+bool MeshMassProps(const MeshGeometry& g, const std::vector<int>* partIds, MassProps& out);
 
 }  // namespace stepviewer

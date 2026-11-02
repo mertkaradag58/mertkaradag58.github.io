@@ -1,6 +1,9 @@
 // Masaüstü testi: çekirdeği Android olmadan dener.
-// Kullanım: step_host_test dosya [cikti.obj] [--tree] [--info] [--faces]
+// Kullanım: step_host_test dosya [cikti.obj] [--as-mesh] [--tree] [--info] [--faces]
 //           [--measure e|f i e|f j]... [--mass]
+// --as-mesh: CAD modelinin üçgenlerini STL gibi (köşeleri kaynaşmamış) ham mesh'e çevirip mesh
+//            hattından geçirir; yüzey/kenar ayırma ve ölçüm mesh dosyası gibi denenir.
+#include "../mesh_model.h"
 #include "../step_mesher.h"
 
 #include <chrono>
@@ -32,9 +35,15 @@ static const TopoDS_Shape* Pick(const MeshData& m, const char* kind, size_t id) 
   return nullptr;
 }
 
+static const MeshData* gMesh = nullptr;
+
 static void PrintInfo(const char* label, size_t id, const TopoDS_Shape& s) {
   ShapeInfo i;
-  if (!GetShapeInfo(s, i)) {
+  const bool ok = gMesh != nullptr && gMesh->meshGeometry
+                      ? MeshFeatureInfo(*gMesh->meshGeometry, label[0] == 'k' ? 0 : 1,
+                                        static_cast<int>(id), i)
+                      : GetShapeInfo(s, i);
+  if (!ok) {
     std::printf("%s %zu: bilgi yok\n", label, id);
     return;
   }
@@ -57,6 +66,35 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "HATA: %s\n", error.c_str());
     return 1;
   }
+  for (int a = 2; a < argc; ++a) {
+    if (std::strcmp(argv[a], "--as-mesh") != 0) continue;
+    RawMesh raw;
+    raw.tree = mesh.tree;
+    raw.colors.push_back({0.7f, 0.72f, 0.75f});
+    for (int p = 0; p < mesh.partCount(); ++p) {
+      RawPart part;
+      const int t0 = mesh.faceOffsets[mesh.partFaceOffsets[p]];
+      const int t1 = mesh.faceOffsets[mesh.partFaceOffsets[p + 1]];
+      for (int t = t0; t < t1; ++t) {
+        for (int k = 0; k < 3; ++k) {
+          const float* v = &mesh.vertices[mesh.indices[3 * t + k] * kFloatsPerVertex];
+          part.positions.insert(part.positions.end(), {v[0], v[1], v[2]});
+          part.indices.push_back(static_cast<uint32_t>(part.indices.size()));
+        }
+      }
+      raw.parts.push_back(std::move(part));
+    }
+    const int cadFaces = mesh.faceCount();
+    const size_t cadEdges = mesh.edgeShapes.size();
+    mesh = MeshData();
+    if (!BuildMeshModel(raw, mesh, error)) {
+      std::fprintf(stderr, "HATA (mesh): %s\n", error.c_str());
+      return 1;
+    }
+    mesh.format = FileFormat::Stl;
+    std::printf("mesh olarak: CAD yuzey=%d kenar=%zu\n", cadFaces, cadEdges);
+  }
+  gMesh = &mesh;
   const double ms =
       std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
   std::printf("bicim=%d parca=%d yuzey=%d kenar=%zu kose=%zu ucgen=%zu sure=%.0fms\n",
@@ -94,7 +132,12 @@ int main(int argc, char** argv) {
       const TopoDS_Shape* sa = Pick(mesh, ka, ia);
       const TopoDS_Shape* sb = Pick(mesh, kb, ib);
       PairMeasure m;
-      if (sa && sb && MeasurePair(*sa, *sb, m)) {
+      const bool measured =
+          mesh.meshGeometry
+              ? MeshMeasurePair(*mesh.meshGeometry, ka[0] == 'e' ? 0 : 1, static_cast<int>(ia),
+                                kb[0] == 'e' ? 0 : 1, static_cast<int>(ib), m)
+              : (sa && sb && MeasurePair(*sa, *sb, m));
+      if (measured) {
         std::printf("olcum %s%zu-%s%zu: mesafe=%.4f p1=(%.3f %.3f %.3f) p2=(%.3f %.3f %.3f) "
                     "aci=%.2f merkez=%.4f paralel=%.4f\n",
                     ka, ia, kb, ib, m.distance, m.p1[0], m.p1[1], m.p1[2], m.p2[0], m.p2[1],
@@ -104,7 +147,8 @@ int main(int argc, char** argv) {
       }
     } else if (std::strcmp(argv[a], "--mass") == 0) {
       MassProps p;
-      if (ComputeMassProps(mesh.partShapes, p)) {
+      if (mesh.meshGeometry ? MeshMassProps(*mesh.meshGeometry, nullptr, p)
+                            : ComputeMassProps(mesh.partShapes, p)) {
         std::printf("hacim=%.3f alan=%.3f merkez=(%.3f %.3f %.3f) kati=%d\n", p.volume, p.area,
                     p.center[0], p.center[1], p.center[2], p.hasSolids ? 1 : 0);
       }

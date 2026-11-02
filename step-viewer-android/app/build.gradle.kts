@@ -9,6 +9,11 @@ val occtDir: String = (project.findProperty("occtDir") as String?)
     ?: System.getenv("OCCT_DIR")
     ?: rootProject.file("third_party/occt-install").absolutePath
 
+// Assimp kurulum klasörü: scripts/build_assimp_android.sh çıktısı.
+val assimpDir: String = (project.findProperty("assimpDir") as String?)
+    ?: System.getenv("ASSIMP_DIR")
+    ?: rootProject.file("third_party/assimp-install").absolutePath
+
 android {
     namespace = "com.mertkaradag.stepviewer"
     compileSdk = 36
@@ -42,6 +47,7 @@ android {
             cmake {
                 arguments += listOf(
                     "-DOCCT_DIR=$occtDir",
+                    "-DASSIMP_DIR=$assimpDir",
                     "-DANDROID_STL=c++_static",
                 )
             }

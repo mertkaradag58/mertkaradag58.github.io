@@ -27,7 +27,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- "Birlikte aç": STEP MIME türleriyle gelen dosyalar -->
+            <!-- "Birlikte aç": CAD ve mesh MIME türleriyle gelen dosyalar -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -45,6 +45,20 @@
                 <data android:mimeType="model/iges" />
                 <data android:mimeType="application/iges" />
                 <data android:mimeType="application/x-iges" />
+                <data android:mimeType="model/obj" />
+                <data android:mimeType="model/stl" />
+                <data android:mimeType="model/x.stl-binary" />
+                <data android:mimeType="model/x.stl-ascii" />
+                <data android:mimeType="application/sla" />
+                <data android:mimeType="application/vnd.ms-pki.stl" />
+                <data android:mimeType="model/gltf-binary" />
+                <data android:mimeType="model/gltf+json" />
+                <data android:mimeType="model/vnd.collada+xml" />
+                <data android:mimeType="application/x-3ds" />
+                <data android:mimeType="image/x-3ds" />
+                <data android:mimeType="application/x-fbx" />
+                <data android:mimeType="model/x-fbx" />
+                <data android:mimeType="application/x-ply" />
             </intent-filter>
 
             <!-- Çoğu dosya yöneticisi .step dosyalarını genel tür olarak bildirir -->
@@ -78,6 +92,22 @@
                 <data android:pathPattern=".*\\.IGES" />
                 <data android:pathPattern=".*\\.brep" />
                 <data android:pathPattern=".*\\.BREP" />
+                <data android:pathPattern=".*\\.obj" />
+                <data android:pathPattern=".*\\.OBJ" />
+                <data android:pathPattern=".*\\.stl" />
+                <data android:pathPattern=".*\\.STL" />
+                <data android:pathPattern=".*\\.gltf" />
+                <data android:pathPattern=".*\\.GLTF" />
+                <data android:pathPattern=".*\\.glb" />
+                <data android:pathPattern=".*\\.GLB" />
+                <data android:pathPattern=".*\\.dae" />
+                <data android:pathPattern=".*\\.DAE" />
+                <data android:pathPattern=".*\\.3ds" />
+                <data android:pathPattern=".*\\.3DS" />
+                <data android:pathPattern=".*\\.fbx" />
+                <data android:pathPattern=".*\\.FBX" />
+                <data android:pathPattern=".*\\.ply" />
+                <data android:pathPattern=".*\\.PLY" />
             </intent-filter>
         </activity>
 

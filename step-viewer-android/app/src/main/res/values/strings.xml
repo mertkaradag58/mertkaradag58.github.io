@@ -20,7 +20,7 @@
 
     <!-- Boş ekran -->
     <string name="empty_title">Open a CAD file</string>
-    <string name="empty_subtitle">STEP (.step, .stp), IGES (.igs, .iges) and BREP (.brep) files open without an internet connection.</string>
+    <string name="empty_subtitle">CAD: STEP, IGES, BREP\nMesh / architecture: OBJ, STL, glTF/GLB, DAE (SketchUp), 3DS, FBX, PLY\nNo internet connection needed.</string>
     <string name="empty_open">Choose file</string>
     <string name="recent_files">Recent files</string>
     <string name="gesture_hint">One finger rotates · two fingers zoom and pan · double tap: 360° spin · long press: select part</string>
@@ -39,7 +39,7 @@
     <string name="error_unknown">An unknown error occurred.</string>
     <string name="error_read_format">Could not read the %1$s file (invalid or corrupt file).</string>
     <string name="error_transfer_format">Could not convert the %1$s data.</string>
-    <string name="error_unsupported">Unsupported file format. Choose a STEP (.step/.stp), IGES (.igs/.iges) or BREP (.brep) file.</string>
+    <string name="error_unsupported">Unsupported file format. Supported: STEP, IGES, BREP, OBJ, STL, glTF/GLB, DAE, 3DS, FBX, PLY. SketchUp (.skp) files: export as DAE or OBJ first.</string>
     <string name="error_no_geometry">The file contains no displayable geometry.</string>
 
     <!-- Görünümler -->
@@ -124,11 +124,13 @@
     <string name="info_center">Center of mass: (%1$s, %2$s, %3$s) mm</string>
     <string name="info_mass">Mass: %1$s</string>
     <string name="info_no_solid">The model has no solid bodies; volume and mass cannot be calculated.</string>
+    <string name="info_no_solid_mesh">The mesh is not closed (watertight); volume and mass cannot be calculated.</string>
+    <string name="info_mesh_units">This file has no unit information: 1 unit is shown as 1 mm.</string>
     <string name="info_material">Material</string>
     <string name="info_density">Density (g/cm³)</string>
 
     <!-- Hakkında -->
     <string name="about_title">Cepte CAD %1$s</string>
-    <string name="about_text">View and measure CAD files on your phone, without an internet connection.\n\nThis app uses Open CASCADE Technology (OCCT) 7.8.1. OCCT is licensed under the GNU Lesser General Public License (LGPL) 2.1 with the Open CASCADE exception. OCCT source code: https://github.com/Open-Cascade-SAS/OCCT\n\nApp source code: https://github.com/mertkaradag58/mertkaradag58.github.io/tree/main/step-viewer-android\n\nPrivacy policy: https://mertkaradag58.github.io/step-goruntuleyici/gizlilik.html</string>
+    <string name="about_text">View and measure CAD files on your phone, without an internet connection.\n\nThis app uses Open CASCADE Technology (OCCT) 7.8.1. OCCT is licensed under the GNU Lesser General Public License (LGPL) 2.1 with the Open CASCADE exception. OCCT source code: https://github.com/Open-Cascade-SAS/OCCT\n\nMesh files are read with Open Asset Import Library (Assimp) 5.4.3, licensed under the BSD 3-clause license. Copyright (c) 2006-2024 assimp team. https://github.com/assimp/assimp\n\nApp source code: https://github.com/mertkaradag58/mertkaradag58.github.io/tree/main/step-viewer-android\n\nPrivacy policy: https://mertkaradag58.github.io/step-goruntuleyici/gizlilik.html</string>
     <string name="ok">OK</string>
 </resources>

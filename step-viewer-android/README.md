@@ -1,6 +1,8 @@
 # Cepte CAD – STEP Görüntüleyici (Android)
 
-STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) dosyalarını telefonda **tamamen çevrimdışı** açıp 3B olarak gösteren yerel (native) Android uygulaması.
+STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) CAD dosyalarını, ayrıca mimari / 3B tasarım programlarının mesh dosyalarını (OBJ, STL, glTF/GLB, DAE/Collada, 3DS, FBX, PLY) telefonda **tamamen çevrimdışı** açıp 3B olarak gösteren yerel (native) Android uygulaması.
+
+Mesh dosyalarında yüzey bilgisi olmadığı için üçgenler düz ve eğri bölgelere ayrılır, bölge sınırlarından kenarlar çıkarılır (`mesh_model.cpp`); böylece seçme, ölçme (düzlem, silindir, küre, çember tanıma), kesit ve hacim (kapalı mesh'lerde) STEP'teki gibi çalışır. Mesh dosyaları [Assimp](https://github.com/assimp/assimp) 5.4.3 (BSD lisansı) ile okunur.
 
 - **Geometri çekirdeği:** [Open CASCADE Technology (OCCT)](https://dev.opencascade.org/) 7.8.1, Android NDK ile statik derlenir
 - **Köprü:** JNI (C++ → Kotlin)
@@ -10,7 +12,7 @@ STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) dosyalarını
 ## Özellikler (v1.0)
 
 **Dosya**
-- Dosya seçiciden veya dosya yöneticisinde **"Birlikte aç"** ile STEP / IGES / BREP açma
+- Dosya seçiciden veya dosya yöneticisinde **"Birlikte aç"** ile STEP / IGES / BREP ve OBJ / STL / glTF / DAE / 3DS / FBX / PLY açma (SketchUp `.skp` dosyaları önce DAE veya OBJ olarak dışa aktarılmalı)
 - Son açılan dosyalar listesi (açılış ekranında)
 - Montajlar: parça yerleşimleri ve STEP renkleri doğru uygulanır
 
@@ -63,6 +65,9 @@ ModelView (GLSurfaceView) + ModelRenderer (ES 3.0) + Camera
 |---|---|
 | `scripts/build_occt_android.sh` | OCCT'yi NDK ile derler (yalnızca gereken araç takımları) |
 | `app/src/main/cpp/step_mesher.*` | STEP okuma ve üçgenleme (JNI'den bağımsız) |
+| `app/src/main/cpp/mesh_import.cpp` | Mesh dosyalarını Assimp ile okuma, birim (mm) ve eksen (Z yukarı) dönüşümü |
+| `app/src/main/cpp/mesh_model.*` | Mesh'i yüzey bölgelerine ve kenarlara ayırma, mesh üzerinde ölçüm ve hacim |
+| `scripts/build_assimp_android.sh` | Assimp'i NDK ile statik derler (yalnızca gerekli okuyucular) |
 | `app/src/main/cpp/jni_bridge.cpp` | Kotlin ↔ C++ köprüsü |
 | `app/src/main/cpp/host_test/` | Çekirdeği masaüstünde (Linux) test etmek için küçük program |
 | `app/src/main/java/.../ModelRenderer.kt` | Shader'lar ve çizim |
