@@ -37,6 +37,10 @@ Mesh dosyalarında yüzey bilgisi olmadığı için üçgenler düz ve eğri bö
 - **Model bilgisi:** boyutlar, hacim, yüzey alanı, kütle merkezi; malzeme seçimi veya özel yoğunluk ile kütle
 - **Ekran görüntüsü paylaşma** (ölçüm sonucu ve dosya adı resmin üstüne yazılır)
 - **Reklamlar:** Google AdMob, altta uyarlanabilir banner, dosya açılınca ve paylaşımdan sonra geçiş reklamı (en az 60 sn arayla), Avrupa için UMP onay formu. Kimlikler `app/build.gradle.kts` içinde (verilmezse test reklamları)
+- **Dönme merkezi:** modele çift dokunulan nokta dönme merkezi olur ve ortaya gelir; boşluğa çift dokunma veya Sığdır sıfırlar
+- **Patlatılmış görünüm:** sağdaki düğme ve kaydırıcı; parçalar model merkezinden kendi merkezlerine doğru açılır (`Explode.kt`, köşe başına yön tamponu + shader). Patlatılmışken parça seçilebilir, ölçüm kapalıdır
+- **Dışa aktarma:** görünen parçalar STL (ikili, mm), OBJ (mm, parça başına nesne) veya GLB (glTF 2.0, metre, Y-yukarı, köşe renkleri) olarak kaydedilir (`Exporter.kt`)
+- **Parça listesi (CSV):** aynı ad ve boyuttaki parçalar adetle toplanır; boyutlar, hacim, seçilen malzemeye göre birim ve toplam kütle (`Bom.kt`). Türkçe Excel için `;` ayırıcı
 - **Reklamsız satın alma:** Google Play Billing 8, tek seferlik ürün `reklamsiz` (fiyat Play Console'da, ör. 299 TL). Menüde "Reklamları kaldır" ve "Satın alımı geri yükle"; durum cihazda önbelleklenir, açılışta Play'den doğrulanır (`Billing.kt`)
 - **İki dil:** telefon Türkçeyse Türkçe, değilse İngilizce (`res/values-tr` ve `res/values`); yerel çekirdek hata kodu döner, metin Kotlin tarafında çevrilir
 

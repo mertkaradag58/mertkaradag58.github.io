@@ -96,9 +96,32 @@ class MainActivity : AppCompatActivity() {
     private var sectionAxis = 0
     private var sectionFlip = false
 
+    // Patlatılmış görünüm
+    private lateinit var explodeCard: MaterialCardView
+    private lateinit var explodeSlider: Slider
+    private var explode: Explode? = null
+    private var explodeFactor = 0f
+
+    // Dışa aktarma: dosya seçildikten sonra yazılacak içerik
+    private var pendingExport: Exporter.Format? = null
+    private var pendingBomDensity = 0.0
+
     private var displayMode = ModelRenderer.DisplayMode.SHADED_EDGES
     private var orthographic = false
     private var yUp = false
+
+    private val exportStl = registerForActivityResult(ActivityResultContracts.CreateDocument("model/stl")) { uri ->
+        if (uri != null) runExport(uri)
+    }
+    private val exportObj = registerForActivityResult(ActivityResultContracts.CreateDocument("model/obj")) { uri ->
+        if (uri != null) runExport(uri)
+    }
+    private val exportGlb = registerForActivityResult(ActivityResultContracts.CreateDocument("model/gltf-binary")) { uri ->
+        if (uri != null) runExport(uri)
+    }
+    private val exportCsv = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) runBomExport(uri)
+    }
 
     private val openDocument =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -170,7 +193,11 @@ class MainActivity : AppCompatActivity() {
         hiddenCard = findViewById(R.id.hidden_card)
         hiddenText = findViewById(R.id.hidden_text)
 
+        explodeCard = findViewById(R.id.explode_card)
+        explodeSlider = findViewById(R.id.explode_slider)
+
         modelView.onTap = { x, y -> onModelTap(x, y) }
+        modelView.onDoubleTap = { x, y -> onModelDoubleTap(x, y) }
         modelView.onLongPress = { x, y -> onModelLongPress(x, y) }
     }
 
@@ -220,6 +247,11 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.fit_button).setOnClickListener { modelView.fit() }
         findViewById<View>(R.id.spin_button).setOnClickListener { modelView.spin360() }
         findViewById<View>(R.id.views_button).setOnClickListener { showViewsMenu(it) }
+        findViewById<View>(R.id.explode_button).setOnClickListener { toggleExplodeCard() }
+        findViewById<View>(R.id.explode_close).setOnClickListener { closeExplode() }
+        explodeSlider.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) setExplodeFactor(value / 100f * Explode.MAX_FACTOR)
+        }
     }
 
     private fun setupBackHandling() {
@@ -242,6 +274,8 @@ class MainActivity : AppCompatActivity() {
         val hasModel = currentMesh != null
         popup.menu.add(Menu.NONE, MENU_INFO, 0, R.string.menu_model_info).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_SHARE, 1, R.string.menu_share).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_EXPORT, 1, R.string.menu_export).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_BOM, 1, R.string.menu_bom).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
         if (!billing.adFree) {
             val price = billing.formattedPrice
@@ -255,6 +289,8 @@ class MainActivity : AppCompatActivity() {
             when (item.itemId) {
                 MENU_INFO -> showModelInfo()
                 MENU_SHARE -> shareScreenshot()
+                MENU_EXPORT -> showExportDialog()
+                MENU_BOM -> showBomDialog()
                 MENU_ABOUT -> showAbout()
                 MENU_PRIVACY -> ads.showPrivacyOptions()
                 MENU_REMOVE_ADS -> billing.buyAdFree(this)
@@ -425,6 +461,11 @@ class MainActivity : AppCompatActivity() {
 
         modelView.setMesh(mesh)
         modelView.setDisplayMode(displayMode)
+        explode = null
+        explodeFactor = 0f
+        explodeSlider.value = 0f
+        explodeCard.visibility = View.GONE
+        modelView.camera.extentScale = 1f
         measure.setMesh(mesh)
         setMeasureMode(false)
         setSelectMode(false)
@@ -519,6 +560,11 @@ class MainActivity : AppCompatActivity() {
     // -----------------------------------------------------------------------
 
     private fun setMeasureMode(enabled: Boolean) {
+        if (enabled && explodeFactor > 0f) {
+            // Ölçüm gerçek geometri üzerinde yapılır; kaydırılmış parçalarla karışmasın
+            closeExplode()
+            Toast.makeText(this, R.string.explode_measure_off, Toast.LENGTH_SHORT).show()
+        }
         if (enabled && selectMode) setSelectMode(false)
         measureMode = enabled
         toolMeasure.isActivated = enabled
@@ -579,7 +625,8 @@ class MainActivity : AppCompatActivity() {
         val visible = if (partVisible.all { it }) null else partVisible.copyOf()
         val clip = if (sectionOn) clipPlane(mesh) else null
         executor.execute {
-            val part = Picker.pickPart(mesh, mvp, w, h, x, y, threshold, visible, clip)
+            val offsets = currentExplodeOffsets()
+            val part = Picker.pickPart(mesh, mvp, w, h, x, y, threshold, visible, clip, offsets)
             runOnUiThread {
                 if (mesh !== currentMesh || !selectMode) return@runOnUiThread
                 if (part < 0) setSelection(-1, -1) else setSelection(part, part + 1)
@@ -819,6 +866,220 @@ class MainActivity : AppCompatActivity() {
     }
 
     // -----------------------------------------------------------------------
+    // Dönme merkezi (çift dokunma)
+    // -----------------------------------------------------------------------
+
+    /** Modele çift dokunma: o nokta dönme merkezi olur; boşluğa çift dokunma: sığdır. */
+    private fun onModelDoubleTap(x: Float, y: Float) {
+        if (loading) return
+        val mesh = currentMesh ?: return
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val visible = if (partVisible.all { it }) null else partVisible.copyOf()
+        val clip = if (sectionOn) clipPlane(mesh) else null
+        val offsets = currentExplodeOffsets()
+        executor.execute {
+            val point = Picker.pickPoint(mesh, mvp, w, h, x, y, visible, clip, offsets)
+            runOnUiThread {
+                if (mesh !== currentMesh) return@runOnUiThread
+                if (point != null) {
+                    modelView.focusOn(point)
+                    if (!focusHintShown) {
+                        focusHintShown = true
+                        Toast.makeText(this, R.string.focus_hint, Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    modelView.fit()
+                }
+            }
+        }
+    }
+
+    private var focusHintShown = false
+
+    // -----------------------------------------------------------------------
+    // Patlatılmış görünüm
+    // -----------------------------------------------------------------------
+
+    private fun toggleExplodeCard() {
+        val mesh = currentMesh ?: return
+        if (explodeCard.visibility == View.VISIBLE) {
+            closeExplode()
+            return
+        }
+        if (mesh.partCount < 2) {
+            Toast.makeText(this, R.string.explode_single_part, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (measureMode) setMeasureMode(false)
+        explodeCard.visibility = View.VISIBLE
+        if (explode == null) {
+            executor.execute {
+                val data = Explode.compute(mesh)
+                runOnUiThread {
+                    if (mesh !== currentMesh) return@runOnUiThread
+                    explode = data
+                    modelView.setExplodeDirections(data.vertexDirs, data.edgeDirs)
+                    setExplodeFactor(explodeSlider.value / 100f * Explode.MAX_FACTOR)
+                }
+            }
+        }
+    }
+
+    private fun closeExplode() {
+        explodeCard.visibility = View.GONE
+        explodeSlider.value = 0f
+        setExplodeFactor(0f)
+    }
+
+    private fun setExplodeFactor(f: Float) {
+        explodeFactor = if (explode == null) 0f else f
+        modelView.camera.extentScale = 1f + explodeFactor
+        modelView.setExplodeFactor(explodeFactor)
+    }
+
+    /** Seçim için parça kaymaları; patlatma kapalıysa null. */
+    private fun currentExplodeOffsets(): FloatArray? {
+        val e = explode ?: return null
+        return if (explodeFactor > 0f) e.partOffsets(explodeFactor) else null
+    }
+
+    // -----------------------------------------------------------------------
+    // Dışa aktarma ve parça listesi
+    // -----------------------------------------------------------------------
+
+    private fun exportPartName(mesh: StepMesh, p: Int): String =
+        mesh.partName(p, getString(R.string.part_fallback, p + 1))
+
+    private fun baseFileName(): String =
+        currentName.substringBeforeLast('.').ifBlank { "model" }
+
+    private fun showExportDialog() {
+        val mesh = currentMesh ?: return
+        val visible = partVisible.count { it }
+        if (visible == 0) {
+            Toast.makeText(this, R.string.export_nothing, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val formats = arrayOf(Exporter.Format.STL, Exporter.Format.OBJ, Exporter.Format.GLB)
+        val labels = arrayOf(getString(R.string.export_stl), getString(R.string.export_obj), getString(R.string.export_glb))
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.export_title, visible))
+            .setItems(labels) { _, which ->
+                val f = formats[which]
+                pendingExport = f
+                val name = baseFileName() + "." + f.extension
+                when (f) {
+                    Exporter.Format.STL -> exportStl.launch(name)
+                    Exporter.Format.OBJ -> exportObj.launch(name)
+                    Exporter.Format.GLB -> exportGlb.launch(name)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+        dialog.show()
+        if (mesh.partCount > 1 && visible == mesh.partCount) {
+            Toast.makeText(this, R.string.export_hidden_note, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun runExport(uri: Uri) {
+        val mesh = currentMesh ?: return
+        val format = pendingExport ?: return
+        pendingExport = null
+        val visible = partVisible.copyOf()
+        val name = displayName(uri)
+        showBusy(getString(R.string.export_busy))
+        executor.execute {
+            val result = runCatching {
+                contentResolver.openOutputStream(uri, "w")?.use { out ->
+                    Exporter.write(mesh, visible, { exportPartName(mesh, it) }, format, out)
+                } ?: throw IOException("open")
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                hideBusy()
+                result.onSuccess { tris ->
+                    Toast.makeText(this, getString(R.string.export_done, name, tris), Toast.LENGTH_LONG).show()
+                }.onFailure {
+                    Toast.makeText(this, R.string.export_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun showBomDialog() {
+        currentMesh ?: return
+        val names = resources.getStringArray(R.array.material_names)
+        val densities = resources.getStringArray(R.array.material_densities).map { it.toDouble() }
+        // "Özel…" yerine "Kütle olmadan"
+        val labels = names.indices.map { i ->
+            if (densities[i] <= 0.0) getString(R.string.bom_no_mass) else names[i]
+        }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.bom_title)
+            .setItems(labels) { _, which ->
+                pendingBomDensity = densities[which]
+                exportCsv.launch(baseFileName() + "_parca_listesi.csv")
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun runBomExport(uri: Uri) {
+        val mesh = currentMesh ?: return
+        val visible = partVisible.copyOf()
+        val density = pendingBomDensity
+        val name = displayName(uri)
+        val headers = Bom.Headers(
+            no = getString(R.string.bom_h_no),
+            name = getString(R.string.bom_h_name),
+            path = getString(R.string.bom_h_path),
+            qty = getString(R.string.bom_h_qty),
+            sizeX = getString(R.string.bom_h_x),
+            sizeY = getString(R.string.bom_h_y),
+            sizeZ = getString(R.string.bom_h_z),
+            volume = getString(R.string.bom_h_volume),
+            unitMass = getString(R.string.bom_h_unit_mass),
+            totalMass = getString(R.string.bom_h_total_mass),
+            total = getString(R.string.bom_h_total),
+        )
+        showBusy(getString(R.string.export_busy))
+        executor.execute {
+            val result = runCatching {
+                val csv = Bom.build(
+                    mesh = mesh,
+                    partVisible = visible,
+                    partName = { exportPartName(mesh, it) },
+                    massProps = { p -> StepNative.massProps(intArrayOf(p)) },
+                    density = density,
+                    headers = headers,
+                )
+                contentResolver.openOutputStream(uri, "w")?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+                    ?: throw IOException("open")
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                hideBusy()
+                result.onSuccess {
+                    Toast.makeText(this, getString(R.string.bom_done, name), Toast.LENGTH_LONG).show()
+                }.onFailure {
+                    Toast.makeText(this, R.string.export_failed, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun showBusy(text: String) {
+        progressText.text = text
+        progressOverlay.visibility = View.VISIBLE
+    }
+
+    private fun hideBusy() {
+        if (!loading) progressOverlay.visibility = View.GONE
+    }
+
+    // -----------------------------------------------------------------------
     // Model bilgisi, paylaşma, hakkında
     // -----------------------------------------------------------------------
 
@@ -929,6 +1190,8 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_PRIVACY = 4
         private const val MENU_REMOVE_ADS = 5
         private const val MENU_RESTORE = 6
+        private const val MENU_EXPORT = 7
+        private const val MENU_BOM = 8
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
     }

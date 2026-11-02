@@ -27,11 +27,18 @@ class Camera {
     private var q = Quat.IDENTITY
     private var center = floatArrayOf(0f, 0f, 0f)
     private var radius = 1f
+    /** Modelin sınır kutusu merkezi; [center] dönme merkezidir (çift dokunma ile değişir). */
+    private var homeCenter = floatArrayOf(0f, 0f, 0f)
     private var zoom = 1f
     private var panX = 0f
     private var panY = 0f
     private var viewWidth = 1
     private var viewHeight = 1
+
+    /** Derinlik aralığı çarpanı (patlatılmış görünüm için 1'den büyük). */
+    var extentScale = 1f
+        @Synchronized get
+        @Synchronized set
 
     var orthographic = false
         @Synchronized get
@@ -53,6 +60,8 @@ class Camera {
     private var animFromPanY = 0f
     private var animToPanX = 0f
     private var animToPanY = 0f
+    private var animFromCenter = floatArrayOf(0f, 0f, 0f)
+    private var animToCenter = floatArrayOf(0f, 0f, 0f)
     private var animStart = 0L
     private var animDuration = 0L
     private var animating = false
@@ -87,6 +96,7 @@ class Camera {
         val dy = bbox[4] - bbox[1]
         val dz = bbox[5] - bbox[2]
         radius = max(sqrt(dx * dx + dy * dy + dz * dz) * 0.5f, 1e-6f)
+        homeCenter = center.copyOf()
         stopMotion()
         q = viewQuat(View.ISO)
         zoom = 1f
@@ -100,10 +110,37 @@ class Camera {
         viewHeight = max(height, 1)
     }
 
+    private fun beginCenterAnim(to: FloatArray) {
+        animFromCenter = center.copyOf()
+        animToCenter = to.copyOf()
+    }
+
+    /**
+     * Çift dokunma: dokunulan noktayı dönme merkezi yapar ve ekranın ortasına getirir.
+     * Model bundan sonra bu noktanın etrafında döner.
+     */
+    @Synchronized
+    fun animateFocus(point: FloatArray, durationMs: Long = 350) {
+        stopMotion()
+        animFromQ = q
+        animToQ = q
+        animFromZoom = zoom
+        animToZoom = zoom
+        animFromPanX = panX
+        animFromPanY = panY
+        animToPanX = 0f
+        animToPanY = 0f
+        beginCenterAnim(point)
+        animStart = now()
+        animDuration = durationMs
+        animating = true
+    }
+
     /** Görünüme (ve sığdırmaya) yumuşak geçiş. */
     @Synchronized
     fun animateTo(view: View, durationMs: Long = 450) {
         stopMotion()
+        beginCenterAnim(homeCenter)
         animFromQ = q
         animToQ = viewQuat(view)
         animFromZoom = zoom
@@ -121,6 +158,7 @@ class Camera {
     @Synchronized
     fun animateFit(durationMs: Long = 350) {
         stopMotion()
+        beginCenterAnim(homeCenter)
         animFromQ = q
         animToQ = q
         animFromZoom = zoom
@@ -174,6 +212,7 @@ class Camera {
             zoom = animFromZoom + (animToZoom - animFromZoom) * e
             panX = animFromPanX + (animToPanX - animFromPanX) * e
             panY = animFromPanY + (animToPanY - animFromPanY) * e
+            for (i in 0 until 3) center[i] = animFromCenter[i] + (animToCenter[i] - animFromCenter[i]) * e
             if (f >= 1f) animating = false
         }
         if (spinning) {
@@ -255,8 +294,10 @@ class Camera {
         Matrix.translateM(tmp, 0, panX, panY, -dist)
         Matrix.multiplyMM(modelView, 0, tmp, 0, tmp2, 0)
 
-        val near = max(dist - radius * 2f, dist * 0.01f)
-        val far = dist + radius * 2f
+        // Patlatılmış görünümde parçalar sınır kutusunun dışına çıkar: derinlik aralığı genişler
+        val extent = radius * 2f * extentScale
+        val near = max(dist - extent, dist * 0.01f)
+        val far = dist + extent
         val aspect = viewWidth.toFloat() / viewHeight
         if (orthographic) {
             val h = halfHeightAtFocus()
