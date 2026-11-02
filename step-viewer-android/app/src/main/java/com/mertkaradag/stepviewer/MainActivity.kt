@@ -170,6 +170,8 @@ class MainActivity : AppCompatActivity() {
             runOnUi = { task -> runOnUiThread(task) },
             onResult = { text, overlay ->
                 measureText.text = text
+                // Yeni sonuç geldiğinde balon başa dönsün
+                findViewById<View>(R.id.measure_scroll).scrollTo(0, 0)
                 measureOverlay = overlay
                 pushOverlay()
             },

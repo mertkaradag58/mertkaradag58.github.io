@@ -383,6 +383,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:gravity="top"
                 android:orientation="horizontal"
                 android:padding="14dp">
 
@@ -394,15 +395,25 @@
                     android:src="@drawable/ic_ruler"
                     app:tint="@color/measure" />
 
-                <TextView
-                    android:id="@+id/measure_text"
+                <!-- Uzun sonuçlar kaydırılarak okunur (en fazla ~150 dp yükseklik) -->
+                <com.mertkaradag.stepviewer.MaxHeightScrollView
+                    android:id="@+id/measure_scroll"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:lineSpacingExtra="3dp"
-                    android:textColor="@color/text"
-                    android:textIsSelectable="true"
-                    android:textSize="14sp" />
+                    android:fadeScrollbars="false"
+                    android:scrollbars="vertical">
+
+                    <TextView
+                        android:id="@+id/measure_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:lineSpacingExtra="3dp"
+                        android:paddingEnd="6dp"
+                        android:textColor="@color/text"
+                        android:textIsSelectable="true"
+                        android:textSize="14sp" />
+                </com.mertkaradag.stepviewer.MaxHeightScrollView>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/measure_close"
