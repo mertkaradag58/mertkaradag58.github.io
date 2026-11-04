@@ -39,6 +39,16 @@ class ModelRenderer(
     private var visibleSegRanges: IntArray? = null
     private var displayMode = DisplayMode.SHADED_EDGES
     private var clipPlane: FloatArray? = null        // [nx, ny, nz, d]: n·p + d >= 0 görünür
+    // Patlatılmış görünüm: köşe başına kayma yönü (parça merkezi - model merkezi) ve çarpan
+    private var explodeVertexDirs: FloatArray? = null
+    private var explodeEdgeDirs: FloatArray? = null
+    private var explodeDirty = false
+    private var explodeFactor = 0f
+    // PMI çizimleri
+    private var pmiSegments: FloatArray? = null
+    private var pmiDirty = false
+    private var pmiVisible = false
+    private var pmiHighlight = IntArray(0) // (başlangıç segment, adet)
     private var screenshotCallback: ((Bitmap?) -> Unit)? = null
 
     private var bgProgram = 0
@@ -49,6 +59,11 @@ class ModelRenderer(
     private var edgeVbo = 0
     private var highlightVbo = 0
     private var measureVbo = 0
+    private var explodeVbo = 0
+    private var explodeEdgeVbo = 0
+    private var pmiVbo = 0
+    private var pmiVertexCount = 0
+    private var hasExplodeData = false
     private var indexCount = 0
     private var edgeVertexCount = 0
     private var highlightVertexCount = 0
@@ -67,6 +82,8 @@ class ModelRenderer(
     private var uPointSize = 0
     private var uLineClip = 0
     private var uLineClipOn = 0
+    private var uMeshExplode = 0
+    private var uLineExplode = 0
 
     private val modelView = FloatArray(16)
     private val mvp = FloatArray(16)
@@ -79,6 +96,35 @@ class ModelRenderer(
         visibleTriRanges = null
         visibleSegRanges = null
         clipPlane = null
+        explodeVertexDirs = null
+        explodeEdgeDirs = null
+        explodeDirty = true
+        explodeFactor = 0f
+        pmiSegments = null
+        pmiDirty = true
+        pmiVisible = false
+        pmiHighlight = IntArray(0)
+    }
+
+    fun setPmi(segments: FloatArray?) {
+        pmiSegments = segments
+        pmiDirty = true
+    }
+
+    fun setPmiVisible(visible: Boolean, highlight: IntArray) {
+        pmiVisible = visible
+        pmiHighlight = highlight
+    }
+
+    /** Patlatma yönleri (köşe ve kenar köşesi başına x, y, z); bir kez verilir. */
+    fun setExplodeDirections(vertexDirs: FloatArray?, edgeDirs: FloatArray?) {
+        explodeVertexDirs = vertexDirs
+        explodeEdgeDirs = edgeDirs
+        explodeDirty = true
+    }
+
+    fun setExplodeFactor(f: Float) {
+        explodeFactor = f
     }
 
     fun setOverlay(o: Overlay) {
@@ -116,6 +162,7 @@ class ModelRenderer(
         uMeshClip = GLES30.glGetUniformLocation(meshProgram, "uClip")
         uMeshClipOn = GLES30.glGetUniformLocation(meshProgram, "uClipOn")
         uOverride = GLES30.glGetUniformLocation(meshProgram, "uOverride")
+        uMeshExplode = GLES30.glGetUniformLocation(meshProgram, "uExplode")
 
         lineProgram = buildProgram(LINE_VS, LINE_FS)
         uLineMvp = GLES30.glGetUniformLocation(lineProgram, "uMvp")
@@ -123,18 +170,24 @@ class ModelRenderer(
         uPointSize = GLES30.glGetUniformLocation(lineProgram, "uPointSize")
         uLineClip = GLES30.glGetUniformLocation(lineProgram, "uClip")
         uLineClipOn = GLES30.glGetUniformLocation(lineProgram, "uClipOn")
+        uLineExplode = GLES30.glGetUniformLocation(lineProgram, "uExplode")
 
-        val ids = IntArray(5)
-        GLES30.glGenBuffers(5, ids, 0)
+        val ids = IntArray(8)
+        GLES30.glGenBuffers(8, ids, 0)
         vbo = ids[0]
         ibo = ids[1]
         edgeVbo = ids[2]
         highlightVbo = ids[3]
         measureVbo = ids[4]
+        explodeVbo = ids[5]
+        explodeEdgeVbo = ids[6]
+        pmiVbo = ids[7]
 
         // Yeni bağlam: GPU tamponları boş, her şeyi tekrar yükle.
         meshDirty = true
         overlayDirty = true
+        explodeDirty = true
+        pmiDirty = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -154,6 +207,20 @@ class ModelRenderer(
             measureVertexCount = upload(measureVbo, overlay.measureLine)
             overlayDirty = false
         }
+        if (pmiDirty) {
+            pmiVertexCount = upload(pmiVbo, pmiSegments)
+            pmiDirty = false
+        }
+        if (explodeDirty) {
+            val v = explodeVertexDirs
+            val e = explodeEdgeDirs
+            hasExplodeData = v != null && v.isNotEmpty()
+            if (hasExplodeData) {
+                upload(explodeVbo, v)
+                upload(explodeEdgeVbo, e)
+            }
+            explodeDirty = false
+        }
 
         val moving = camera.update()
 
@@ -166,6 +233,7 @@ class ModelRenderer(
             if (displayMode != DisplayMode.WIREFRAME) drawFaces(clip)
             if (displayMode != DisplayMode.SHADED) drawEdges(clip)
             drawOverlay(clip)
+            drawPmi()
         }
 
         screenshotCallback?.let { cb ->
@@ -194,13 +262,35 @@ class ModelRenderer(
         GLES30.glVertexAttribPointer(1, 3, GLES30.GL_FLOAT, false, stride, 12)
         GLES30.glEnableVertexAttribArray(2)
         GLES30.glVertexAttribPointer(2, 3, GLES30.GL_FLOAT, false, stride, 24)
+        bindExplode(3, explodeVbo, uMeshExplode)
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ibo)
+    }
+
+    /** Patlatma yönü niteliği; veri yoksa sabit (0, 0, 0). */
+    private fun bindExplode(location: Int, buffer: Int, uniform: Int) {
+        if (hasExplodeData && explodeFactor != 0f) {
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, buffer)
+            GLES30.glEnableVertexAttribArray(location)
+            GLES30.glVertexAttribPointer(location, 3, GLES30.GL_FLOAT, false, 12, 0)
+            GLES30.glUniform1f(uniform, explodeFactor)
+        } else {
+            GLES30.glDisableVertexAttribArray(location)
+            GLES30.glVertexAttrib3f(location, 0f, 0f, 0f)
+            GLES30.glUniform1f(uniform, 0f)
+        }
+    }
+
+    private fun noExplode(location: Int, uniform: Int) {
+        GLES30.glDisableVertexAttribArray(location)
+        GLES30.glVertexAttrib3f(location, 0f, 0f, 0f)
+        GLES30.glUniform1f(uniform, 0f)
     }
 
     private fun unbindMeshAttributes() {
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glDisableVertexAttribArray(1)
         GLES30.glDisableVertexAttribArray(2)
+        GLES30.glDisableVertexAttribArray(3)
     }
 
     private fun setMeshClip(clip: FloatArray?) {
@@ -254,6 +344,7 @@ class ModelRenderer(
         }
         GLES30.glUniform1f(uPointSize, 1f)
         setLineClip(clip)
+        bindExplode(1, explodeEdgeVbo, uLineExplode)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, edgeVbo)
         GLES30.glEnableVertexAttribArray(0)
         GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
@@ -268,6 +359,7 @@ class ModelRenderer(
             }
         }
         GLES30.glDisableVertexAttribArray(0)
+        GLES30.glDisableVertexAttribArray(1)
     }
 
     private fun setLineClip(clip: FloatArray?) {
@@ -305,6 +397,8 @@ class ModelRenderer(
         if (highlightVertexCount == 0 && measureVertexCount < 2) return
         GLES30.glUseProgram(lineProgram)
         GLES30.glUniformMatrix4fv(uLineMvp, 1, false, mvp, 0)
+        // Seçili kenar ve ölçü çizgileri patlatılmaz (ölçüm patlatma kapalıyken yapılır)
+        noExplode(1, uLineExplode)
         GLES30.glEnableVertexAttribArray(0)
         if (highlightVertexCount > 0) {
             // Seçili kenarlar: turuncu, kalın
@@ -328,6 +422,35 @@ class ModelRenderer(
             GLES30.glDrawArrays(GLES30.GL_LINES, 0, 2)
             GLES30.glUniform1f(uPointSize, 14f)
             GLES30.glDrawArrays(GLES30.GL_POINTS, 0, 2)
+            GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+        }
+        GLES30.glLineWidth(1f)
+        GLES30.glDisableVertexAttribArray(0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+    }
+
+    /** PMI çizgileri: yeşil; seçili öğe sarı, kalın ve her zaman önde. */
+    private fun drawPmi() {
+        if (!pmiVisible || pmiVertexCount == 0) return
+        GLES30.glUseProgram(lineProgram)
+        GLES30.glUniformMatrix4fv(uLineMvp, 1, false, mvp, 0)
+        noExplode(1, uLineExplode)
+        setLineClip(null)
+        GLES30.glUniform1f(uPointSize, 1f)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, pmiVbo)
+        GLES30.glEnableVertexAttribArray(0)
+        GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+        GLES30.glLineWidth(2f)
+        GLES30.glUniform4f(uLineColor, 0.30f, 0.90f, 0.55f, 1f)
+        GLES30.glDrawArrays(GLES30.GL_LINES, 0, pmiVertexCount)
+        val h = pmiHighlight
+        if (h.size >= 2 && h[1] > 0) {
+            GLES30.glDisable(GLES30.GL_DEPTH_TEST)
+            GLES30.glLineWidth(4f)
+            GLES30.glUniform4f(uLineColor, 1.0f, 0.85f, 0.1f, 1f)
+            val start = h[0] * 2
+            val count = minOf(h[1] * 2, pmiVertexCount - start)
+            if (start >= 0 && count > 0) GLES30.glDrawArrays(GLES30.GL_LINES, start, count)
             GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         }
         GLES30.glLineWidth(1f)
@@ -451,19 +574,22 @@ void main() {
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec3 aColor;
+layout(location = 3) in vec3 aExplode;
 uniform mat4 uMvp;
 uniform mat4 uModelView;
+uniform float uExplode;
 out vec3 vNormal;
 out vec3 vColor;
 out vec3 vViewPos;
 out vec3 vWorld;
 void main() {
-    vec4 viewPos = uModelView * vec4(aPos, 1.0);
+    vec3 p = aPos + aExplode * uExplode;
+    vec4 viewPos = uModelView * vec4(p, 1.0);
     vViewPos = viewPos.xyz;
     vNormal = mat3(uModelView) * aNormal;
     vColor = aColor;
-    vWorld = aPos;
-    gl_Position = uMvp * vec4(aPos, 1.0);
+    vWorld = p;
+    gl_Position = uMvp * vec4(p, 1.0);
 }
 """
 
@@ -507,12 +633,15 @@ void main() {
 
         private const val LINE_VS = """#version 300 es
 layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aExplode;
 uniform mat4 uMvp;
 uniform highp float uPointSize;
+uniform float uExplode;
 out vec3 vWorld;
 void main() {
-    vWorld = aPos;
-    gl_Position = uMvp * vec4(aPos, 1.0);
+    vec3 p = aPos + aExplode * uExplode;
+    vWorld = p;
+    gl_Position = uMvp * vec4(p, 1.0);
     gl_PointSize = uPointSize;
 }
 """

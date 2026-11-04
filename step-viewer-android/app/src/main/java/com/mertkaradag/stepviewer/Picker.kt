@@ -41,7 +41,7 @@ object Picker {
         if (dirLen <= 0f) return null
         dir[0] /= dirLen; dir[1] /= dirLen; dir[2] /= dirLen
 
-        val surface = raycastSurface(mesh, near, dir, partVisible, clip)
+        val surface = raycastSurface(mesh, near, dir, partVisible, clip, null)
 
         val b = mesh.bbox
         val diag = sqrt(
@@ -115,26 +115,73 @@ object Picker {
         thresholdPx: Float,
         partVisible: BooleanArray?,
         clip: FloatArray?,
+        partOffsets: FloatArray? = null,
     ): Int {
-        val inv = FloatArray(16)
-        if (!Matrix.invertM(inv, 0, mvp, 0)) return -1
-        val ndcX = 2f * x / viewWidth - 1f
-        val ndcY = 1f - 2f * y / viewHeight
-        val near = unproject(inv, ndcX, ndcY, -1f)
-        val far = unproject(inv, ndcX, ndcY, 1f)
-        val dir = floatArrayOf(far[0] - near[0], far[1] - near[1], far[2] - near[2])
-        val dirLen = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2])
-        if (dirLen <= 0f) return -1
-        dir[0] /= dirLen; dir[1] /= dirLen; dir[2] /= dirLen
-
-        val surface = raycastSurface(mesh, near, dir, partVisible, clip)
+        val ray = ray(mvp, viewWidth, viewHeight, x, y) ?: return -1
+        val surface = raycastSurface(mesh, ray[0], ray[1], partVisible, clip, partOffsets)
         if (surface != null) {
             val face = mesh.faceOfTriangle(surface.first)
             if (face >= 0) return mesh.partOfFace(face)
         }
+        // Patlatılmış görünümde kenar konumları kaydırılmış olduğundan kenara göre seçilmez
+        if (partOffsets != null) return -1
         // Tel kafes görünümü veya yüzeysiz modeller: kenara göre
         val hit = pick(mesh, mvp, viewWidth, viewHeight, x, y, thresholdPx, partVisible, clip) ?: return -1
         return if (hit.kind == StepNative.KIND_EDGE) mesh.partOfEdge(hit.id) else mesh.partOfFace(hit.id)
+    }
+
+    /**
+     * Dokunulan yüzey noktası (dünya koordinatı); boşluğa dokunulduysa null.
+     * Çift dokunma ile dönme merkezini seçmek için.
+     */
+    fun pickPoint(
+        mesh: StepMesh,
+        mvp: FloatArray,
+        viewWidth: Int,
+        viewHeight: Int,
+        x: Float,
+        y: Float,
+        partVisible: BooleanArray?,
+        clip: FloatArray?,
+        partOffsets: FloatArray? = null,
+    ): FloatArray? {
+        val ray = ray(mvp, viewWidth, viewHeight, x, y) ?: return null
+        val o = ray[0]
+        val d = ray[1]
+        val hit = raycastSurface(mesh, o, d, partVisible, clip, partOffsets) ?: return null
+        val t = hit.second
+        return floatArrayOf(o[0] + d[0] * t, o[1] + d[1] * t, o[2] + d[2] * t)
+    }
+
+    /** Dokunulan yüzeyin kimliği (kenarlar yok sayılır); boşluk ise -1. */
+    fun pickFace(
+        mesh: StepMesh,
+        mvp: FloatArray,
+        viewWidth: Int,
+        viewHeight: Int,
+        x: Float,
+        y: Float,
+        partVisible: BooleanArray?,
+        clip: FloatArray?,
+    ): Int {
+        val ray = ray(mvp, viewWidth, viewHeight, x, y) ?: return -1
+        val hit = raycastSurface(mesh, ray[0], ray[1], partVisible, clip, null) ?: return -1
+        return mesh.faceOfTriangle(hit.first)
+    }
+
+    /** Dokunma noktasından çıkan ışın: [başlangıç, birim yön] veya null. */
+    private fun ray(mvp: FloatArray, w: Int, h: Int, x: Float, y: Float): Array<FloatArray>? {
+        val inv = FloatArray(16)
+        if (!Matrix.invertM(inv, 0, mvp, 0)) return null
+        val ndcX = 2f * x / w - 1f
+        val ndcY = 1f - 2f * y / h
+        val near = unproject(inv, ndcX, ndcY, -1f)
+        val far = unproject(inv, ndcX, ndcY, 1f)
+        val dir = floatArrayOf(far[0] - near[0], far[1] - near[1], far[2] - near[2])
+        val len = sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2])
+        if (len <= 0f) return null
+        dir[0] /= len; dir[1] /= len; dir[2] /= len
+        return arrayOf(near, dir)
     }
 
     private fun unproject(inv: FloatArray, x: Float, y: Float, z: Float): FloatArray {
@@ -155,18 +202,30 @@ object Picker {
         return true
     }
 
-    /** En yakın görünür üçgen: (üçgen indeksi, uzaklık) veya null. Möller–Trumbore. */
+    /**
+     * En yakın görünür üçgen: (üçgen indeksi, uzaklık) veya null. Möller–Trumbore.
+     * [partOffsets]: patlatılmış görünümde parça başına kaydırma (x, y, z); ışın ters kaydırılır.
+     */
     private fun raycastSurface(
         mesh: StepMesh, o: FloatArray, d: FloatArray, partVisible: BooleanArray?, clip: FloatArray?,
+        partOffsets: FloatArray?,
     ): Pair<Int, Float>? {
         var best = Float.MAX_VALUE
         var bestTri = -1
         val parts = mesh.partCount
+        val local = FloatArray(3)
         for (p in 0 until parts) {
             if (partVisible != null && !partVisible[p]) continue
             val range = mesh.partTriangleRange(p)
+            if (partOffsets != null && partOffsets.size >= parts * 3) {
+                local[0] = o[0] - partOffsets[p * 3]
+                local[1] = o[1] - partOffsets[p * 3 + 1]
+                local[2] = o[2] - partOffsets[p * 3 + 2]
+            } else {
+                local[0] = o[0]; local[1] = o[1]; local[2] = o[2]
+            }
             for (tri in range) {
-                val t = intersect(mesh, tri, o, d)
+                val t = intersect(mesh, tri, local, d)
                 if (t <= 0f || t >= best) continue
                 if (clip != null) {
                     val hx = o[0] + d[0] * t; val hy = o[1] + d[1] * t; val hz = o[2] + d[2] * t

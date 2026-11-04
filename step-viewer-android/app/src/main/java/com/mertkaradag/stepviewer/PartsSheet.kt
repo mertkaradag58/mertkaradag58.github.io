@@ -33,7 +33,7 @@ class PartsSheet(
 ) {
     private val dialog = BottomSheetDialog(context)
     private val adapter = Adapter()
-    private val locale = Locale("tr", "TR")
+    private val locale = Locale.getDefault()
 
     private val allNodes: List<StepMesh.TreeNode> = mesh.tree
     private var nodes: List<StepMesh.TreeNode> = allNodes

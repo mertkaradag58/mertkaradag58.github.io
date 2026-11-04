@@ -68,6 +68,25 @@ jobs:
           path: step-viewer-android/third_party/occt-install
           key: ${{ steps.occt-cache.outputs.cache-primary-key }}
 
+      # Assimp (mesh dosyaları) ~5 dk; derleme betiği değişmedikçe önbellekten gelir.
+      - name: Assimp önbelleğini geri yükle
+        id: assimp-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: step-viewer-android/third_party/assimp-install
+          key: assimp-ndk${{ env.NDK_VERSION }}-${{ hashFiles('step-viewer-android/scripts/build_assimp_android.sh') }}
+
+      - name: Assimp'i Android için derle
+        if: steps.assimp-cache.outputs.cache-hit != 'true'
+        run: ./scripts/build_assimp_android.sh
+
+      - name: Assimp önbelleğini kaydet
+        if: steps.assimp-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: step-viewer-android/third_party/assimp-install
+          key: ${{ steps.assimp-cache.outputs.cache-primary-key }}
+
       # Bağımlılıklar her dalda önbelleğe alınır; Maven Central'ın hız sınırına (429) takılmamak için.
       - uses: gradle/actions/setup-gradle@v4
         with:

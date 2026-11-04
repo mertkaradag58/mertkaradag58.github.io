@@ -1,5 +1,7 @@
 #include "step_mesher.h"
 
+#include "mesh_model.h"
+
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepBndLib.hxx>
@@ -30,6 +32,7 @@
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
+#include <StepData_ConfParameters.hxx>
 #include <XCAFApp_Application.hxx>
 #include <XCAFDoc_DocumentTool.hxx>
 #include <XCAFDoc_ShapeTool.hxx>
@@ -44,6 +47,7 @@
 #include <gp_Torus.hxx>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
 #include <exception>
@@ -140,6 +144,38 @@ std::string NodeName(const XCAFPrs_DocumentNode& node) {
   return name;
 }
 
+// Dosyadaki 8 bitlik baytlar geçerli UTF-8 mi? Eski SolidWorks gibi programlar
+// Türkçe adları UTF-8 yerine Windows-1254 ile yazar ("Varsayılan" -> "Varsay\xFDlan").
+// Geçersiz bir dizi bulunursa dosya CP1254 olarak okunur.
+bool LooksLikeUtf8(const std::string& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return true;
+  std::vector<char> buf(1 << 20);
+  int need = 0;  // beklenen devam baytı sayısı
+  while (in) {
+    in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
+    const std::streamsize n = in.gcount();
+    for (std::streamsize i = 0; i < n; ++i) {
+      const auto c = static_cast<unsigned char>(buf[static_cast<size_t>(i)]);
+      if (need > 0) {
+        if ((c & 0xC0) != 0x80) return false;
+        --need;
+      } else if (c < 0x80) {
+        continue;
+      } else if ((c & 0xE0) == 0xC0 && c >= 0xC2) {
+        need = 1;
+      } else if ((c & 0xF0) == 0xE0) {
+        need = 2;
+      } else if ((c & 0xF8) == 0xF0 && c <= 0xF4) {
+        need = 3;
+      } else {
+        return false;
+      }
+    }
+  }
+  return need == 0;
+}
+
 // Belgeyi dosyadan doldurur.
 bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Document)& doc,
                   std::string& error) {
@@ -150,15 +186,19 @@ bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Doc
       reader.SetNameMode(true);
       reader.SetLayerMode(false);
       reader.SetPropsMode(false);
-      reader.SetGDTMode(false);
+      reader.SetGDTMode(true);  // PMI: ölçü ve tolerans bilgileri
       reader.SetMatMode(false);
       reader.SetViewMode(false);
-      if (reader.ReadFile(path.c_str()) != IFSelect_RetDone) {
-        error = "STEP dosyası okunamadı (geçersiz veya bozuk dosya).";
+      StepData_ConfParameters params;
+      params.InitFromStatic();
+      params.ReadCodePage =
+          LooksLikeUtf8(path) ? Resource_FormatType_UTF8 : Resource_FormatType_CP1254;
+      if (reader.ReadFile(path.c_str(), params) != IFSelect_RetDone) {
+        error = "read_failed:STEP";
         return false;
       }
       if (!reader.Transfer(doc)) {
-        error = "STEP verisi aktarılamadı.";
+        error = "transfer_failed:STEP";
         return false;
       }
       return true;
@@ -169,11 +209,11 @@ bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Doc
       reader.SetNameMode(true);
       reader.SetLayerMode(false);
       if (reader.ReadFile(path.c_str()) != IFSelect_RetDone) {
-        error = "IGES dosyası okunamadı (geçersiz veya bozuk dosya).";
+        error = "read_failed:IGES";
         return false;
       }
       if (!reader.Transfer(doc)) {
-        error = "IGES verisi aktarılamadı.";
+        error = "transfer_failed:IGES";
         return false;
       }
       return true;
@@ -182,7 +222,7 @@ bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Doc
       TopoDS_Shape shape;
       BRep_Builder builder;
       if (!BRepTools::Read(shape, path.c_str(), builder) || shape.IsNull()) {
-        error = "BREP dosyası okunamadı.";
+        error = "read_failed:BREP";
         return false;
       }
       Handle(XCAFDoc_ShapeTool) shapeTool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
@@ -190,7 +230,7 @@ bool ReadDocument(const std::string& path, FileFormat format, Handle(TDocStd_Doc
       return true;
     }
     default:
-      error = "Desteklenmeyen dosya biçimi. STEP, IGES veya BREP dosyası seçin.";
+      error = "unsupported_format";
       return false;
   }
 }
@@ -199,9 +239,15 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
               std::string& error) {
   out.format = DetectFormat(path);
   if (out.format == FileFormat::Unknown) {
-    error = "Desteklenmeyen dosya biçimi. STEP (.step/.stp), IGES (.igs/.iges) veya BREP "
-            "(.brep) dosyası seçin.";
+    error = "unsupported_format";
     return false;
+  }
+
+  // Mesh dosyaları (OBJ, STL, glTF, ...) ayrı yoldan okunur.
+  if (IsMeshFormat(out.format)) {
+    RawMesh raw;
+    if (!ImportMeshFile(path, out.format, raw, error)) return false;
+    return BuildMeshModel(raw, out, error);
   }
 
   Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
@@ -218,7 +264,7 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
   TDF_LabelSequence freeShapes;
   shapeTool->GetFreeShapes(freeShapes);
   if (freeShapes.IsEmpty()) {
-    error = "Dosyada geometri bulunamadı.";
+    error = "no_geometry";
     app->Close(doc);
     return false;
   }
@@ -237,7 +283,7 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
   Bnd_Box box;
   BRepBndLib::Add(compound, box, false);
   if (box.IsVoid()) {
-    error = "Dosyada görüntülenebilir geometri yok.";
+    error = "no_geometry";
     app->Close(doc);
     return false;
   }
@@ -250,6 +296,11 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
   // Paylaşılan geometri (örneğin montajda aynı cıvata) yalnızca bir kez üçgenlenir.
   BRepMesh_IncrementalMesh mesher(compound, linDefl, false, options.angularDeflection,
                                   /*isInParallel=*/true);
+
+  // PMI (yalnızca STEP; IGES/BREP'te yok)
+  if (out.format == FileFormat::Step) {
+    ExtractPmi(doc, linDefl, out.pmi);
+  }
 
   // --- 3) Montaj ağacını gez: parçalar, yüzeyler, kenarlar, renkler ---
   float bmin[3] = {1e30f, 1e30f, 1e30f};
@@ -345,7 +396,7 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
   }
 
   if (out.indices.empty()) {
-    error = "Model üçgenlenemedi (yüzey bulunamadı).";
+    error = "no_geometry";
     return false;
   }
   for (int i = 0; i < 3; ++i) {
@@ -357,7 +408,30 @@ bool LoadImpl(const std::string& path, const MeshOptions& options, MeshData& out
 
 }  // namespace
 
+namespace {
+
+std::string LowerExtension(const std::string& path) {
+  const size_t slash = path.find_last_of("/\\");
+  const size_t dot = path.find_last_of('.');
+  if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) return std::string();
+  std::string ext = path.substr(dot + 1);
+  for (char& c : ext) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return ext;
+}
+
+}  // namespace
+
 FileFormat DetectFormat(const std::string& path) {
+  // Mesh biçimleri önce uzantıdan tanınır (STL/OBJ gibi biçimlerin belirgin bir imzası yok).
+  const std::string ext = LowerExtension(path);
+  if (ext == "obj") return FileFormat::Obj;
+  if (ext == "stl") return FileFormat::Stl;
+  if (ext == "gltf" || ext == "glb") return FileFormat::Gltf;
+  if (ext == "dae") return FileFormat::Dae;
+  if (ext == "3ds") return FileFormat::Max3ds;
+  if (ext == "fbx") return FileFormat::Fbx;
+  if (ext == "ply") return FileFormat::Ply;
+
   std::ifstream in(path, std::ios::binary);
   if (!in) return FileFormat::Unknown;
   std::string head(4096, '\0');
@@ -373,6 +447,19 @@ FileFormat DetectFormat(const std::string& path) {
   const size_t eol = head.find_first_of("\r\n");
   const std::string first = head.substr(0, eol);
   if (first.size() >= 73 && (first[72] == 'S' || first[72] == 'G')) return FileFormat::Iges;
+
+  // Uzantısı bilinmeyen mesh dosyaları için imzalar
+  if (head.compare(0, 4, "glTF") == 0) return FileFormat::Gltf;
+  if (head.compare(0, 18, "Kaydara FBX Binary") == 0) return FileFormat::Fbx;
+  if (head.compare(0, 3, "ply") == 0) return FileFormat::Ply;
+  if (head.find("<COLLADA") != std::string::npos) return FileFormat::Dae;
+  if (head.compare(0, 5, "solid") == 0 && head.find("facet") != std::string::npos) {
+    return FileFormat::Stl;
+  }
+  if (head.size() >= 2 && static_cast<unsigned char>(head[0]) == 0x4D &&
+      static_cast<unsigned char>(head[1]) == 0x4D && ext == "dat") {
+    return FileFormat::Max3ds;  // 3DS ana parçası 0x4D4D
+  }
   return FileFormat::Unknown;
 }
 
@@ -386,13 +473,13 @@ bool LoadModelFile(const std::string& path, const MeshOptions& options, MeshData
   try {
     if (LoadImpl(path, options, out, error)) return true;
   } catch (const Standard_Failure& e) {
-    error = std::string("OCCT hatası: ") + e.GetMessageString();
+    error = std::string("OCCT: ") + e.GetMessageString();
   } catch (const std::bad_alloc&) {
-    error = "Bellek yetersiz: model bu cihaz için çok büyük.";
+    error = "out_of_memory";
   } catch (const std::exception& e) {
-    error = std::string("Hata: ") + e.what();
+    error = std::string("Error: ") + e.what();
   } catch (...) {
-    error = "Bilinmeyen bir hata oluştu.";
+    error = "unknown_error";
   }
   out = MeshData();
   return false;
@@ -529,6 +616,11 @@ bool GetShapeInfo(const TopoDS_Shape& shape, ShapeInfo& info) {
 }
 
 bool MeasurePair(const TopoDS_Shape& a, const TopoDS_Shape& b, PairMeasure& out) {
+  return MeasurePairWithInfo(a, nullptr, b, nullptr, out);
+}
+
+bool MeasurePairWithInfo(const TopoDS_Shape& a, const ShapeInfo* pia, const TopoDS_Shape& b,
+                         const ShapeInfo* pib, PairMeasure& out) {
   out = PairMeasure();
   try {
     BRepExtrema_DistShapeShape dist(a, b);
@@ -540,7 +632,16 @@ bool MeasurePair(const TopoDS_Shape& a, const TopoDS_Shape& b, PairMeasure& out)
     ToArray(dist.PointOnShape2(1).XYZ(), out.p2);
 
     ShapeInfo ia, ib;
-    if (!GetShapeInfo(a, ia) || !GetShapeInfo(b, ib)) return true;
+    if (pia != nullptr) {
+      ia = *pia;
+    } else if (!GetShapeInfo(a, ia)) {
+      return true;
+    }
+    if (pib != nullptr) {
+      ib = *pib;
+    } else if (!GetShapeInfo(b, ib)) {
+      return true;
+    }
 
     const bool aLine = IsLineLike(ia.kind), bLine = IsLineLike(ib.kind);
     const bool aPlane = ia.kind == GeomKind::Plane, bPlane = ib.kind == GeomKind::Plane;

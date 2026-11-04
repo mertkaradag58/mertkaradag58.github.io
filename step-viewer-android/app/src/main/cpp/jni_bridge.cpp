@@ -3,10 +3,19 @@
 #include <android/log.h>
 #include <jni.h>
 
+#include <BRepBndLib.hxx>
+#include <Bnd_Box.hxx>
+#include <Standard_Failure.hxx>
+#include <TopoDS.hxx>
+
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
+#include "drawing_views.h"
+#include "dxf_export.h"
+#include "hole_finder.h"
 #include "step_mesher.h"
 
 #define LOG_TAG "StepViewer"
@@ -20,15 +29,28 @@ struct ModelStore {
   std::vector<TopoDS_Edge> edges;
   std::vector<TopoDS_Face> faces;
   std::vector<TopoDS_Shape> parts;
+  std::vector<int32_t> partFaceOffsets;  // parça i -> yüzeyler
+  // Mesh dosyalarında (OBJ, STL, ...) ölçüm bu geometriden yapılır; CAD'de boş.
+  std::shared_ptr<stepviewer::MeshGeometry> mesh;
+  // STEP PMI (ölçü, tolerans, referans)
+  stepviewer::PmiData pmi;
 
   void Clear() {
     std::lock_guard<std::mutex> lock(mutex);
+    pmi = stepviewer::PmiData();
     std::vector<TopoDS_Edge>().swap(edges);
     std::vector<TopoDS_Face>().swap(faces);
     std::vector<TopoDS_Shape>().swap(parts);
+    std::vector<int32_t>().swap(partFaceOffsets);
+    mesh.reset();
   }
 };
 ModelStore gStore;
+
+std::shared_ptr<stepviewer::MeshGeometry> CurrentMesh() {
+  std::lock_guard<std::mutex> lock(gStore.mutex);
+  return gStore.mesh;
+}
 
 constexpr jint kKindEdge = 0;
 constexpr jint kKindFace = 1;
@@ -164,6 +186,9 @@ Java_com_mertkaradag_stepviewer_StepNative_loadModel(JNIEnv* env, jobject /*thiz
     gStore.edges = std::move(mesh.edgeShapes);
     gStore.faces = std::move(mesh.faceShapes);
     gStore.parts = std::move(mesh.partShapes);
+    gStore.partFaceOffsets = std::move(mesh.partFaceOffsets);
+    gStore.pmi = std::move(mesh.pmi);
+    gStore.mesh = std::move(mesh.meshGeometry);
   }
   return result;
 }
@@ -174,7 +199,11 @@ Java_com_mertkaradag_stepviewer_StepNative_shapeInfo(JNIEnv* env, jobject /*thiz
                                                      jint id) {
   TopoDS_Shape shape;
   stepviewer::ShapeInfo i;
-  if (!GetStoredShape(kind, id, shape) || !stepviewer::GetShapeInfo(shape, i)) return nullptr;
+  if (auto mesh = CurrentMesh()) {
+    if (!stepviewer::MeshFeatureInfo(*mesh, kind, id, i)) return nullptr;
+  } else if (!GetStoredShape(kind, id, shape) || !stepviewer::GetShapeInfo(shape, i)) {
+    return nullptr;
+  }
   return ToJava(env, std::vector<double>{static_cast<double>(i.kind), i.length, i.area, i.radius, i.radius2,
                       i.angleDeg, i.center[0], i.center[1], i.center[2], i.dir[0], i.dir[1],
                       i.dir[2]});
@@ -188,8 +217,10 @@ Java_com_mertkaradag_stepviewer_StepNative_measurePair(JNIEnv* env, jobject /*th
                                                        jint idB) {
   TopoDS_Shape a, b;
   stepviewer::PairMeasure m;
-  if (!GetStoredShape(kindA, idA, a) || !GetStoredShape(kindB, idB, b) ||
-      !stepviewer::MeasurePair(a, b, m)) {
+  if (auto mesh = CurrentMesh()) {
+    if (!stepviewer::MeshMeasurePair(*mesh, kindA, idA, kindB, idB, m)) return nullptr;
+  } else if (!GetStoredShape(kindA, idA, a) || !GetStoredShape(kindB, idB, b) ||
+             !stepviewer::MeasurePair(a, b, m)) {
     return nullptr;
   }
   return ToJava(env, std::vector<double>{m.distance, m.p1[0], m.p1[1], m.p1[2], m.p2[0], m.p2[1], m.p2[2],
@@ -200,6 +231,19 @@ Java_com_mertkaradag_stepviewer_StepNative_measurePair(JNIEnv* env, jobject /*th
 extern "C" JNIEXPORT jdoubleArray JNICALL
 Java_com_mertkaradag_stepviewer_StepNative_massProps(JNIEnv* env, jobject /*thiz*/,
                                                      jintArray jpartIds) {
+  if (auto mesh = CurrentMesh()) {
+    std::vector<int> ids;
+    if (jpartIds != nullptr) {
+      const jsize n = env->GetArrayLength(jpartIds);
+      std::vector<jint> raw(static_cast<size_t>(n));
+      env->GetIntArrayRegion(jpartIds, 0, n, raw.data());
+      ids.assign(raw.begin(), raw.end());
+    }
+    stepviewer::MassProps p;
+    if (!stepviewer::MeshMassProps(*mesh, jpartIds != nullptr ? &ids : nullptr, p)) return nullptr;
+    return ToJava(env, std::vector<double>{p.volume, p.area, p.center[0], p.center[1], p.center[2],
+                                           p.hasSolids ? 1.0 : 0.0});
+  }
   std::vector<TopoDS_Shape> shapes;
   {
     std::lock_guard<std::mutex> lock(gStore.mutex);
@@ -220,4 +264,183 @@ Java_com_mertkaradag_stepviewer_StepNative_massProps(JNIEnv* env, jobject /*thiz
   if (shapes.empty() || !stepviewer::ComputeMassProps(shapes, p)) return nullptr;
   return ToJava(env, std::vector<double>{p.volume, p.area, p.center[0], p.center[1], p.center[2],
                       p.hasSolids ? 1.0 : 0.0});
+}
+
+// PMI: [float[] segmentler, int[] (tür, segBaş, segSon, konumVar)*n, float[] konumlar, byte[] metinler]
+// Metinler UTF-8, '\n' ile ayrılmış. PMI yoksa null.
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_com_mertkaradag_stepviewer_StepNative_pmiData(JNIEnv* env, jobject /*thiz*/) {
+  stepviewer::PmiData pmi;
+  {
+    std::lock_guard<std::mutex> lock(gStore.mutex);
+    if (gStore.pmi.items.empty()) return nullptr;
+    pmi = gStore.pmi;
+  }
+  std::vector<int32_t> items;
+  std::vector<float> anchors;
+  std::string texts;
+  for (const auto& it : pmi.items) {
+    items.push_back(static_cast<int32_t>(it.kind));
+    items.push_back(it.segStart);
+    items.push_back(it.segEnd);
+    items.push_back(it.hasAnchor ? 1 : 0);
+    anchors.insert(anchors.end(), {it.anchor[0], it.anchor[1], it.anchor[2]});
+    std::string t = it.text;
+    for (char& c : t) {
+      if (c == '\n' || c == '\r') c = ' ';
+    }
+    texts += t;
+    texts += '\n';
+  }
+  jclass objClass = env->FindClass("java/lang/Object");
+  if (objClass == nullptr) return nullptr;
+  jobjectArray result = env->NewObjectArray(4, objClass, nullptr);
+  if (result == nullptr) return nullptr;
+  jfloatArray jsegs = ToJava(env, pmi.segments.data(), pmi.segments.size());
+  jintArray jitems = ToJava(env, items);
+  jfloatArray janchors = ToJava(env, anchors.data(), anchors.size());
+  jbyteArray jtexts = env->NewByteArray(static_cast<jsize>(texts.size()));
+  if (!jsegs || !jitems || !janchors || !jtexts) return nullptr;
+  env->SetByteArrayRegion(jtexts, 0, static_cast<jsize>(texts.size()),
+                          reinterpret_cast<const jbyte*>(texts.data()));
+  env->SetObjectArrayElement(result, 0, jsegs);
+  env->SetObjectArrayElement(result, 1, jitems);
+  env->SetObjectArrayElement(result, 2, janchors);
+  env->SetObjectArrayElement(result, 3, jtexts);
+  return result;
+}
+
+// Delik tablosu (yalnızca CAD dosyaları).
+// Dönüş: [double[] delik başına 17 değer, int[] yüzey kimlikleri] veya null.
+// Değerler: parça, çap, derinlik, boydan boya (1/0), matkap ucu (1/0), kaçak çapı, kaçak derinliği,
+// konik havşa çapı, konik havşa açısı, giriş xyz, yön xyz, yüzey başlangıcı, yüzey sayısı.
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_com_mertkaradag_stepviewer_StepNative_holes(JNIEnv* env, jobject /*thiz*/) {
+  std::vector<TopoDS_Face> faces;
+  std::vector<TopoDS_Shape> parts;
+  std::vector<int32_t> offsets;
+  {
+    std::lock_guard<std::mutex> lock(gStore.mutex);
+    if (gStore.mesh || gStore.faces.empty()) return nullptr;
+    faces = gStore.faces;
+    parts = gStore.parts;
+    offsets = gStore.partFaceOffsets;
+  }
+  std::vector<stepviewer::HoleInfo> holes;
+  try {
+    stepviewer::FindHoles(faces, offsets, parts, holes);
+  } catch (const Standard_Failure&) {
+    return nullptr;
+  }
+  std::vector<double> values;
+  std::vector<int32_t> faceIds;
+  values.reserve(holes.size() * 17);
+  for (const auto& h : holes) {
+    values.insert(values.end(),
+                  {static_cast<double>(h.part), h.diameter, h.depth, h.through ? 1.0 : 0.0,
+                   h.drillPoint ? 1.0 : 0.0, h.cboreDiameter, h.cboreDepth, h.csinkDiameter,
+                   h.csinkAngle, h.entry[0], h.entry[1], h.entry[2], h.dir[0], h.dir[1], h.dir[2],
+                   static_cast<double>(faceIds.size()), static_cast<double>(h.faces.size())});
+    faceIds.insert(faceIds.end(), h.faces.begin(), h.faces.end());
+  }
+  jclass objClass = env->FindClass("java/lang/Object");
+  if (objClass == nullptr) return nullptr;
+  jobjectArray result = env->NewObjectArray(2, objClass, nullptr);
+  if (result == nullptr) return nullptr;
+  jdoubleArray jv = ToJava(env, values);
+  jintArray jf = ToJava(env, faceIds);
+  if (!jv || !jf) return nullptr;
+  env->SetObjectArrayElement(result, 0, jv);
+  env->SetObjectArrayElement(result, 1, jf);
+  return result;
+}
+
+// Düz yüzü DXF olarak (yalnızca CAD). Dönüş: [byte[] DXF metni, double[] {genişlik, yükseklik,
+// iç kontur sayısı}] veya yüz düz değilse null.
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_com_mertkaradag_stepviewer_StepNative_faceDxf(JNIEnv* env, jobject /*thiz*/, jint faceId) {
+  TopoDS_Shape shape;
+  {
+    std::lock_guard<std::mutex> lock(gStore.mutex);
+    if (gStore.mesh) return nullptr;
+  }
+  if (!GetStoredShape(kKindFace, faceId, shape)) return nullptr;
+  stepviewer::DxfResult r;
+  if (!stepviewer::ExportFaceDxf(TopoDS::Face(shape), r)) return nullptr;
+  jclass objClass = env->FindClass("java/lang/Object");
+  if (objClass == nullptr) return nullptr;
+  jobjectArray result = env->NewObjectArray(2, objClass, nullptr);
+  if (result == nullptr) return nullptr;
+  jbyteArray jtext = env->NewByteArray(static_cast<jsize>(r.text.size()));
+  jdoubleArray jinfo = ToJava(env, std::vector<double>{r.width, r.height, static_cast<double>(r.innerLoops)});
+  if (!jtext || !jinfo) return nullptr;
+  env->SetByteArrayRegion(jtext, 0, static_cast<jsize>(r.text.size()),
+                          reinterpret_cast<const jbyte*>(r.text.data()));
+  env->SetObjectArrayElement(result, 0, jtext);
+  env->SetObjectArrayElement(result, 1, jinfo);
+  return result;
+}
+
+// Teknik resim görünüşleri (yalnızca CAD). partIds null ise tüm parçalar.
+// Dönüş: [float[] segmentler (x1, y1, x2, y2), int[] görünüş başına (görünenBaş, görünenAdet,
+// gizliBaş, gizliAdet) * 4, double[6] gerçek sınır kutusu (min xyz, max xyz)] veya null.
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_com_mertkaradag_stepviewer_StepNative_drawingViews(JNIEnv* env, jobject /*thiz*/,
+                                                        jintArray jpartIds, jboolean zUp,
+                                                        jboolean hidden) {
+  std::vector<TopoDS_Shape> shapes;
+  {
+    std::lock_guard<std::mutex> lock(gStore.mutex);
+    if (gStore.mesh || gStore.parts.empty()) return nullptr;
+    if (jpartIds == nullptr) {
+      shapes = gStore.parts;
+    } else {
+      const jsize n = env->GetArrayLength(jpartIds);
+      std::vector<jint> ids(static_cast<size_t>(n));
+      env->GetIntArrayRegion(jpartIds, 0, n, ids.data());
+      for (jint id : ids) {
+        if (id >= 0 && static_cast<size_t>(id) < gStore.parts.size()) {
+          shapes.push_back(gStore.parts[static_cast<size_t>(id)]);
+        }
+      }
+    }
+  }
+  std::vector<stepviewer::DrawingView> views;
+  try {
+    if (!stepviewer::MakeDrawingViews(shapes, zUp, hidden, views)) return nullptr;
+  } catch (const Standard_Failure&) {
+    return nullptr;
+  }
+  std::vector<float> segs;
+  std::vector<int32_t> ranges;
+  for (const auto& v : views) {
+    ranges.push_back(static_cast<int32_t>(segs.size() / 4));
+    ranges.push_back(static_cast<int32_t>(v.visible.size() / 4));
+    segs.insert(segs.end(), v.visible.begin(), v.visible.end());
+    ranges.push_back(static_cast<int32_t>(segs.size() / 4));
+    ranges.push_back(static_cast<int32_t>(v.hidden.size() / 4));
+    segs.insert(segs.end(), v.hidden.begin(), v.hidden.end());
+  }
+  jclass objClass = env->FindClass("java/lang/Object");
+  if (objClass == nullptr) return nullptr;
+  jobjectArray result = env->NewObjectArray(3, objClass, nullptr);
+  if (result == nullptr) return nullptr;
+  Bnd_Box box;
+  for (const auto& sh : shapes) {
+    try {
+      BRepBndLib::AddOptimal(sh, box, false, false);
+    } catch (const Standard_Failure&) {
+      BRepBndLib::Add(sh, box);
+    }
+  }
+  double b[6] = {0, 0, 0, 0, 0, 0};
+  if (!box.IsVoid()) box.Get(b[0], b[1], b[2], b[3], b[4], b[5]);
+  jfloatArray js = ToJava(env, segs.data(), segs.size());
+  jintArray jr = ToJava(env, ranges);
+  jdoubleArray jb = ToJava(env, std::vector<double>(b, b + 6));
+  if (!js || !jr || !jb) return nullptr;
+  env->SetObjectArrayElement(result, 0, js);
+  env->SetObjectArrayElement(result, 1, jr);
+  env->SetObjectArrayElement(result, 2, jb);
+  return result;
 }

@@ -72,6 +72,13 @@ class StepMesh(
             FORMAT_STEP -> "STEP"
             FORMAT_IGES -> "IGES"
             FORMAT_BREP -> "BREP"
+            FORMAT_OBJ -> "OBJ"
+            FORMAT_STL -> "STL"
+            FORMAT_GLTF -> "glTF"
+            FORMAT_DAE -> "DAE (Collada)"
+            FORMAT_3DS -> "3DS"
+            FORMAT_FBX -> "FBX"
+            FORMAT_PLY -> "PLY"
             else -> "?"
         }
 
@@ -132,5 +139,16 @@ class StepMesh(
         const val FORMAT_STEP = 1
         const val FORMAT_IGES = 2
         const val FORMAT_BREP = 3
+        // Mesh (üçgen) biçimleri; step_mesher.h FileFormat ile aynı sıra
+        const val FORMAT_OBJ = 4
+        const val FORMAT_STL = 5
+        const val FORMAT_GLTF = 6
+        const val FORMAT_DAE = 7
+        const val FORMAT_3DS = 8
+        const val FORMAT_FBX = 9
+        const val FORMAT_PLY = 10
     }
+
+    /** Mesh dosyası mı (birim bilgisi olmayabilir, yüzeyler üçgenlerden çıkarılır). */
+    val isMeshFormat: Boolean get() = format >= FORMAT_OBJ
 }

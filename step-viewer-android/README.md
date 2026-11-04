@@ -1,16 +1,18 @@
-# STEP Görüntüleyici (Android)
+# Cepte CAD – STEP Görüntüleyici (Android)
 
-STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) dosyalarını telefonda **tamamen çevrimdışı** açıp 3B olarak gösteren yerel (native) Android uygulaması.
+STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) CAD dosyalarını, ayrıca mimari / 3B tasarım programlarının mesh dosyalarını (OBJ, STL, glTF/GLB, DAE/Collada, 3DS, FBX, PLY) telefonda **tamamen çevrimdışı** açıp 3B olarak gösteren yerel (native) Android uygulaması.
+
+Mesh dosyalarında yüzey bilgisi olmadığı için üçgenler düz ve eğri bölgelere ayrılır, bölge sınırlarından kenarlar çıkarılır (`mesh_model.cpp`); böylece seçme, ölçme (düzlem, silindir, küre, çember tanıma), kesit ve hacim (kapalı mesh'lerde) STEP'teki gibi çalışır. Mesh dosyaları [Assimp](https://github.com/assimp/assimp) 5.4.3 (BSD lisansı) ile okunur.
 
 - **Geometri çekirdeği:** [Open CASCADE Technology (OCCT)](https://dev.opencascade.org/) 7.8.1, Android NDK ile statik derlenir
 - **Köprü:** JNI (C++ → Kotlin)
 - **Çizim:** OpenGL ES 3.0, `GLSurfaceView`, 4x MSAA
 - **Arayüz:** Kotlin, Material 3 (koyu tema, kenardan kenara)
 
-## Özellikler (v0.3)
+## Özellikler (v1.0)
 
 **Dosya**
-- Dosya seçiciden veya dosya yöneticisinde **"Birlikte aç"** ile STEP / IGES / BREP açma
+- Dosya seçiciden veya dosya yöneticisinde **"Birlikte aç"** ile STEP / IGES / BREP ve OBJ / STL / glTF / DAE / 3DS / FBX / PLY açma (SketchUp `.skp` dosyaları önce DAE veya OBJ olarak dışa aktarılmalı)
 - Son açılan dosyalar listesi (açılış ekranında)
 - Montajlar: parça yerleşimleri ve STEP renkleri doğru uygulanır
 
@@ -34,6 +36,21 @@ STEP (`.step` / `.stp`), IGES (`.igs` / `.iges`) ve BREP (`.brep`) dosyalarını
 - Gizli parça varken "Geri al" ve "Tümünü göster" kısayolları
 - **Model bilgisi:** boyutlar, hacim, yüzey alanı, kütle merkezi; malzeme seçimi veya özel yoğunluk ile kütle
 - **Ekran görüntüsü paylaşma** (ölçüm sonucu ve dosya adı resmin üstüne yazılır)
+- **Reklamlar:** Google AdMob, altta uyarlanabilir banner, dosya açılınca ve paylaşımdan sonra geçiş reklamı (en az 60 sn arayla), Avrupa için UMP onay formu. Kimlikler `app/build.gradle.kts` içinde (verilmezse test reklamları)
+- **Dönme merkezi:** modele çift dokunulan nokta dönme merkezi olur ve ortaya gelir; boşluğa çift dokunma veya Sığdır sıfırlar
+- **Patlatılmış görünüm:** sağdaki düğme ve kaydırıcı; parçalar model merkezinden kendi merkezlerine doğru açılır (`Explode.kt`, köşe başına yön tamponu + shader). Patlatılmışken parça seçilebilir, ölçüm kapalıdır
+- **Dışa aktarma:** görünen parçalar STL (ikili, mm), OBJ (mm, parça başına nesne) veya GLB (glTF 2.0, metre, Y-yukarı, köşe renkleri) olarak kaydedilir (`Exporter.kt`)
+- **Parça listesi (CSV):** aynı ad ve boyuttaki parçalar adetle toplanır; boyutlar, hacim, seçilen malzemeye göre birim ve toplam kütle (`Bom.kt`). Türkçe Excel için `;` ayırıcı
+- **İşaretleme:** ⋮ › İşaretle ve paylaş; ekran görüntüsü üstüne kalem, ok, çerçeve, yazı (7 renk, geri al), sonra paylaş veya PNG kaydet (`MarkupView.kt`, `MarkupDialog.kt`)
+- **Büyük dosyalar:** yükleme sırasında geçen süre ve dosya boyutu, Vazgeç düğmesi; ⋮ › Ağ kalitesi (Hızlı / Normal / Hassas); bellek yetmezse model otomatik olarak hızlı kalitede yeniden açılır
+- **PMI / GD&T (STEP AP242):** ölçüler (Ø, R, ±, H7 gibi tolerans sınıfları), geometrik toleranslar (sembol, değer, (M)/(L), referanslar) ve referans harfleri okunur (`pmi_extract.cpp`, `Pmi.kt`). Çizimli PMI yeşil çizgilerle gösterilir; sağdaki PMI düğmesinden listelenir, seçilen öğe sarı vurgulanır ve kamera ona odaklanır
+- **AR (gerçek boyutta gör):** ARCore ile model masaya/zemine 1:1 ölçekte konur; tek parmak döndürür, iki parmak ölçekler, dokunma yeniden yerleştirir (`ArActivity.kt`). AR isteğe bağlıdır (ARCore olmayan telefonlarda uygulama yine kurulur)
+- **Reklamsız satın alma:** Google Play Billing 8, tek seferlik ürün `reklamsiz` (fiyat Play Console'da, ör. 299 TL). Menüde "Reklamları kaldır" ve "Satın alımı geri yükle"; durum cihazda önbelleklenir, açılışta Play'den doğrulanır (`Billing.kt`)
+- **Delik tablosu:** ⋮ › Delik tablosu; içbükey silindir/konilerden delikler bulunur: çap, derinlik, boydan boya / kör (katı içi testi), kaçak (silindirik havşa), konik havşa, matkap ucu. Aynı tipler A, B, C… olarak gruplanır; kılavuz deliği (ISO kaba diş), geçiş deliği (ISO 273) ve imbus yuvası (DIN 974) tahmini. Satıra dokununca delikler modelde vurgulanır; delik başına konumlu CSV (`hole_finder.cpp`, `Holes.kt`, `HoleTableSheet.kt`)
+- **Yüzeyi DXF'e aktar (lazer/plazma):** ⋮ › Yüzeyi DXF'e aktar, sonra düz yüze dokun; dış kontur `OUTER`, delikler `INNER` katmanında, 1:1 mm, dışarıdan bakış, sol alt köşe 0,0. Doğru, çember ve yaylar gerçek eğri olarak, diğerleri 0,01 mm sapmayla (`dxf_export.cpp`)
+- **Teknik resim:** ⋮ › Teknik resim; görünen parçaların ön, üst, sol (ISO E, birinci açı) ve izometrik görünüşleri, gizli çizgiler kesikli (OCCT HLR), standart ölçek, A4/A3, çerçeve, antet, genel ölçüler. Vektör PDF veya DXF olarak kaydedilir / paylaşılır (`drawing_views.cpp`, `TechDrawing.kt`, `DrawingDialog.kt`)
+- **Çökme raporu:** yakalanmamış hatalar cihazda saklanır, bir sonraki açılışta kullanıcıya gösterilir ve isterse paylaşır; yerel çökmeler Android 11+ `ApplicationExitInfo` ile (`CrashLog.kt`). Otomatik gönderim yoktur
+- **Yedi dil:** Türkçe, İngilizce (varsayılan), Almanca, İspanyolca, Fransızca, Portekizce, Rusça; telefon diline göre (`res/values-*`); yerel çekirdek hata kodu döner, metin Kotlin tarafında çevrilir
 
 Sonra: PMI / GD&T (STEP AP242 içindeki toleranslar) ayrı bir iş olarak planlandı.
 
@@ -61,6 +78,9 @@ ModelView (GLSurfaceView) + ModelRenderer (ES 3.0) + Camera
 |---|---|
 | `scripts/build_occt_android.sh` | OCCT'yi NDK ile derler (yalnızca gereken araç takımları) |
 | `app/src/main/cpp/step_mesher.*` | STEP okuma ve üçgenleme (JNI'den bağımsız) |
+| `app/src/main/cpp/mesh_import.cpp` | Mesh dosyalarını Assimp ile okuma, birim (mm) ve eksen (Z yukarı) dönüşümü |
+| `app/src/main/cpp/mesh_model.*` | Mesh'i yüzey bölgelerine ve kenarlara ayırma, mesh üzerinde ölçüm ve hacim |
+| `scripts/build_assimp_android.sh` | Assimp'i NDK ile statik derler (yalnızca gerekli okuyucular) |
 | `app/src/main/cpp/jni_bridge.cpp` | Kotlin ↔ C++ köprüsü |
 | `app/src/main/cpp/host_test/` | Çekirdeği masaüstünde (Linux) test etmek için küçük program |
 | `app/src/main/java/.../ModelRenderer.kt` | Shader'lar ve çizim |

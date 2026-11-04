@@ -16,7 +16,7 @@ import javax.microedition.khronos.egl.EGLDisplay
  * 3B model görünümü.
  * - Tek parmak: döndür (bırakınca ataletle devam eder)
  * - İki parmak: kıstırarak yakınlaştır, sürükleyerek kaydır
- * - Çift dokunma: modeli 360° döndür
+ * - Çift dokunma: [onDoubleTap] (dokunulan noktayı dönme merkezi yapma)
  * - Tek dokunma: [onTap] ile bildirilir (ölçüm / seçim)
  * - Uzun basma: [onLongPress] ile bildirilir (parça seçimi)
  */
@@ -30,6 +30,9 @@ class ModelView @JvmOverloads constructor(
 
     /** Sürükleme olmadan yapılan tek dokunuş (piksel koordinatları). */
     var onTap: ((x: Float, y: Float) -> Unit)? = null
+
+    /** Çift dokunma (piksel koordinatları). */
+    var onDoubleTap: ((x: Float, y: Float) -> Unit)? = null
 
     /** Uzun basma (parça seçimi). */
     var onLongPress: ((x: Float, y: Float) -> Unit)? = null
@@ -51,7 +54,8 @@ class ModelView @JvmOverloads constructor(
     private val gestureDetector = GestureDetector(context,
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                spin360()
+                val cb = onDoubleTap
+                if (cb != null) cb(e.x, e.y) else spin360()
                 return true
             }
 
@@ -99,6 +103,32 @@ class ModelView @JvmOverloads constructor(
 
     fun setDisplayMode(mode: ModelRenderer.DisplayMode) {
         queueEvent { renderer.setDisplayMode(mode) }
+        requestRender()
+    }
+
+    fun setPmi(segments: FloatArray?) {
+        queueEvent { renderer.setPmi(segments) }
+        requestRender()
+    }
+
+    fun setPmiVisible(visible: Boolean, highlight: IntArray = IntArray(0)) {
+        queueEvent { renderer.setPmiVisible(visible, highlight) }
+        requestRender()
+    }
+
+    fun setExplodeDirections(vertexDirs: FloatArray?, edgeDirs: FloatArray?) {
+        queueEvent { renderer.setExplodeDirections(vertexDirs, edgeDirs) }
+        requestRender()
+    }
+
+    fun setExplodeFactor(f: Float) {
+        queueEvent { renderer.setExplodeFactor(f) }
+        requestRender()
+    }
+
+    /** Dokunulan noktayı dönme merkezi yapıp ortaya getirir. */
+    fun focusOn(point: FloatArray) {
+        camera.animateFocus(point)
         requestRender()
     }
 
@@ -233,7 +263,7 @@ class ModelView @JvmOverloads constructor(
                     configs[0]?.let { return it }
                 }
             }
-            throw IllegalStateException("Uygun bir OpenGL ES 3 yapılandırması bulunamadı")
+            throw IllegalStateException("No suitable OpenGL ES 3 config found")
         }
     }
 }

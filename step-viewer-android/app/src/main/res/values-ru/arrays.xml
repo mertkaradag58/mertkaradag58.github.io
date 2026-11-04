@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="material_names">
+        <item>Сталь (7,85)</item>
+        <item>Нержавеющая сталь (8,00)</item>
+        <item>Чугун (7,20)</item>
+        <item>Алюминий (2,70)</item>
+        <item>Латунь (8,50)</item>
+        <item>Медь (8,96)</item>
+        <item>Титан (4,51)</item>
+        <item>Пластик ABS (1,05)</item>
+        <item>PLA (1,24)</item>
+        <item>Нейлон PA6 (1,14)</item>
+        <item>Свой…</item>
+    </string-array>
+</resources>

@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Malzeme adları ve yoğunlukları (g/cm³); sıralar aynı olmalı -->
+    <!-- Malzeme adları (values-tr de var) ve yoğunlukları (g/cm³); sıralar aynı olmalı -->
     <string-array name="material_names">
-        <item>Çelik (7,85)</item>
-        <item>Paslanmaz çelik (8,00)</item>
-        <item>Dökme demir (7,20)</item>
-        <item>Alüminyum (2,70)</item>
-        <item>Pirinç (8,50)</item>
-        <item>Bakır (8,96)</item>
-        <item>Titanyum (4,51)</item>
-        <item>ABS plastik (1,05)</item>
-        <item>PLA (1,24)</item>
-        <item>Naylon PA6 (1,14)</item>
-        <item>Özel…</item>
+        <item>Steel (7.85)</item>
+        <item>Stainless steel (8.00)</item>
+        <item>Cast iron (7.20)</item>
+        <item>Aluminium (2.70)</item>
+        <item>Brass (8.50)</item>
+        <item>Copper (8.96)</item>
+        <item>Titanium (4.51)</item>
+        <item>ABS plastic (1.05)</item>
+        <item>PLA (1.24)</item>
+        <item>Nylon PA6 (1.14)</item>
+        <item>Custom…</item>
     </string-array>
     <string-array name="material_densities">
         <item>7.85</item>

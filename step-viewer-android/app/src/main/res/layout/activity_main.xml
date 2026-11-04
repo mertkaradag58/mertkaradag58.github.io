@@ -166,6 +166,25 @@
             style="@style/SideButton"
             android:contentDescription="@string/fit"
             app:icon="@drawable/ic_fit" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/ar_button"
+            style="@style/SideButton"
+            android:contentDescription="@string/ar"
+            app:icon="@drawable/ic_ar" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/pmi_button"
+            style="@style/SideButton"
+            android:contentDescription="@string/pmi"
+            android:visibility="gone"
+            app:icon="@drawable/ic_pmi" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/explode_button"
+            style="@style/SideButton"
+            android:contentDescription="@string/explode"
+            app:icon="@drawable/ic_explode" />
     </LinearLayout>
 
     <!-- Alt bölüm: paneller + araç çubuğu -->
@@ -364,6 +383,7 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:gravity="top"
                 android:orientation="horizontal"
                 android:padding="14dp">
 
@@ -375,15 +395,25 @@
                     android:src="@drawable/ic_ruler"
                     app:tint="@color/measure" />
 
-                <TextView
-                    android:id="@+id/measure_text"
+                <!-- Uzun sonuçlar kaydırılarak okunur (en fazla ~150 dp yükseklik) -->
+                <com.mertkaradag.stepviewer.MaxHeightScrollView
+                    android:id="@+id/measure_scroll"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:lineSpacingExtra="3dp"
-                    android:textColor="@color/text"
-                    android:textIsSelectable="true"
-                    android:textSize="14sp" />
+                    android:fadeScrollbars="false"
+                    android:scrollbars="vertical">
+
+                    <TextView
+                        android:id="@+id/measure_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:lineSpacingExtra="3dp"
+                        android:paddingEnd="6dp"
+                        android:textColor="@color/text"
+                        android:textIsSelectable="true"
+                        android:textSize="14sp" />
+                </com.mertkaradag.stepviewer.MaxHeightScrollView>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/measure_close"
@@ -397,6 +427,63 @@
                     app:icon="@drawable/ic_close"
                     app:iconSize="18dp"
                     app:iconTint="@color/text_secondary" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Patlatılmış görünüm paneli -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/explode_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="@color/surface"
+            app:cardCornerRadius="20dp"
+            app:strokeWidth="0dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingLeft="14dp"
+                android:paddingTop="4dp"
+                android:paddingRight="8dp"
+                android:paddingBottom="4dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/explode_label"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/explode"
+                        android:textColor="@color/text"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/explode_close"
+                        style="@style/Widget.Material3.Button.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:contentDescription="@string/section_close"
+                        app:icon="@drawable/ic_close"
+                        app:iconTint="@color/text" />
+                </LinearLayout>
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/explode_slider"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:value="0"
+                    android:valueFrom="0"
+                    android:valueTo="100"
+                    app:labelBehavior="gone" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -590,6 +677,16 @@
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
+
+        <!-- Reklam (banner); yanlışlıkla dokunmayı önlemek için araç çubuğundan biraz uzakta -->
+        <FrameLayout
+            android:id="@+id/ad_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginLeft="-12dp"
+            android:layout_marginRight="-12dp"
+            android:visibility="gone" />
     </LinearLayout>
 
     <!-- Yükleniyor -->
@@ -631,6 +728,23 @@
                     android:gravity="center"
                     android:textColor="@color/text"
                     android:textSize="15sp" />
+
+                <TextView
+                    android:id="@+id/progress_elapsed"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/progress_cancel"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/cancel"
+                    android:visibility="gone" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </FrameLayout>
