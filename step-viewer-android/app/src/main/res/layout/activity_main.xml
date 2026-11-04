@@ -585,6 +585,15 @@
                     </com.google.android.material.chip.ChipGroup>
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/section_face"
+                        style="@style/Widget.Material3.Button.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:contentDescription="@string/section_from_face"
+                        app:icon="@drawable/ic_face_pick"
+                        app:iconTint="@color/text" />
+
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/section_flip"
                         style="@style/Widget.Material3.Button.IconButton"
                         android:layout_width="44dp"

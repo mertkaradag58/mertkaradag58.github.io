@@ -20,7 +20,7 @@ class ModelRenderer(
     private val requestRender: () -> Unit,
 ) : GLSurfaceView.Renderer {
 
-    enum class DisplayMode { SHADED_EDGES, SHADED, WIREFRAME, XRAY }
+    enum class DisplayMode { SHADED_EDGES, SHADED, WIREFRAME, XRAY, HIDDEN_LINE }
 
     /**
      * Seçim/ölçüm katmanı. Aralıklar (başlangıç, adet) çiftleridir.
@@ -279,6 +279,14 @@ class ModelRenderer(
                 DisplayMode.WIREFRAME -> drawEdges(clip)
                 DisplayMode.XRAY -> {
                     drawXray(clip)
+                    drawEdges(clip)
+                }
+                DisplayMode.HIDDEN_LINE -> {
+                    // Teknik resim görünümü: yüzeyler yalnızca derinliğe yazılır, arkadaki
+                    // kenarlar gizlenir, yalnızca görünen kenarlar çizilir.
+                    GLES30.glColorMask(false, false, false, false)
+                    drawFaces(clip)
+                    GLES30.glColorMask(true, true, true, true)
                     drawEdges(clip)
                 }
                 DisplayMode.SHADED -> {

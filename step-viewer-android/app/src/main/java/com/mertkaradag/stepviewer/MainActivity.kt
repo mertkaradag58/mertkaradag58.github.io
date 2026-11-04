@@ -18,6 +18,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.print.PrintHelper
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -84,6 +85,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var loupeView: LoupeView
     private lateinit var home: HomeScreen
     private lateinit var savedViews: SavedViews
+    private val notes = NotesController(this) { pushOverlay() }
+    private var sectionFace: FloatArray? = null   // [nx, ny, nz, px, py, pz]: yüzeyden kesit
+    private var pickTarget = PICK_NONE
+    private var pickSnackbar: Snackbar? = null
     private lateinit var measureModeGroup: ChipGroup
     private lateinit var measureUndo: View
     /** Parça rengi (0 = dosyadaki renk) ve şeffaflığı. */
@@ -502,6 +507,9 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(Menu.NONE, MENU_HOLES, 1, R.string.menu_holes).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_DXF, 1, R.string.menu_dxf).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_DRAWING, 1, R.string.menu_drawing).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_NOTE_ADD, 2, R.string.menu_note_add).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_NOTES, 2, getString(R.string.menu_notes, notes.notes.size)).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_PRINT, 2, R.string.menu_print).isEnabled = hasModel
         if (!billing.adFree) {
             val price = billing.formattedPrice
             val title = if (price != null) getString(R.string.menu_remove_ads_price, price)
@@ -525,6 +533,9 @@ class MainActivity : AppCompatActivity() {
                 MENU_REMOVE_ADS -> billing.buyAdFree(this)
                 MENU_RESTORE -> billing.restore()
                 MENU_SETTINGS -> openSettings()
+                MENU_NOTE_ADD -> startPick(PICK_NOTE, R.string.note_pick_hint)
+                MENU_NOTES -> notes.showList()
+                MENU_PRINT -> printScreenshot()
             }
             true
         }
@@ -581,7 +592,8 @@ class MainActivity : AppCompatActivity() {
             ModelRenderer.DisplayMode.SHADED_EDGES -> ModelRenderer.DisplayMode.SHADED
             ModelRenderer.DisplayMode.SHADED -> ModelRenderer.DisplayMode.XRAY
             ModelRenderer.DisplayMode.XRAY -> ModelRenderer.DisplayMode.WIREFRAME
-            ModelRenderer.DisplayMode.WIREFRAME -> ModelRenderer.DisplayMode.SHADED_EDGES
+            ModelRenderer.DisplayMode.WIREFRAME -> ModelRenderer.DisplayMode.HIDDEN_LINE
+            ModelRenderer.DisplayMode.HIDDEN_LINE -> ModelRenderer.DisplayMode.SHADED_EDGES
         }
         updateDisplayLabel()
         modelView.setDisplayMode(displayMode)
@@ -596,6 +608,7 @@ class MainActivity : AppCompatActivity() {
                 ModelRenderer.DisplayMode.SHADED -> R.string.display_shaded
                 ModelRenderer.DisplayMode.WIREFRAME -> R.string.display_wireframe
                 ModelRenderer.DisplayMode.XRAY -> R.string.display_xray
+                ModelRenderer.DisplayMode.HIDDEN_LINE -> R.string.display_hidden_line
             }
         )
     }
@@ -955,6 +968,8 @@ class MainActivity : AppCompatActivity() {
         currentMesh = null
         currentUri = null
         Session.clear()
+        notes.clear()
+        stopPick()
         modelView.visibility = View.VISIBLE
         setMeasureMode(false)
         setSelectMode(false)
@@ -1002,6 +1017,9 @@ class MainActivity : AppCompatActivity() {
     private fun onModelLoaded(mesh: StepMesh, name: String, seconds: Double, restoring: Boolean = false) {
         currentMesh = mesh
         currentName = name
+        notes.load(name)
+        sectionFace = null
+        stopPick()
         partVisible = BooleanArray(mesh.partCount) { true }
         partColor = IntArray(mesh.partCount)
         partTransparent = BooleanArray(mesh.partCount)
@@ -1018,6 +1036,7 @@ class MainActivity : AppCompatActivity() {
 
         modelView.setMesh(mesh)
         modelView.setDisplayMode(displayMode)
+        pushOverlay()
         explode = null
         explodeFactor = 0f
         explodeSlider.value = 0f
@@ -1151,6 +1170,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun onModelTap(x: Float, y: Float) {
         if (loading) return
+        if (pickTarget != PICK_NONE) {
+            handlePick(x, y)
+            return
+        }
         if (dxfPickMode) {
             pickDxfFace(x, y)
             return
@@ -1159,7 +1182,10 @@ class MainActivity : AppCompatActivity() {
             pickPartAt(x, y)
             return
         }
-        if (!measureMode) return
+        if (!measureMode) {
+            openNoteAt(x, y)
+            return
+        }
         val mesh = currentMesh ?: return
         val mvp = modelView.currentMvp()
         val w = modelView.width
@@ -1440,6 +1466,7 @@ class MainActivity : AppCompatActivity() {
                 edgeSegments = o.edgeSegments,
                 measureLine = o.measureLine,
                 partRanges = partHighlight,
+                points = mergePoints(o.points, notes.points()),
             )
         )
     }
@@ -1455,6 +1482,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.chip_z -> 2
                 else -> 0
             }
+            sectionFace = null
             updateSection()
         }
         sectionSlider.addOnChangeListener { _, _, _ -> updateSection() }
@@ -1463,6 +1491,9 @@ class MainActivity : AppCompatActivity() {
             updateSection()
         }
         findViewById<View>(R.id.section_close).setOnClickListener { setSection(false) }
+        findViewById<View>(R.id.section_face).setOnClickListener {
+            startPick(PICK_SECTION_FACE, R.string.section_pick_face)
+        }
     }
 
     private fun setSection(enabled: Boolean) {
@@ -1479,9 +1510,23 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val plane = clipPlane(mesh)
-        val axisName = arrayOf("X", "Y", "Z")[sectionAxis]
-        sectionLabel.text = Units.localize(getString(R.string.section_position, axisName, Units.fl(sectionPosition(mesh).toDouble())))
+        if (sectionFace != null) {
+            sectionLabel.text = Units.localize(getString(R.string.section_face_depth, Units.fl(sectionFaceDepth(mesh).toDouble())))
+        } else {
+            val axisName = arrayOf("X", "Y", "Z")[sectionAxis]
+            sectionLabel.text = Units.localize(getString(R.string.section_position, axisName, Units.fl(sectionPosition(mesh).toDouble())))
+        }
         modelView.setClipPlane(plane)
+    }
+
+    /** Yüzeyden kesitte derinlik (mm): kaydırıcı sağda 0, solda modelin köşegeni kadar. */
+    private fun sectionFaceDepth(mesh: StepMesh): Float {
+        val b = mesh.bbox
+        val dx = b[3] - b[0]
+        val dy = b[4] - b[1]
+        val dz = b[5] - b[2]
+        val diag = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        return (1f - sectionSlider.value / 1000f) * diag
     }
 
     private fun sectionPosition(mesh: StepMesh): Float {
@@ -1493,6 +1538,19 @@ class MainActivity : AppCompatActivity() {
 
     /** [nx, ny, nz, d]: n·p + d >= 0 olan kısım görünür. */
     private fun clipPlane(mesh: StepMesh): FloatArray {
+        sectionFace?.let { f ->
+            // Yüzey normali dışarı bakar: düzlem yüzeyden [derinlik] kadar içeri kaydırılır ve
+            // yüzey tarafı kesilip atılır (çevirince tersi).
+            val depth = sectionFaceDepth(mesh)
+            val px = f[3] - f[0] * depth
+            val py = f[4] - f[1] * depth
+            val pz = f[5] - f[2] * depth
+            val sign = if (sectionFlip) 1f else -1f
+            return floatArrayOf(
+                sign * f[0], sign * f[1], sign * f[2],
+                -sign * (f[0] * px + f[1] * py + f[2] * pz),
+            )
+        }
         val pos = sectionPosition(mesh)
         val plane = FloatArray(4)
         val sign = if (sectionFlip) 1f else -1f
@@ -2482,6 +2540,123 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    // -----------------------------------------------------------------------
+    // Dokunarak seçim (not konumu, kesit yüzeyi) ve notlar
+    // -----------------------------------------------------------------------
+
+    private fun startPick(target: Int, hint: Int) {
+        if (currentMesh == null) return
+        if (measureMode) setMeasureMode(false)
+        if (selectMode) setSelectMode(false)
+        stopDxfPick()
+        pickSnackbar?.dismiss()
+        pickTarget = target
+        val bar = Snackbar.make(findViewById(R.id.model_view), hint, Snackbar.LENGTH_INDEFINITE)
+        bar.setAction(R.string.cancel) { }
+        bar.addCallback(object : Snackbar.Callback() {
+            override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                if (pickSnackbar === transientBottomBar) {
+                    pickSnackbar = null
+                    pickTarget = PICK_NONE
+                }
+            }
+        })
+        pickSnackbar = bar
+        bar.show()
+    }
+
+    private fun stopPick() {
+        pickTarget = PICK_NONE
+        val bar = pickSnackbar
+        pickSnackbar = null
+        bar?.dismiss()
+    }
+
+    private fun handlePick(x: Float, y: Float) {
+        val mesh = currentMesh ?: return
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val visible = if (partVisible.all { it }) null else partVisible.copyOf()
+        val clip = if (sectionOn) clipPlane(mesh) else null
+        val threshold = 18f * resources.displayMetrics.density
+        val target = pickTarget
+        executor.execute {
+            when (target) {
+                PICK_NOTE -> {
+                    val s = Picker.snapPoint(mesh, mvp, w, h, x, y, threshold, visible, clip, false) { null }
+                    runOnUiThread {
+                        if (mesh !== currentMesh || pickTarget != PICK_NOTE || s == null) return@runOnUiThread
+                        stopPick()
+                        notes.addAt(s.point)
+                    }
+                }
+                PICK_SECTION_FACE -> {
+                    val face = Picker.pickFace(mesh, mvp, w, h, x, y, visible, clip)
+                    val info = if (face >= 0) {
+                        try {
+                            StepNative.shapeInfo(StepNative.KIND_FACE, face)
+                        } catch (_: Throwable) {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                    runOnUiThread {
+                        if (mesh !== currentMesh || pickTarget != PICK_SECTION_FACE || face < 0) return@runOnUiThread
+                        if (info == null || info.size < 12 || info[0].toInt() != GeomKind.PLANE) {
+                            Toast.makeText(this, R.string.section_face_not_planar, Toast.LENGTH_SHORT).show()
+                            return@runOnUiThread
+                        }
+                        stopPick()
+                        sectionFace = floatArrayOf(
+                            info[9].toFloat(), info[10].toFloat(), info[11].toFloat(),
+                            info[6].toFloat(), info[7].toFloat(), info[8].toFloat(),
+                        )
+                        sectionFlip = false
+                        sectionSlider.value = 950f
+                        if (!sectionOn) setSection(true) else updateSection()
+                        haptic()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun openNoteAt(x: Float, y: Float) {
+        if (notes.notes.isEmpty()) return
+        val note = notes.findNear(
+            modelView.currentMvp(), modelView.width, modelView.height, x, y,
+            24f * resources.displayMetrics.density,
+        ) ?: return
+        notes.open(note)
+    }
+
+    private fun mergePoints(a: FloatArray?, b: FloatArray): FloatArray? = when {
+        a == null || a.isEmpty() -> b.takeIf { it.isNotEmpty() }
+        b.isEmpty() -> a
+        else -> a + b
+    }
+
+    private fun printScreenshot() {
+        val overlayText = if (measureMode) measure.lastText else ""
+        modelView.captureScreenshot { bmp ->
+            if (bmp == null || isDestroyed) {
+                Toast.makeText(this, R.string.print_failed, Toast.LENGTH_SHORT).show()
+                return@captureScreenshot
+            }
+            try {
+                val helper = PrintHelper(this)
+                helper.scaleMode = PrintHelper.SCALE_MODE_FIT
+                helper.orientation = if (bmp.width > bmp.height) PrintHelper.ORIENTATION_LANDSCAPE
+                else PrintHelper.ORIENTATION_PORTRAIT
+                helper.printBitmap(baseFileName(), annotate(bmp, currentName, overlayText))
+            } catch (_: Exception) {
+                Toast.makeText(this, R.string.print_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     companion object {
         private const val MENU_INFO = 1
         private const val MENU_SHARE = 2
@@ -2497,6 +2672,12 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_DXF = 12
         private const val MENU_DRAWING = 13
         private const val MENU_SETTINGS = 14
+        private const val MENU_NOTE_ADD = 15
+        private const val MENU_NOTES = 16
+        private const val MENU_PRINT = 17
+        private const val PICK_NONE = 0
+        private const val PICK_NOTE = 1
+        private const val PICK_SECTION_FACE = 2
         private const val MENU_SAVE_VIEW = 60
         private const val MENU_MANAGE_VIEWS = 61
         private const val MENU_SAVED_BASE = 1000
