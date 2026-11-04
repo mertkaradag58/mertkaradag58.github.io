@@ -172,6 +172,35 @@ class Camera {
         animating = true
     }
 
+    /**
+     * Kayıtlı görünüm için kamera durumu:
+     * [qw, qx, qy, qz, cx, cy, cz, zoom, panX, panY, ortho(0/1)].
+     */
+    @Synchronized
+    fun saveState(): FloatArray = floatArrayOf(
+        q.w, q.x, q.y, q.z, center[0], center[1], center[2], zoom, panX, panY, if (orthographic) 1f else 0f,
+    )
+
+    /** Kayıtlı görünüme yumuşak geçiş. */
+    @Synchronized
+    fun animateToState(s: FloatArray, durationMs: Long = 500) {
+        if (s.size < 10) return
+        stopMotion()
+        animFromQ = q
+        animToQ = Quat(s[0], s[1], s[2], s[3]).normalized()
+        animFromZoom = zoom
+        animToZoom = s[7].coerceIn(0.05f, 500f)
+        animFromPanX = panX
+        animFromPanY = panY
+        animToPanX = s[8]
+        animToPanY = s[9]
+        beginCenterAnim(floatArrayOf(s[4], s[5], s[6]))
+        if (s.size > 10) orthographic = s[10] > 0.5f
+        animStart = now()
+        animDuration = durationMs
+        animating = true
+    }
+
     /** Döner tabla gibi tam bir tur (360°). */
     @Synchronized
     fun spin360() {

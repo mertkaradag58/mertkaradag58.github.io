@@ -36,6 +36,9 @@ const char* FormatName(FileFormat f) {
     case FileFormat::Max3ds: return "3DS";
     case FileFormat::Fbx: return "FBX";
     case FileFormat::Ply: return "PLY";
+    case FileFormat::ThreeMf: return "3MF";
+    case FileFormat::Amf: return "AMF";
+    case FileFormat::Off: return "OFF";
     default: return "?";
   }
 }
@@ -212,7 +215,8 @@ bool ImportMeshFile(const std::string& path, FileFormat format, RawMesh& out,
   }
 
   // Birim ve eksen: Assimp glTF/DAE'yi metre, FBX'i santimetre olarak verir ve bunları Y yukarı
-  // çevirir. OBJ, 3DS, STL ve PLY'de birim bilgisi yoktur; 1 birim = 1 mm kabul edilir.
+  // çevirir. OBJ, 3DS, STL, PLY ve OFF'ta birim bilgisi yoktur; 1 birim = 1 mm kabul edilir.
+  // 3MF ve AMF varsayılan olarak mm ve Z yukarıdır; olduğu gibi kullanılır.
   double scale = 1.0;
   bool yUp = false;
   switch (format) {
