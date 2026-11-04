@@ -1,4 +1,4 @@
-// CAD dosyası (STEP / IGES / BREP) ve mesh dosyası (OBJ, STL, glTF, DAE, 3DS, FBX, PLY)
+// CAD dosyası (STEP / IGES / BREP) ve mesh dosyası (OBJ, STL, glTF, DAE, 3DS, FBX, PLY, 3MF, AMF, OFF)
 // okuma, üçgenleme ve ölçüm çekirdeği.
 // JNI'den bağımsızdır; masaüstünde host_test ile de derlenip denenebilir.
 #pragma once
@@ -20,7 +20,7 @@ namespace stepviewer {
 constexpr int kFloatsPerVertex = 9;
 
 // Sayısal değerler Kotlin tarafındaki StepMesh.FORMAT_* ile aynı olmalıdır.
-enum class FileFormat { Unknown, Step, Iges, Brep, Obj, Stl, Gltf, Dae, Max3ds, Fbx, Ply };
+enum class FileFormat { Unknown, Step, Iges, Brep, Obj, Stl, Gltf, Dae, Max3ds, Fbx, Ply, ThreeMf, Amf, Off };
 
 inline bool IsMeshFormat(FileFormat f) { return static_cast<int>(f) >= static_cast<int>(FileFormat::Obj); }
 
@@ -123,6 +123,7 @@ struct ShapeInfo {
   double angleDeg = 0;           // koni yarı açısı
   double center[3] = {0, 0, 0};  // merkez veya eksen üzerindeki nokta / düzlem noktası
   double dir[3] = {0, 0, 0};     // doğru yönü, eksen yönü veya düzlem normali
+  double perimeter = 0;          // yüzeyin sınır kenarlarının toplam uzunluğu (bilinmiyorsa 0)
 };
 
 // Kenar veya yüzey için geometri bilgisi.
@@ -152,11 +153,16 @@ bool ComputeMassProps(const std::vector<TopoDS_Shape>& shapes, MassProps& out);
 bool MeasurePairWithInfo(const TopoDS_Shape& a, const ShapeInfo* ia, const TopoDS_Shape& b,
                          const ShapeInfo* ib, PairMeasure& out);
 
+// Bir nokta ile kenar/yüzey arası en kısa mesafe: p1 = nokta, p2 = şekil üzerindeki en yakın nokta.
+bool MeasurePointShape(const double point[3], const TopoDS_Shape& shape, PairMeasure& out);
+
 // --- Mesh dosyaları için ölçüm (kind: 0 = kenar, 1 = yüzey) ---
 
 bool MeshFeatureInfo(const MeshGeometry& g, int kind, int id, ShapeInfo& info);
 bool MeshMeasurePair(const MeshGeometry& g, int kindA, int idA, int kindB, int idB,
                      PairMeasure& out);
+bool MeshMeasurePoint(const MeshGeometry& g, const double point[3], int kind, int id,
+                      PairMeasure& out);
 // partIds null ise tüm model.
 bool MeshMassProps(const MeshGeometry& g, const std::vector<int>* partIds, MassProps& out);
 

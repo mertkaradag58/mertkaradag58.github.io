@@ -964,6 +964,24 @@ bool MeshMeasurePair(const MeshGeometry& g, int kindA, int idA, int kindB, int i
   }
 }
 
+bool MeshMeasurePoint(const MeshGeometry& g, const double point[3], int kind, int id,
+                      PairMeasure& out) {
+  out = PairMeasure();
+  try {
+    TopoDS_Shape shape;
+    if (kind == 0) {
+      EdgeFit f;
+      if (!FitEdge(g, id, f)) return false;
+      shape = EdgeShape(f);
+    } else {
+      shape = FaceShape(g, id);
+    }
+    return MeasurePointShape(point, shape, out);
+  } catch (const Standard_Failure&) {
+    return false;
+  }
+}
+
 bool MeshMassProps(const MeshGeometry& g, const std::vector<int>* partIds, MassProps& out) {
   out = MassProps();
   const int nParts = static_cast<int>(g.partFaceOffsets.size()) - 1;

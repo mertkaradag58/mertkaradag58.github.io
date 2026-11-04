@@ -206,7 +206,7 @@ Java_com_mertkaradag_stepviewer_StepNative_shapeInfo(JNIEnv* env, jobject /*thiz
   }
   return ToJava(env, std::vector<double>{static_cast<double>(i.kind), i.length, i.area, i.radius, i.radius2,
                       i.angleDeg, i.center[0], i.center[1], i.center[2], i.dir[0], i.dir[1],
-                      i.dir[2]});
+                      i.dir[2], i.perimeter});
 }
 
 // Dönüş: [mesafe, p1x, p1y, p1z, p2x, p2y, p2z, açı, merkez/eksen mesafesi, paralel düzlem
@@ -225,6 +225,22 @@ Java_com_mertkaradag_stepviewer_StepNative_measurePair(JNIEnv* env, jobject /*th
   }
   return ToJava(env, std::vector<double>{m.distance, m.p1[0], m.p1[1], m.p1[2], m.p2[0], m.p2[1], m.p2[2],
                       m.angleDeg, m.centerDistance, m.parallelDistance});
+}
+
+// Nokta ile kenar/yüzey arası. Dönüş: [mesafe, nokta xyz, en yakın nokta xyz] veya null
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_com_mertkaradag_stepviewer_StepNative_measurePoint(JNIEnv* env, jobject /*thiz*/, jdouble x,
+                                                        jdouble y, jdouble z, jint kind, jint id) {
+  const double p[3] = {x, y, z};
+  stepviewer::PairMeasure m;
+  if (auto mesh = CurrentMesh()) {
+    if (!stepviewer::MeshMeasurePoint(*mesh, p, kind, id, m)) return nullptr;
+  } else {
+    TopoDS_Shape s;
+    if (!GetStoredShape(kind, id, s) || !stepviewer::MeasurePointShape(p, s, m)) return nullptr;
+  }
+  return ToJava(env, std::vector<double>{m.distance, m.p1[0], m.p1[1], m.p1[2], m.p2[0], m.p2[1],
+                                         m.p2[2]});
 }
 
 // partIds null ise tüm model. Dönüş: [hacim, alan, cx, cy, cz, katı var mı (1/0)] veya null

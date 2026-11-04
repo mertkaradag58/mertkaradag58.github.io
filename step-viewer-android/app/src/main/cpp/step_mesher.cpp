@@ -4,6 +4,7 @@
 
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepGProp.hxx>
@@ -30,6 +31,7 @@
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
 #include <StepData_ConfParameters.hxx>
@@ -431,6 +433,9 @@ FileFormat DetectFormat(const std::string& path) {
   if (ext == "3ds") return FileFormat::Max3ds;
   if (ext == "fbx") return FileFormat::Fbx;
   if (ext == "ply") return FileFormat::Ply;
+  if (ext == "3mf") return FileFormat::ThreeMf;
+  if (ext == "amf") return FileFormat::Amf;
+  if (ext == "off") return FileFormat::Off;
 
   std::ifstream in(path, std::ios::binary);
   if (!in) return FileFormat::Unknown;
@@ -453,6 +458,8 @@ FileFormat DetectFormat(const std::string& path) {
   if (head.compare(0, 18, "Kaydara FBX Binary") == 0) return FileFormat::Fbx;
   if (head.compare(0, 3, "ply") == 0) return FileFormat::Ply;
   if (head.find("<COLLADA") != std::string::npos) return FileFormat::Dae;
+  if (head.find("<amf") != std::string::npos) return FileFormat::Amf;
+  if (head.compare(0, 3, "OFF") == 0) return FileFormat::Off;
   if (head.compare(0, 5, "solid") == 0 && head.find("facet") != std::string::npos) {
     return FileFormat::Stl;
   }
@@ -545,10 +552,28 @@ bool GetEdgeInfo(const TopoDS_Edge& edge, ShapeInfo& info) {
   return true;
 }
 
+// Yüzeyin sınır uzunluğu: dikiş (seam) ve dejenere kenarlar sayılmaz.
+double FacePerimeter(const TopoDS_Face& face) {
+  double total = 0;
+  TopTools_IndexedMapOfShape edges;
+  TopExp::MapShapes(face, TopAbs_EDGE, edges);
+  for (int i = 1; i <= edges.Extent(); ++i) {
+    const TopoDS_Edge& e = TopoDS::Edge(edges(i));
+    if (BRep_Tool::Degenerated(e) || BRep_Tool::IsClosed(e, face)) continue;
+    try {
+      BRepAdaptor_Curve c(e);
+      total += GCPnts_AbscissaPoint::Length(c);
+    } catch (const Standard_Failure&) {
+    }
+  }
+  return total;
+}
+
 bool GetFaceInfo(const TopoDS_Face& face, ShapeInfo& info) {
   GProp_GProps props;
   BRepGProp::SurfaceProperties(face, props);
   info.area = props.Mass();
+  info.perimeter = FacePerimeter(face);
 
   BRepAdaptor_Surface surf(face);  // yüzey konumunu uygular
   switch (surf.GetType()) {
@@ -617,6 +642,25 @@ bool GetShapeInfo(const TopoDS_Shape& shape, ShapeInfo& info) {
 
 bool MeasurePair(const TopoDS_Shape& a, const TopoDS_Shape& b, PairMeasure& out) {
   return MeasurePairWithInfo(a, nullptr, b, nullptr, out);
+}
+
+bool MeasurePointShape(const double point[3], const TopoDS_Shape& shape, PairMeasure& out) {
+  out = PairMeasure();
+  try {
+    if (shape.IsNull()) return false;
+    const TopoDS_Vertex v =
+        BRepBuilderAPI_MakeVertex(gp_Pnt(point[0], point[1], point[2])).Vertex();
+    BRepExtrema_DistShapeShape dist(v, shape);
+    if (!dist.IsDone() || dist.NbSolution() < 1) return false;
+    out.distance = dist.Value();
+    out.p1[0] = point[0];
+    out.p1[1] = point[1];
+    out.p1[2] = point[2];
+    ToArray(dist.PointOnShape2(1).XYZ(), out.p2);
+    return true;
+  } catch (const Standard_Failure&) {
+    return false;
+  }
 }
 
 bool MeasurePairWithInfo(const TopoDS_Shape& a, const ShapeInfo* pia, const TopoDS_Shape& b,

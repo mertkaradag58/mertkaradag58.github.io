@@ -20,15 +20,23 @@ class ModelRenderer(
     private val requestRender: () -> Unit,
 ) : GLSurfaceView.Renderer {
 
-    enum class DisplayMode { SHADED_EDGES, SHADED, WIREFRAME }
+    enum class DisplayMode { SHADED_EDGES, SHADED, WIREFRAME, XRAY }
 
-    /** Seçim/ölçüm katmanı. Aralıklar (başlangıç, adet) çiftleridir. */
+    /**
+     * Seçim/ölçüm katmanı. Aralıklar (başlangıç, adet) çiftleridir.
+     * [measureLine]: ölçü çizgileri (segment başına 2 nokta * 3 float),
+     * [points]: işaret noktaları (nokta başına 3 float).
+     */
     class Overlay(
         val faceRanges: IntArray = IntArray(0),
         val edgeSegments: FloatArray = FloatArray(0),
         val measureLine: FloatArray? = null,
         val partRanges: IntArray = IntArray(0),
+        val points: FloatArray? = null,
     )
+
+    /** Parça renk / şeffaflık grubu: üçgen aralıkları, renk (null = kendi rengi), opaklık. */
+    class StyleGroup(val ranges: IntArray, val color: FloatArray?, val alpha: Float)
 
     // GL iş parçacığı durumu
     private var mesh: StepMesh? = null
@@ -50,6 +58,14 @@ class ModelRenderer(
     private var pmiVisible = false
     private var pmiHighlight = IntArray(0) // (başlangıç segment, adet)
     private var screenshotCallback: ((Bitmap?) -> Unit)? = null
+    // Renkli / şeffaf parçalar (normal parçalar visibleTriRanges ile çizilir)
+    private var styleGroups: List<StyleGroup> = emptyList()
+    private var palette: Palette? = null
+    // Büyüteç: her karede (x, y) çevresindeki kare bölge okunur
+    private var loupeX = -1f
+    private var loupeY = -1f
+    private var loupeSize = 0
+    private var loupeCallback: ((Bitmap?) -> Unit)? = null
 
     private var bgProgram = 0
     private var meshProgram = 0
@@ -59,6 +75,8 @@ class ModelRenderer(
     private var edgeVbo = 0
     private var highlightVbo = 0
     private var measureVbo = 0
+    private var pointsVbo = 0
+    private var pointsVertexCount = 0
     private var explodeVbo = 0
     private var explodeEdgeVbo = 0
     private var pmiVbo = 0
@@ -77,6 +95,12 @@ class ModelRenderer(
     private var uMeshClip = 0
     private var uMeshClipOn = 0
     private var uOverride = 0
+    private var uAlpha = 0
+    private var uContrast = 0
+    private var uBgTop = 0
+    private var uBgBottom = 0
+    private var uBgRadial = 0
+    private var uBgAspect = 0
     private var uLineMvp = 0
     private var uLineColor = 0
     private var uPointSize = 0
@@ -132,9 +156,22 @@ class ModelRenderer(
         overlayDirty = true
     }
 
-    fun setVisibility(triRanges: IntArray?, segRanges: IntArray?) {
+    fun setVisibility(triRanges: IntArray?, segRanges: IntArray?, groups: List<StyleGroup> = emptyList()) {
         visibleTriRanges = triRanges
         visibleSegRanges = segRanges
+        styleGroups = groups
+    }
+
+    fun setPalette(p: Palette) {
+        palette = p
+    }
+
+    /** Büyüteç bölgesi (piksel); size <= 0 ise kapalı. Callback GL iş parçacığında çağrılır. */
+    fun setLoupe(x: Float, y: Float, size: Int, callback: ((Bitmap?) -> Unit)?) {
+        loupeX = x
+        loupeY = y
+        loupeSize = size
+        loupeCallback = callback
     }
 
     fun setDisplayMode(mode: DisplayMode) {
@@ -155,6 +192,10 @@ class ModelRenderer(
         GLES30.glDepthFunc(GLES30.GL_LEQUAL)
 
         bgProgram = buildProgram(BG_VS, BG_FS)
+        uBgTop = GLES30.glGetUniformLocation(bgProgram, "uTop")
+        uBgBottom = GLES30.glGetUniformLocation(bgProgram, "uBottom")
+        uBgRadial = GLES30.glGetUniformLocation(bgProgram, "uRadial")
+        uBgAspect = GLES30.glGetUniformLocation(bgProgram, "uAspect")
 
         meshProgram = buildProgram(MESH_VS, MESH_FS)
         uMvp = GLES30.glGetUniformLocation(meshProgram, "uMvp")
@@ -162,6 +203,8 @@ class ModelRenderer(
         uMeshClip = GLES30.glGetUniformLocation(meshProgram, "uClip")
         uMeshClipOn = GLES30.glGetUniformLocation(meshProgram, "uClipOn")
         uOverride = GLES30.glGetUniformLocation(meshProgram, "uOverride")
+        uAlpha = GLES30.glGetUniformLocation(meshProgram, "uAlpha")
+        uContrast = GLES30.glGetUniformLocation(meshProgram, "uContrast")
         uMeshExplode = GLES30.glGetUniformLocation(meshProgram, "uExplode")
 
         lineProgram = buildProgram(LINE_VS, LINE_FS)
@@ -172,8 +215,8 @@ class ModelRenderer(
         uLineClipOn = GLES30.glGetUniformLocation(lineProgram, "uClipOn")
         uLineExplode = GLES30.glGetUniformLocation(lineProgram, "uExplode")
 
-        val ids = IntArray(8)
-        GLES30.glGenBuffers(8, ids, 0)
+        val ids = IntArray(9)
+        GLES30.glGenBuffers(9, ids, 0)
         vbo = ids[0]
         ibo = ids[1]
         edgeVbo = ids[2]
@@ -182,6 +225,7 @@ class ModelRenderer(
         explodeVbo = ids[5]
         explodeEdgeVbo = ids[6]
         pmiVbo = ids[7]
+        pointsVbo = ids[8]
 
         // Yeni bağlam: GPU tamponları boş, her şeyi tekrar yükle.
         meshDirty = true
@@ -205,6 +249,7 @@ class ModelRenderer(
         if (overlayDirty) {
             highlightVertexCount = upload(highlightVbo, overlay.edgeSegments)
             measureVertexCount = upload(measureVbo, overlay.measureLine)
+            pointsVertexCount = upload(pointsVbo, overlay.points)
             overlayDirty = false
         }
         if (pmiDirty) {
@@ -230,8 +275,22 @@ class ModelRenderer(
         if (indexCount > 0) {
             camera.computeMatrices(modelView, mvp)
             val clip = clipPlane
-            if (displayMode != DisplayMode.WIREFRAME) drawFaces(clip)
-            if (displayMode != DisplayMode.SHADED) drawEdges(clip)
+            when (displayMode) {
+                DisplayMode.WIREFRAME -> drawEdges(clip)
+                DisplayMode.XRAY -> {
+                    drawXray(clip)
+                    drawEdges(clip)
+                }
+                DisplayMode.SHADED -> {
+                    drawFaces(clip)
+                    drawTransparent(clip)
+                }
+                DisplayMode.SHADED_EDGES -> {
+                    drawFaces(clip)
+                    drawEdges(clip)
+                    drawTransparent(clip)
+                }
+            }
             drawOverlay(clip)
             drawPmi()
         }
@@ -239,6 +298,9 @@ class ModelRenderer(
         screenshotCallback?.let { cb ->
             screenshotCallback = null
             cb(readPixels())
+        }
+        loupeCallback?.let { cb ->
+            if (loupeSize > 0) cb(readRegion(loupeX, loupeY, loupeSize))
         }
 
         if (moving) requestRender()
@@ -248,6 +310,17 @@ class ModelRenderer(
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
         GLES30.glDepthMask(false)
         GLES30.glUseProgram(bgProgram)
+        val p = palette
+        if (p != null) {
+            GLES30.glUniform3f(uBgTop, p.bgTop[0], p.bgTop[1], p.bgTop[2])
+            GLES30.glUniform3f(uBgBottom, p.bgBottom[0], p.bgBottom[1], p.bgBottom[2])
+            GLES30.glUniform1f(uBgRadial, if (p.radial) 1f else 0f)
+        } else {
+            GLES30.glUniform3f(uBgTop, 0.97f, 0.98f, 0.99f)
+            GLES30.glUniform3f(uBgBottom, 0.86f, 0.89f, 0.92f)
+            GLES30.glUniform1f(uBgRadial, 0f)
+        }
+        GLES30.glUniform1f(uBgAspect, viewWidth.toFloat() / maxOf(1, viewHeight))
         GLES30.glDrawArrays(GLES30.GL_TRIANGLES, 0, 3)
         GLES30.glDepthMask(true)
         GLES30.glEnable(GLES30.GL_DEPTH_TEST)
@@ -326,22 +399,87 @@ class ModelRenderer(
         GLES30.glUniformMatrix4fv(uMvp, 1, false, mvp, 0)
         GLES30.glUniformMatrix4fv(uModelView, 1, false, modelView, 0)
         GLES30.glUniform4f(uOverride, 0f, 0f, 0f, 0f)
+        GLES30.glUniform1f(uAlpha, 1f)
+        GLES30.glUniform1f(uContrast, palette?.contrast ?: 1f)
         setMeshClip(clip)
         bindMeshAttributes()
         drawTriangleRanges(visibleTriRanges)
+        // Renk verilmiş (opak) parçalar
+        for (g in styleGroups) {
+            if (g.alpha < 0.999f) continue
+            val c = g.color
+            if (c != null) GLES30.glUniform4f(uOverride, c[0], c[1], c[2], 1f)
+            else GLES30.glUniform4f(uOverride, 0f, 0f, 0f, 0f)
+            drawTriangleRanges(g.ranges)
+        }
         unbindMeshAttributes()
         GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
+    }
+
+    /** Şeffaf parçalar: opak her şeyden sonra, derinlik yazmadan karıştırılarak çizilir. */
+    private fun drawTransparent(clip: FloatArray?) {
+        if (styleGroups.none { it.alpha < 0.999f }) return
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glDepthMask(false)
+        GLES30.glUseProgram(meshProgram)
+        GLES30.glUniformMatrix4fv(uMvp, 1, false, mvp, 0)
+        GLES30.glUniformMatrix4fv(uModelView, 1, false, modelView, 0)
+        GLES30.glUniform1f(uContrast, palette?.contrast ?: 1f)
+        setMeshClip(clip)
+        bindMeshAttributes()
+        for (g in styleGroups) {
+            if (g.alpha >= 0.999f) continue
+            val c = g.color
+            if (c != null) GLES30.glUniform4f(uOverride, c[0], c[1], c[2], 1f)
+            else GLES30.glUniform4f(uOverride, 0f, 0f, 0f, 0f)
+            GLES30.glUniform1f(uAlpha, g.alpha)
+            drawTriangleRanges(g.ranges)
+        }
+        unbindMeshAttributes()
+        GLES30.glUniform1f(uAlpha, 1f)
+        GLES30.glDepthMask(true)
+        GLES30.glDisable(GLES30.GL_BLEND)
+    }
+
+    /** X-ışını: tüm görünen yüzeyler yarı saydam, kenarlar her yerden görünür. */
+    private fun drawXray(clip: FloatArray?) {
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+        GLES30.glDepthMask(false)
+        GLES30.glUseProgram(meshProgram)
+        GLES30.glUniformMatrix4fv(uMvp, 1, false, mvp, 0)
+        GLES30.glUniformMatrix4fv(uModelView, 1, false, modelView, 0)
+        GLES30.glUniform1f(uContrast, palette?.contrast ?: 1f)
+        GLES30.glUniform4f(uOverride, 0f, 0f, 0f, 0f)
+        GLES30.glUniform1f(uAlpha, 0.22f)
+        setMeshClip(clip)
+        bindMeshAttributes()
+        drawTriangleRanges(visibleTriRanges)
+        for (g in styleGroups) {
+            val c = g.color
+            if (c != null) GLES30.glUniform4f(uOverride, c[0], c[1], c[2], 1f)
+            else GLES30.glUniform4f(uOverride, 0f, 0f, 0f, 0f)
+            drawTriangleRanges(g.ranges)
+        }
+        unbindMeshAttributes()
+        GLES30.glUniform1f(uAlpha, 1f)
+        GLES30.glDepthMask(true)
+        GLES30.glDisable(GLES30.GL_BLEND)
     }
 
     private fun drawEdges(clip: FloatArray?) {
         if (edgeVertexCount == 0) return
         GLES30.glUseProgram(lineProgram)
         GLES30.glUniformMatrix4fv(uLineMvp, 1, false, mvp, 0)
-        if (displayMode == DisplayMode.WIREFRAME) {
-            GLES30.glUniform4f(uLineColor, 0.80f, 0.86f, 0.95f, 1f)
-        } else {
-            GLES30.glUniform4f(uLineColor, 0.07f, 0.08f, 0.10f, 1f)
+        val p = palette
+        val c = when {
+            displayMode == DisplayMode.WIREFRAME || displayMode == DisplayMode.XRAY ->
+                p?.wire ?: floatArrayOf(0.16f, 0.22f, 0.34f)
+            else -> p?.edge ?: floatArrayOf(0.12f, 0.15f, 0.21f)
         }
+        GLES30.glUniform4f(uLineColor, c[0], c[1], c[2], 1f)
+        GLES30.glLineWidth(p?.edgeWidth ?: 1f)
         GLES30.glUniform1f(uPointSize, 1f)
         setLineClip(clip)
         bindExplode(1, explodeEdgeVbo, uLineExplode)
@@ -360,6 +498,7 @@ class ModelRenderer(
         }
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glDisableVertexAttribArray(1)
+        GLES30.glLineWidth(1f)
     }
 
     private fun setLineClip(clip: FloatArray?) {
@@ -380,6 +519,8 @@ class ModelRenderer(
             GLES30.glUseProgram(meshProgram)
             GLES30.glUniformMatrix4fv(uMvp, 1, false, mvp, 0)
             GLES30.glUniformMatrix4fv(uModelView, 1, false, modelView, 0)
+            GLES30.glUniform1f(uAlpha, 1f)
+            GLES30.glUniform1f(uContrast, palette?.contrast ?: 1f)
             setMeshClip(clip)
             bindMeshAttributes()
             if (o.partRanges.isNotEmpty()) {
@@ -394,7 +535,7 @@ class ModelRenderer(
             GLES30.glDisable(GLES30.GL_POLYGON_OFFSET_FILL)
         }
 
-        if (highlightVertexCount == 0 && measureVertexCount < 2) return
+        if (highlightVertexCount == 0 && measureVertexCount < 2 && pointsVertexCount == 0) return
         GLES30.glUseProgram(lineProgram)
         GLES30.glUniformMatrix4fv(uLineMvp, 1, false, mvp, 0)
         // Seçili kenar ve ölçü çizgileri patlatılmaz (ölçüm patlatma kapalıyken yapılır)
@@ -410,18 +551,35 @@ class ModelRenderer(
             GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
             GLES30.glDrawArrays(GLES30.GL_LINES, 0, highlightVertexCount)
         }
+        val mc = palette?.measure ?: floatArrayOf(1.0f, 0.9f, 0.1f)
         if (measureVertexCount >= 2) {
-            // Ölçü çizgisi ve uç noktaları: her zaman görünür (derinlik testi ve kesit kapalı)
+            // Ölçü çizgileri ve uç noktaları: her zaman görünür (derinlik testi ve kesit kapalı)
             setLineClip(null)
             GLES30.glDisable(GLES30.GL_DEPTH_TEST)
             GLES30.glLineWidth(3f)
-            GLES30.glUniform4f(uLineColor, 1.0f, 0.9f, 0.1f, 1f)
+            GLES30.glUniform4f(uLineColor, mc[0], mc[1], mc[2], 1f)
             GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, measureVbo)
             GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
             GLES30.glUniform1f(uPointSize, 1f)
-            GLES30.glDrawArrays(GLES30.GL_LINES, 0, 2)
+            val n = measureVertexCount - measureVertexCount % 2
+            GLES30.glDrawArrays(GLES30.GL_LINES, 0, n)
             GLES30.glUniform1f(uPointSize, 14f)
-            GLES30.glDrawArrays(GLES30.GL_POINTS, 0, 2)
+            GLES30.glDrawArrays(GLES30.GL_POINTS, 0, n)
+            GLES30.glEnable(GLES30.GL_DEPTH_TEST)
+        }
+        if (pointsVertexCount > 0) {
+            // İşaret noktaları (nokta ölçümü): beyaz halka + renkli iç
+            setLineClip(null)
+            GLES30.glDisable(GLES30.GL_DEPTH_TEST)
+            GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, pointsVbo)
+            GLES30.glVertexAttribPointer(0, 3, GLES30.GL_FLOAT, false, 12, 0)
+            val ring = if (palette?.light == false) 0.08f else 1f
+            GLES30.glUniform4f(uLineColor, ring, ring, ring, 1f)
+            GLES30.glUniform1f(uPointSize, 22f)
+            GLES30.glDrawArrays(GLES30.GL_POINTS, 0, pointsVertexCount)
+            GLES30.glUniform4f(uLineColor, mc[0], mc[1], mc[2], 1f)
+            GLES30.glUniform1f(uPointSize, 14f)
+            GLES30.glDrawArrays(GLES30.GL_POINTS, 0, pointsVertexCount)
             GLES30.glEnable(GLES30.GL_DEPTH_TEST)
         }
         GLES30.glLineWidth(1f)
@@ -474,6 +632,29 @@ class ModelRenderer(
             flipped
         } catch (e: Throwable) {
             Log.e(TAG, "Ekran görüntüsü alınamadı", e)
+            null
+        }
+    }
+
+    /** Ekran (x, y) noktası (üstten) çevresindeki kare bölgeyi okur. */
+    private fun readRegion(cx: Float, cy: Float, size: Int): Bitmap? {
+        return try {
+            val half = size / 2
+            val x0 = (cx.toInt() - half).coerceIn(0, maxOf(0, viewWidth - size))
+            val yTop = (cy.toInt() - half).coerceIn(0, maxOf(0, viewHeight - size))
+            val w = minOf(size, viewWidth)
+            val h = minOf(size, viewHeight)
+            val glY = viewHeight - yTop - h
+            val buf = ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder())
+            GLES30.glReadPixels(x0, glY, w, h, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, buf)
+            val raw = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            buf.rewind()
+            raw.copyPixelsFromBuffer(buf)
+            val m = android.graphics.Matrix().apply { preScale(1f, -1f) }
+            val flipped = Bitmap.createBitmap(raw, 0, 0, w, h, m, false)
+            raw.recycle()
+            flipped
+        } catch (e: Throwable) {
             null
         }
     }
@@ -552,9 +733,11 @@ class ModelRenderer(
         // Tam ekran üçgen ile dikey degrade arka plan (köşe tamponu gerekmez)
         private const val BG_VS = """#version 300 es
 out float vT;
+out vec2 vUv;
 void main() {
     vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
     vT = p.y * 0.5;
+    vUv = p * 0.5;
     gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }
 """
@@ -562,11 +745,23 @@ void main() {
         private const val BG_FS = """#version 300 es
 precision mediump float;
 in float vT;
+in vec2 vUv;
+uniform vec3 uTop;
+uniform vec3 uBottom;
+uniform float uRadial;
+uniform float uAspect;
 out vec4 fragColor;
 void main() {
-    vec3 bottom = vec3(0.075, 0.085, 0.105);
-    vec3 top = vec3(0.235, 0.265, 0.320);
-    fragColor = vec4(mix(bottom, top, clamp(vT, 0.0, 1.0)), 1.0);
+    float t;
+    if (uRadial > 0.5) {
+        // Ortası açık, kenarları koyu: merkez üstte (%35)
+        vec2 d = vUv - vec2(0.5, 0.62);
+        d.x *= uAspect;
+        t = 1.0 - clamp(length(d) * 1.35, 0.0, 1.0);
+    } else {
+        t = clamp(vT, 0.0, 1.0);
+    }
+    fragColor = vec4(mix(uBottom, uTop, t), 1.0);
 }
 """
 
@@ -602,6 +797,8 @@ in vec3 vWorld;
 uniform vec4 uClip;
 uniform float uClipOn;
 uniform vec4 uOverride;
+uniform float uAlpha;
+uniform float uContrast;
 out vec4 fragColor;
 void main() {
     if (uClipOn > 0.5 && dot(uClip.xyz, vWorld) + uClip.w < 0.0) discard;
@@ -610,7 +807,7 @@ void main() {
 
     // Kesit açıkken modelin içi (arka yüzler) kesit rengiyle boyanır
     if (uClipOn > 0.5 && !gl_FrontFacing) {
-        fragColor = vec4(0.86, 0.32, 0.26, 1.0);
+        fragColor = vec4(0.86, 0.32, 0.26, uAlpha);
         return;
     }
 
@@ -627,7 +824,8 @@ void main() {
     // Kenar aydınlatması (rim): siluet daha belirgin
     float rim = 0.10 * pow(1.0 - max(dot(n, v), 0.0), 3.0);
     vec3 c = base * (0.26 + diffuse) + vec3(spec + rim);
-    fragColor = vec4(c, 1.0);
+    c = clamp((c - 0.5) * uContrast + 0.5, 0.0, 1.0);
+    fragColor = vec4(c, uAlpha);
 }
 """
 
