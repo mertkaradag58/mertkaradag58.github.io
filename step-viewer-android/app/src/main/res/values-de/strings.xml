@@ -166,10 +166,13 @@
     <string name="ar">In Originalgröße ansehen (AR)</string>
     <string name="ar_hint_move">Bewegen Sie das Telefon langsam; Tisch oder Boden wird gesucht…</string>
     <string name="ar_hint_tap">Tippen Sie auf die orange Fläche, um das Modell zu platzieren</string>
-    <string name="ar_gestures">Ein Finger: drehen · Zwei Finger: skalieren · Tippen: neu platzieren</string>
+    <string name="ar_gestures">Ziehen oder mit zwei Fingern drehen: drehen · Kippen: auf andere Seite legen · Tippen: neu platzieren</string>
     <string name="ar_scale_real">Originalgröße 1:1</string>
     <string name="ar_scale_value">Maßstab %1$s×</string>
     <string name="ar_reset">Zurück zur Originalgröße</string>
+    <string name="ar_flip">Kippen</string>
+    <string name="ar_scale_locked">Maßstab 1:1 🔒</string>
+    <string name="ar_scale_free">Freier Maßstab</string>
     <string name="ar_unsupported">Dieses Telefon unterstützt keine erweiterte Realität (Google Play-Dienste für AR).</string>
     <string name="ar_camera_needed">AR benötigt die Kameraberechtigung. Das Kamerabild wird weder gespeichert noch gesendet.</string>
     <string name="ar_intro">Augmented Reality stellt das Modell über die Kamera in Originalgröße (1:1) auf Ihren Tisch oder Boden. Bewegen Sie das Telefon langsam, bis eine orange Fläche erscheint, und tippen Sie darauf. Ein Finger dreht, zwei Finger skalieren.\n\nDas Kamerabild wird weder gespeichert noch gesendet.</string>

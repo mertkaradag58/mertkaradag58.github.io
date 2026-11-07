@@ -165,10 +165,13 @@
     <string name="ar">Voir en taille réelle (RA)</string>
     <string name="ar_hint_move">Déplacez lentement le téléphone ; recherche d’une table ou du sol…</string>
     <string name="ar_hint_tap">Touchez la zone orange pour placer le modèle</string>
-    <string name="ar_gestures">Un doigt : tourner · Deux doigts : échelle · Toucher : replacer</string>
+    <string name="ar_gestures">Glisser ou tourner à deux doigts : pivoter · Basculer : poser sur une autre face · Toucher : replacer</string>
     <string name="ar_scale_real">Taille réelle 1:1</string>
     <string name="ar_scale_value">Échelle %1$s×</string>
     <string name="ar_reset">Revenir à la taille réelle</string>
+    <string name="ar_flip">Basculer</string>
+    <string name="ar_scale_locked">Échelle 1:1 🔒</string>
+    <string name="ar_scale_free">Échelle libre</string>
     <string name="ar_unsupported">Ce téléphone ne prend pas en charge la réalité augmentée (Services Google Play pour la RA).</string>
     <string name="ar_camera_needed">La RA nécessite l’autorisation de la caméra. L’image n’est ni enregistrée ni envoyée.</string>
     <string name="ar_intro">La réalité augmentée pose le modèle sur votre table ou le sol via la caméra, en taille réelle (1:1). Déplacez lentement le téléphone jusqu\'à ce qu\'une zone orange apparaisse, puis touchez-la. Un doigt fait pivoter, deux doigts mettent à l\'échelle.\n\nL\'image de la caméra n\'est ni enregistrée ni envoyée.</string>

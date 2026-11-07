@@ -41,16 +41,10 @@
             android:paddingTop="8dp"
             android:paddingRight="14dp"
             android:paddingBottom="8dp"
+            android:gravity="end"
             android:textColor="@android:color/white"
             android:textSize="14sp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/ar_reset"
-            style="@style/SideButton"
-            android:layout_marginStart="8dp"
-            android:layout_marginBottom="0dp"
-            android:contentDescription="@string/ar_reset"
-            app:icon="@drawable/ic_fit" />
     </LinearLayout>
 
     <LinearLayout
@@ -75,6 +69,39 @@
             android:text="@string/ar_hint_move"
             android:textColor="@android:color/white"
             android:textSize="15sp" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/ar_flip"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/ar_flip"
+                app:icon="@drawable/ic_flip" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/ar_reset"
+                style="@style/Widget.Material3.Button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:contentDescription="@string/ar_reset"
+                android:text="1:1" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/ar_lock"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:checkable="true"
+                android:text="@string/ar_scale_locked" />
+        </LinearLayout>
 
         <TextView
             android:layout_width="wrap_content"
