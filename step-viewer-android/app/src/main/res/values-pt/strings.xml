@@ -172,10 +172,13 @@
     <string name="ar">Ver em tamanho real (RA)</string>
     <string name="ar_hint_move">Mova o celular devagar; procurando uma mesa ou o chão…</string>
     <string name="ar_hint_tap">Toque na área laranja para posicionar o modelo</string>
-    <string name="ar_gestures">Um dedo: girar · Dois dedos: escala · Tocar: reposicionar</string>
+    <string name="ar_gestures">Arrastar ou girar com dois dedos: rodar · Virar: apoiar em outra face · Tocar: reposicionar</string>
     <string name="ar_scale_real">Tamanho real 1:1</string>
     <string name="ar_scale_value">Escala %1$s×</string>
     <string name="ar_reset">Voltar ao tamanho real</string>
+    <string name="ar_flip">Virar</string>
+    <string name="ar_scale_locked">Escala 1:1 🔒</string>
+    <string name="ar_scale_free">Escala livre</string>
     <string name="ar_unsupported">Este celular não suporta realidade aumentada (Google Play Services para RA).</string>
     <string name="ar_camera_needed">A RA precisa da permissão da câmera. A imagem não é salva nem enviada.</string>
     <string name="ar_intro">A realidade aumentada coloca o modelo na sua mesa ou no chão pela câmera, em tamanho real (1:1). Mova o telefone devagar até aparecer uma área laranja e toque nela. Um dedo gira, dois dedos mudam a escala.\n\nA imagem da câmera não é salva nem enviada.</string>
