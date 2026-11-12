@@ -27,4 +27,9 @@
         <item>1.14</item>
         <item>0</item>
     </string-array>
+    <string-array name="cost_stock_modes">
+        <item>Block (machining)</item>
+        <item>Round bar (turning)</item>
+        <item>Net volume (3D print, casting)</item>
+    </string-array>
 </resources>

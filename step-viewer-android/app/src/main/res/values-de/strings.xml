@@ -231,4 +231,6 @@ Maßstab 1:1 in mm, Ansicht von außen, linke untere Ecke bei 0,0. Außenkontur 
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Papierformat</string>
     <string name="drawing_info">Technische Zeichnung · %1$s</string>
+    <string name="menu_cost">Kostenkalkulation</string>
+    <string name="cost_title">Kostenkalkulation</string>
 </resources>

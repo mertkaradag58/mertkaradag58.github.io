@@ -230,4 +230,6 @@ Escala 1:1 en mm, vista desde fuera, esquina inferior izquierda en 0,0. Contorno
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Tamaño de papel</string>
     <string name="drawing_info">Plano técnico · %1$s</string>
+    <string name="menu_cost">Cálculo de costes</string>
+    <string name="cost_title">Cálculo de costes</string>
 </resources>
