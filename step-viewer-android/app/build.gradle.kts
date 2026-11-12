@@ -115,4 +115,6 @@ dependencies {
     implementation("com.android.billingclient:billing:8.0.0")
     // Artırılmış gerçeklik (isteğe bağlı, ARCore olmayan telefonlarda AR düğmesi uyarı verir)
     implementation("com.google.ar:core:1.44.0")
+    // Teknik resimdeki ölçü yazılarını okumak için cihaz içi (çevrimdışı) metin tanıma
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }

@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Yalnızca AR (gerçek boyutta gör) için; görüntü kaydedilmez ve gönderilmez -->
+    <!-- AR (gerçek boyutta gör) ve Fotoğraftan model için; görüntüler cihazda kalır, gönderilmez -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
@@ -29,6 +29,13 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
             android:exported="false"
             android:screenOrientation="portrait"
+            android:theme="@style/Theme.StepViewer" />
+
+        <!-- Fotoğraftan kaba katı model (STEP) -->
+        <activity
+            android:name=".photocad.PhotoCadActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.StepViewer" />
 
         <activity
