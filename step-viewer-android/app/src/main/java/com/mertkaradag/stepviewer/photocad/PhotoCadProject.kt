@@ -14,9 +14,13 @@ class PhotoCadProject(val dir: File) {
     var mode = PhotoCadNative.MODE_EXTRUDE
     var thickness = 10.0
     var axis = 0
+    /** Çok görünüş: üst görünüşte parçanın önü resmin üstünde (ISO E teknik resim). */
+    var flipTop = false
+    /** Çok görünüş: yan görünüş sağdan bakış (varsayılan soldan bakış). */
+    var sideRight = false
     var updated = 0L
-    /** 0: üst/yan görünüş, 1: ön görünüş (iki görünüş yönteminde). */
-    val sketches = arrayOf(Sketch(), Sketch())
+    /** 0: üst görünüş (döndürmede yan), 1: ön görünüş, 2: yan görünüş (çok görünüş yönteminde). */
+    val sketches = arrayOf(Sketch(), Sketch(), Sketch())
 
     val id: String get() = dir.name
 
@@ -25,6 +29,7 @@ class PhotoCadProject(val dir: File) {
         updated = System.currentTimeMillis()
         val o = JSONObject().apply {
             put("name", name); put("mode", mode); put("thickness", thickness); put("axis", axis)
+            put("flipTop", flipTop); put("sideRight", sideRight)
             put("updated", updated)
             put("sketches", JSONArray().apply { sketches.forEach { put(it.toJson()) } })
         }
@@ -53,9 +58,10 @@ class PhotoCadProject(val dir: File) {
                 mode = o.optInt("mode", 0)
                 thickness = o.optDouble("thickness", 10.0)
                 axis = o.optInt("axis", 0)
+                flipTop = o.optBoolean("flipTop"); sideRight = o.optBoolean("sideRight")
                 updated = o.optLong("updated")
                 val arr = o.optJSONArray("sketches")
-                if (arr != null) for (i in 0 until minOf(2, arr.length())) {
+                if (arr != null) for (i in 0 until minOf(3, arr.length())) {
                     sketches[i] = Sketch.fromJson(arr.getJSONObject(i))
                 }
             }

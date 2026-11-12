@@ -35,8 +35,8 @@ void ThrowIo(JNIEnv* env, const std::string& msg) {
 extern "C" JNIEXPORT jdoubleArray JNICALL
 Java_com_mertkaradag_stepviewer_photocad_PhotoCadNative_buildSolid(
     JNIEnv* env, jobject /*thiz*/, jint mode, jdoubleArray sketchA, jdoubleArray sketchB,
-    jdouble param, jint axis, jstring outPath, jstring name) {
-  stepviewer::Sketch a, b;
+    jdoubleArray sketchC, jdouble param, jint axis, jint flags, jstring outPath, jstring name) {
+  stepviewer::Sketch a, b, c;
   if (!ReadSketch(env, sketchA, a)) {
     ThrowIo(env, "open_profile");
     return nullptr;
@@ -45,9 +45,10 @@ Java_com_mertkaradag_stepviewer_photocad_PhotoCadNative_buildSolid(
     ThrowIo(env, "open_profile");
     return nullptr;
   }
+  if (sketchC != nullptr && !ReadSketch(env, sketchC, c)) c.clear();
   const stepviewer::PhotoCadResult r = stepviewer::BuildPhotoSolid(
       static_cast<stepviewer::PhotoCadMode>(mode), a, b, param, axis, ToString(env, outPath),
-      ToString(env, name));
+      ToString(env, name), c, flags);
   if (!r.ok) {
     ThrowIo(env, r.error.empty() ? "build_failed" : r.error);
     return nullptr;

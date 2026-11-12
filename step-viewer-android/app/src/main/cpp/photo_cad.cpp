@@ -13,7 +13,9 @@
 #include <BRep_Builder.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
+#include <BRepTools.hxx>
 #include <IFSelect_ReturnStatus.hxx>
+#include <IGESControl_Writer.hxx>
 #include <Interface_Static.hxx>
 #include <STEPCAFControl_Writer.hxx>
 #include <STEPControl_StepModelType.hxx>
@@ -262,7 +264,7 @@ bool WriteStep(const TopoDS_Shape& shape, const std::string& path, const std::st
 
 PhotoCadResult BuildPhotoSolid(PhotoCadMode mode, const Sketch& aIn, const Sketch& bIn,
                                double param, int axis, const std::string& outPath,
-                               const std::string& name) {
+                               const std::string& name, const Sketch& cIn, int flags) {
   PhotoCadResult res;
   try {
     const Sketch a = Normalized(aIn);
@@ -293,9 +295,16 @@ PhotoCadResult BuildPhotoSolid(PhotoCadMode mode, const Sketch& aIn, const Sketc
         res.error = "open_profile";
         return res;
       }
-      // Üst görünüş: x sağa, y derinlik. Ön görünüş: x sağa, y (resimde yukarı) = z yükseklik.
-      const double depth = ba.maxY - ba.minY, height = bb.maxY - bb.minY;
-      Placement top{gp_Pnt(0, 0, -1), gp::DX(), gp::DY()};
+      // Üst görünüş: x sağa, resimde yukarı = arka (+y); kFlipTop ile resimde yukarı = ön.
+      // Ön görünüş: x sağa, resimde yukarı = z. Yan görünüş: soldan bakışta resimde sağ = ön (-y).
+      const Sketch c = cIn.empty() ? Sketch() : Normalized(cIn);
+      const Box2 bc = OuterBox(c);
+      const bool hasSide = bc.Valid();
+      const double depthTop = ba.maxY - ba.minY, height = bb.maxY - bb.minY;
+      const double depth = hasSide ? std::max(depthTop, bc.maxX - bc.minX) : depthTop;
+      const double width = std::max(ba.maxX - ba.minX, bb.maxX - bb.minX);
+      Placement top = (flags & kFlipTop) ? Placement{gp_Pnt(0, depthTop, -1), gp::DX(), -gp::DY()}
+                                         : Placement{gp_Pnt(0, 0, -1), gp::DX(), gp::DY()};
       Placement front{gp_Pnt(0, -1, 0), gp::DX(), gp::DZ()};
       TopoDS_Face fa, fb;
       if (!MakeSketchFace(a, top, true, fa, err) || !MakeSketchFace(b, front, true, fb, err)) {
@@ -307,6 +316,27 @@ PhotoCadResult BuildPhotoSolid(PhotoCadMode mode, const Sketch& aIn, const Sketc
       if (pa.IsNull() || pb.IsNull()) {
         res.error = "build_failed";
         return res;
+      }
+      if (hasSide) {
+        const double ds = bc.maxX - bc.minX;
+        Placement side = (flags & kSideRight) ? Placement{gp_Pnt(-1, 0, 0), gp::DY(), gp::DZ()}
+                                              : Placement{gp_Pnt(-1, ds, 0), -gp::DY(), gp::DZ()};
+        TopoDS_Face fc;
+        if (!MakeSketchFace(c, side, true, fc, err)) {
+          res.error = err;
+          return res;
+        }
+        TopoDS_Shape pc = Prism(fc, gp_Vec(width + 2, 0, 0));
+        if (pc.IsNull()) {
+          res.error = "build_failed";
+          return res;
+        }
+        BRepAlgoAPI_Common c1(pa, pc);
+        if (!c1.IsDone()) {
+          res.error = "build_failed";
+          return res;
+        }
+        pa = c1.Shape();
       }
       BRepAlgoAPI_Common common(pa, pb);
       if (!common.IsDone()) {
@@ -394,6 +424,18 @@ PhotoCadResult BuildPhotoSolid(PhotoCadMode mode, const Sketch& aIn, const Sketc
     if (!WriteStep(shape, outPath, name)) {
       res.error = "write_failed";
       return res;
+    }
+    // Aynı adla IGES ve BREP kopyaları (kaydetme seçenekleri için); hata olursa yok sayılır.
+    const size_t dot = outPath.find_last_of('.');
+    const std::string base = dot == std::string::npos ? outPath : outPath.substr(0, dot);
+    try {
+      IGESControl_Writer iges("MM", 1);  // 1 = BRep (katı) modu
+      if (iges.AddShape(shape)) {
+        iges.ComputeModel();
+        iges.Write((base + ".igs").c_str());
+      }
+      BRepTools::Write(shape, (base + ".brep").c_str());
+    } catch (const Standard_Failure&) {
     }
     res.ok = true;
   } catch (const Standard_Failure& e) {

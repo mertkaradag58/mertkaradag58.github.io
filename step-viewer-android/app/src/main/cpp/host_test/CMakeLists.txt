@@ -26,3 +26,7 @@ if(ASSIMP_PREFIX)
 else()
   target_compile_definitions(step_host_test PRIVATE STEPVIEWER_NO_ASSIMP)
 endif()
+add_executable(photo_cad_cli photo_cad_cli.cpp ../photo_cad.cpp)
+target_include_directories(photo_cad_cli PRIVATE "${OCCT_PREFIX}/include/opencascade")
+target_link_libraries(photo_cad_cli PRIVATE
+  -Wl,--start-group ${OCCT_LIBS} -Wl,--end-group Threads::Threads ${CMAKE_DL_LIBS})

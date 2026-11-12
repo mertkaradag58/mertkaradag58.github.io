@@ -33,9 +33,15 @@ struct PhotoCadResult {
   double size[3] = {0, 0, 0};
 };
 
-// a: ana görünüş (ekstrüzyon: üst, iki görünüş: üst, döndürme: yan), b: iki görünüşte ön.
+// Görünüş yönü bayrakları (çok görünüşte)
+constexpr int kFlipTop = 1;    // üst görünüşte parçanın önü resmin üstünde (ISO E teknik resim)
+constexpr int kSideRight = 2;  // yan görünüş sağdan bakış (varsayılan: soldan bakış)
+
+// a: ana görünüş (ekstrüzyon: üst, çok görünüş: üst, döndürme: yan), b: çok görünüşte ön,
+// c: çok görünüşte isteğe bağlı yan görünüş (boş olabilir).
 // param: ekstrüzyon kalınlığı (mm). axis: döndürmede 0 = yatay eksen, 1 = dikey eksen.
 PhotoCadResult BuildPhotoSolid(PhotoCadMode mode, const Sketch& a, const Sketch& b, double param,
-                               int axis, const std::string& outPath, const std::string& name);
+                               int axis, const std::string& outPath, const std::string& name,
+                               const Sketch& c = Sketch(), int flags = 0);
 
 }  // namespace stepviewer

@@ -2,19 +2,44 @@
 <!-- Fotoğraftan model (photocad) -->
 <resources>
     <string name="pc_title">Photo to model</string>
-    <string name="pc_menu_entry">Photo to model (rough STEP)</string>
+    <string name="pc_menu_entry">Photo to model (Beta)</string>
     <string name="pc_menu_method">Change method</string>
     <string name="pc_menu_projects">Saved sketches</string>
     <string name="pc_menu_help">How to use</string>
     <string name="pc_menu_delete">Delete this sketch</string>
     <string name="pc_start_title">How should the solid be made?</string>
+    <string name="pc_method_auto">Technical drawing, automatic (PDF / image) · no input needed</string>
+    <string name="pc_auto_scan">Scan automatically</string>
+    <string name="pc_scanning">Scanning the drawing: finding views and dimensions…</string>
+    <string name="pc_auto_failed_title">No view found</string>
+    <string name="pc_auto_failed">No closed outline could be found in this drawing. A sharper PDF or image usually helps. You can still tap inside the views yourself on this screen.</string>
+    <string name="pc_auto_views">%1$d matching views were found and combined.</string>
+    <string name="pc_auto_single">Only one view was found; it was extruded with an assumed thickness of 10 mm.</string>
+    <string name="pc_auto_scale_read">Scale was taken from the largest dimension read on the drawing (%1$s).</string>
+    <string name="pc_auto_scale_paper">No dimension text could be read; the size on paper (1:1) was used.</string>
+    <string name="pc_auto_scale_unknown">No dimension text could be read; the width was assumed to be 100 mm.</string>
     <string name="pc_method_extrude">Give thickness (plate, sheet metal) · 1 photo from the top</string>
-    <string name="pc_method_two_view">Two views (block parts) · top + front photo</string>
+    <string name="pc_method_two_view">Multi-view (block parts, technical drawings) · top + front (+ side)</string>
     <string name="pc_method_revolve">Revolve (shaft, flange, bushing) · 1 side photo</string>
     <string name="pc_open_saved">Open a saved sketch (%1$d)</string>
     <string name="pc_no_projects">No saved sketches yet</string>
     <string name="pc_view_top">Top view</string>
     <string name="pc_view_front">Front view</string>
+    <string name="pc_view_side">Side (optional)</string>
+    <string name="pc_drawing">Technical drawing</string>
+    <string name="pc_drawing_pdf">PDF file</string>
+    <string name="pc_drawing_image">Image of the drawing</string>
+    <string name="pc_drawing_photo">Photograph the paper drawing</string>
+    <string name="pc_pdf_choose_page">Choose a page</string>
+    <string name="pc_pdf_page">Page %1$d</string>
+    <string name="pc_same_image">Use the same drawing</string>
+    <string name="pc_front_edge_bottom">Part front: bottom of image</string>
+    <string name="pc_front_edge_top">Part front: top of image</string>
+    <string name="pc_side_from_left">Side view: seen from the left</string>
+    <string name="pc_side_from_right">Side view: seen from the right</string>
+    <string name="pc_hint_seed_drawing">Tap inside the outline of this view</string>
+    <string name="pc_hint_start_side_view">Optional: a side view makes block parts more accurate. Photo, drawing or Use the same drawing.</string>
+    <string name="pc_auto_scaled_same">Same drawing: the scale of the other view was used</string>
     <string name="pc_camera">Take photo</string>
     <string name="pc_gallery">Gallery</string>
     <string name="pc_video">Frame from video</string>
@@ -68,7 +93,7 @@
     <string name="pc_name">Part name</string>
     <string name="pc_thickness">Thickness</string>
     <string name="pc_build_note_extrude">The outline is extruded by the thickness; holes go through.</string>
-    <string name="pc_build_note_two_view">The top and front outlines are extruded and intersected. Good for block-like parts; hidden pockets cannot be seen in photos.</string>
+    <string name="pc_build_note_two_view">The top, front and (if given) side outlines are extruded and intersected. Good for block-like parts; hidden pockets, sections and slopes are not reconstructed.</string>
     <string name="pc_build_note_revolve">The half of the outline on one side of the green axis is revolved 360°.</string>
     <string name="pc_building">Creating the solid…</string>
     <string name="pc_need_contour">Find or draw the outline first</string>
@@ -77,7 +102,7 @@
     <string name="pc_err_title">Could not create the model</string>
     <string name="pc_err_open">The outline is missing or too small.</string>
     <string name="pc_err_bad">The outline crosses itself. Drag the crossing points apart or press Straighten, then try again.</string>
-    <string name="pc_err_empty">The result is empty. In two-view mode the top and front views must have the same width and direction.</string>
+    <string name="pc_err_empty">The result is empty. In multi-view mode the views must have matching widths and directions (check the Part front / Side view buttons).</string>
     <string name="pc_err_write">The STEP file could not be written.</string>
     <string name="pc_err_param">Enter a thickness greater than zero.</string>
     <string name="pc_err_build">The geometry could not be built. Simplify the outline (Straighten, fewer points) and try again.</string>
@@ -91,6 +116,8 @@ This is a rough model from a photo; check critical dimensions. You can reopen th
     <string name="pc_save">Save…</string>
     <string name="pc_share">Share</string>
     <string name="pc_saved">Saved</string>
+    <string name="pc_save_as">Save as</string>
+    <string name="pc_save_mesh_note">STL / OBJ / GLB: open in viewer, then ⋮ › Export</string>
     <string name="pc_save_failed">Could not save</string>
     <string name="pc_camera_denied">Camera permission is needed to take a photo</string>
     <string name="pc_help">1. Place the part on a plain surface with a different colour (e.g. white paper for a dark part) and take the photo straight on, from as far away as possible and zoomed in a little, so that perspective distortion stays small.
@@ -101,5 +128,7 @@ This is a rough model from a photo; check critical dimensions. You can reopen th
 
 4. Create STEP: plate parts with a thickness, block parts from two views (top + front), shafts and flanges by revolving.
 
-A single photo cannot capture hidden depth, threads, chamfers or inner pockets; the result is a rough model for quick dimensioning, quotes and fixtures. Sketches are saved: you can reopen them later, change dimensions and create the STEP again.</string>
+A single photo cannot capture hidden depth, threads, chamfers or inner pockets; the result is a rough model for quick dimensioning, quotes and fixtures. Sketches are saved: you can reopen them later, change dimensions and create the STEP again.
+
+Technical drawings: choose Multi-view, then Technical drawing (PDF, image or photo of the paper). Tap inside the front view, then switch to Top and Side and tap inside those views on the same page. Enter one dimension with Scale; the other views use the same scale. In both ISO E (European) and ISO A (American) drawings the front of the part is at the bottom of the top view, so keep Part front: bottom of image. The view to the right of the front view is seen from the left in ISO E and from the right in ISO A; set Side view accordingly. Only outer outlines and round holes are taken; sections, hidden lines, chamfers and threads are ignored.</string>
 </resources>
