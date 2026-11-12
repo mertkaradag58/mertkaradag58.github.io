@@ -245,4 +245,9 @@
     <string name="drawing_info">Чертёж · %1$s</string>
     <string name="menu_cost">Расчёт стоимости</string>
     <string name="cost_title">Расчёт стоимости</string>
+    <string name="menu_sheet">Развёртка листовой детали (DXF)</string>
+    <string name="menu_qc">Протокол контроля (PDF)</string>
+    <string name="menu_fit">Калькулятор посадок ISO</string>
+    <string name="fit_button">Допуск</string>
+    <string name="qc_add_from_measure">В протокол</string>
 </resources>

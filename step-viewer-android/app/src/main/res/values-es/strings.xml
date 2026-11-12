@@ -239,4 +239,9 @@ Escala 1:1 en mm, vista desde fuera, esquina inferior izquierda en 0,0. Contorno
     <string name="drawing_info">Plano técnico · %1$s</string>
     <string name="menu_cost">Cálculo de costes</string>
     <string name="cost_title">Cálculo de costes</string>
+    <string name="menu_sheet">Desarrollo de chapa (DXF)</string>
+    <string name="menu_qc">Informe de inspección (PDF)</string>
+    <string name="menu_fit">Calculadora de ajustes ISO</string>
+    <string name="fit_button">Tolerancia</string>
+    <string name="qc_add_from_measure">Al informe</string>
 </resources>

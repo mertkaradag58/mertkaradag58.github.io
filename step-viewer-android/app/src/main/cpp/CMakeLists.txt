@@ -46,7 +46,8 @@ add_library(stepviewer SHARED
   dxf_export.cpp
   drawing_views.cpp
   photo_cad.cpp
-  photo_cad_jni.cpp)
+  photo_cad_jni.cpp
+  sheet_unfold.cpp)
 
 target_include_directories(stepviewer PRIVATE ${OCCT_INCLUDE_DIR} "${ASSIMP_PREFIX}/include")
 
