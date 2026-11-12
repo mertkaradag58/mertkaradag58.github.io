@@ -25,6 +25,7 @@ class HoleTableSheet(
     private val totalHoles: Int,
     private val onSelect: (Holes.Group) -> Unit,
     private val onSaveCsv: () -> Unit,
+    private val onAddToReport: (() -> Unit)? = null,
 ) {
     private val density = context.resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).toInt()
@@ -58,6 +59,15 @@ class HoleTableSheet(
             }
         }
         header.addView(save)
+        if (onAddToReport != null) {
+            header.addView(MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+                text = context.getString(R.string.qc_holes_to_report)
+                setOnClickListener {
+                    dialog.dismiss()
+                    onAddToReport.invoke()
+                }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(6) })
+        }
         root.addView(header)
 
         root.addView(TextView(context).apply {

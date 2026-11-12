@@ -231,4 +231,9 @@ Maßstab 1:1 in mm, Ansicht von außen, linke untere Ecke bei 0,0. Außenkontur 
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Papierformat</string>
     <string name="drawing_info">Technische Zeichnung · %1$s</string>
+    <string name="menu_sheet">Blechabwicklung (DXF)</string>
+    <string name="menu_qc">Prüfbericht (PDF)</string>
+    <string name="menu_fit">ISO-Passungsrechner</string>
+    <string name="fit_button">Toleranz</string>
+    <string name="qc_add_from_measure">Zum Bericht</string>
 </resources>

@@ -152,6 +152,10 @@ class MainActivity : AppCompatActivity() {
         if (uri != null && job != null) runDrawingSave(uri, job, pdf = false)
     }
 
+    private val exportQcPdf = registerForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if (uri != null) runQcPdf(uri)
+    }
+
     private val exportCsv = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) runBomExport(uri)
     }
@@ -200,6 +204,8 @@ class MainActivity : AppCompatActivity() {
                 findViewById<View>(R.id.measure_scroll).scrollTo(0, 0)
                 measureOverlay = overlay
                 pushOverlay()
+                findViewById<View>(R.id.measure_actions).visibility =
+                    if (measure.candidates.isEmpty()) View.GONE else View.VISIBLE
             },
         )
 
@@ -260,6 +266,9 @@ class MainActivity : AppCompatActivity() {
         pmiButton = findViewById(R.id.pmi_button)
         explodeCard = findViewById(R.id.explode_card)
         explodeSlider = findViewById(R.id.explode_slider)
+
+        findViewById<View>(R.id.measure_to_report).setOnClickListener { addMeasureToReport() }
+        findViewById<View>(R.id.measure_to_fit).setOnClickListener { openFitFromMeasure() }
 
         modelView.onTap = { x, y -> onModelTap(x, y) }
         modelView.onDoubleTap = { x, y -> onModelDoubleTap(x, y) }
@@ -352,6 +361,9 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(Menu.NONE, MENU_HOLES, 1, R.string.menu_holes).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_DXF, 1, R.string.menu_dxf).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_DRAWING, 1, R.string.menu_drawing).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_SHEET, 1, R.string.menu_sheet).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_QC, 1, R.string.menu_qc).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_FIT, 1, R.string.menu_fit)
         popup.menu.add(Menu.NONE, MENU_QUALITY, 2, R.string.menu_quality)
         popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
         if (!billing.adFree) {
@@ -372,6 +384,9 @@ class MainActivity : AppCompatActivity() {
                 MENU_HOLES -> showHoleTable()
                 MENU_DXF -> startDxfPick()
                 MENU_DRAWING -> showDrawing()
+                MENU_SHEET -> startSheetPick()
+                MENU_QC -> showInspection()
+                MENU_FIT -> FitDialog(this).show()
                 MENU_ABOUT -> showAbout()
                 MENU_QUALITY -> showQualityDialog()
                 MENU_PRIVACY -> ads.showPrivacyOptions()
@@ -767,7 +782,10 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.explode_measure_off, Toast.LENGTH_SHORT).show()
         }
         if (enabled && selectMode) setSelectMode(false)
-        if (enabled) stopDxfPick()
+        if (enabled) {
+            stopDxfPick()
+            stopSheetPick()
+        }
         measureMode = enabled
         toolMeasure.isActivated = enabled
         measureCard.visibility = if (enabled && currentMesh != null) View.VISIBLE else View.GONE
@@ -782,6 +800,10 @@ class MainActivity : AppCompatActivity() {
         if (loading) return
         if (dxfPickMode) {
             pickDxfFace(x, y)
+            return
+        }
+        if (sheetPickMode) {
+            pickSheetFace(x, y)
             return
         }
         if (selectMode) {
@@ -1440,6 +1462,7 @@ class MainActivity : AppCompatActivity() {
             totalHoles = groups.sumOf { it.holes.size },
             onSelect = { selectHoleGroup(mesh, it) },
             onSaveCsv = { exportHolesCsv.launch(baseFileName() + "_delik_tablosu.csv") },
+            onAddToReport = { addHolesToReport(groups) },
         ).show()
     }
 
@@ -1628,11 +1651,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun shareDxf(data: ByteArray) {
+    private fun shareDxf(data: ByteArray, suffix: String = "_kesim.dxf") {
         try {
             val dir = File(cacheDir, "shared").apply { mkdirs() }
             dir.listFiles()?.forEach { it.delete() }
-            val file = File(dir, baseFileName() + "_kesim.dxf")
+            val file = File(dir, baseFileName() + suffix)
             file.writeBytes(data)
             val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
             val send = Intent(Intent.ACTION_SEND).apply {
@@ -1894,6 +1917,265 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    // -----------------------------------------------------------------------
+    // Atölye: kalite kontrol raporu, geçme hesabı, sac açınımı
+    // -----------------------------------------------------------------------
+
+    private var inspection: Inspection? = null
+
+    private fun currentInspection(): Inspection {
+        val key = currentName.ifEmpty { "-" }
+        val cur = inspection
+        if (cur != null && cur.fileKey == key) return cur
+        return Inspection(this, key).also { inspection = it }
+    }
+
+    private fun addMeasureToReport() {
+        val cands = measure.candidates
+        if (cands.isEmpty()) return
+        if (cands.size == 1) {
+            addCandidate(cands[0])
+            return
+        }
+        val labels = cands.map { c ->
+            c.label + ": " + if (c.unit == Inspection.Dim.DEG) fmt(c.value, 2) + "°" else fmt(c.value)
+        }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.qc_pick_value)
+            .setItems(labels) { _, which -> addCandidate(cands[which]) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun addCandidate(c: MeasureController.Candidate) {
+        val report = currentInspection()
+        val item = report.newItem(c.label, roundNominal(c.value, c.unit), c.unit, c.anchor)
+        InspectionSheet.editItem(this, report, item, isNew = true) {
+            report.items += item
+            report.save()
+            Snackbar.make(findViewById(R.id.model_view), getString(R.string.qc_added, report.items.size), Snackbar.LENGTH_LONG)
+                .setAction(R.string.qc_open) { showInspection() }
+                .show()
+        }
+    }
+
+    /** CAD ölçüsünü makul basamağa yuvarlar (kayan nokta gürültüsü olmasın). */
+    private fun roundNominal(v: Double, unit: Inspection.Dim): Double {
+        val f = if (unit == Inspection.Dim.DEG) 100.0 else 1000.0
+        return kotlin.math.round(v * f) / f
+    }
+
+    private fun openFitFromMeasure() {
+        val c = measure.candidates.firstOrNull { it.isDiameter }
+            ?: measure.candidates.firstOrNull { it.unit == Inspection.Dim.MM }
+        FitDialog(this, c?.let { roundNominal(it.value, it.unit) }).show()
+    }
+
+    private fun addHolesToReport(groups: List<Holes.Group>) {
+        val report = currentInspection()
+        for (g in groups) {
+            val h = g.first
+            val label = getString(R.string.qc_hole_label, g.label, g.holes.size)
+            report.items += report.newItem(label, roundNominal(h.diameter, Inspection.Dim.MM), Inspection.Dim.MM, h.entry)
+        }
+        report.save()
+        showInspection()
+    }
+
+    private fun showInspection() {
+        if (currentMesh == null) return
+        InspectionSheet(
+            context = this,
+            report = currentInspection(),
+            onSavePdf = { exportQcPdf.launch(baseFileName() + "_kalite_kontrol.pdf") },
+            onSharePdf = { shareQcPdf() },
+            onSelect = { item -> item.anchor?.let { modelView.focusOn(it) } },
+        ).show()
+    }
+
+    private fun qcTexts(report: Inspection): Inspection.PdfTexts {
+        val (ok, nok, open) = report.counts()
+        val now = java.util.Date()
+        return Inspection.PdfTexts(
+            title = getString(R.string.qc_title),
+            fileLabel = getString(R.string.qc_pdf_file),
+            fileName = currentName,
+            dateLabel = getString(R.string.drawing_t_date),
+            date = DateFormat.getDateFormat(this).format(now) + " " + DateFormat.getTimeFormat(this).format(now),
+            inspectorLabel = getString(R.string.qc_inspector),
+            orderLabel = getString(R.string.qc_order),
+            generalLabel = getString(R.string.qc_pdf_general, "ISO 2768-" + report.generalClass),
+            headers = listOf(
+                "#", getString(R.string.qc_h_feature), getString(R.string.qc_h_nominal), getString(R.string.qc_h_tol),
+                "Min", "Max", getString(R.string.qc_h_actual), getString(R.string.qc_h_result),
+            ),
+            okText = getString(R.string.qc_ok),
+            nokText = getString(R.string.qc_nok),
+            summary = getString(R.string.qc_summary, report.items.size, ok, nok, open),
+            signature = getString(R.string.qc_signature),
+            app = getString(R.string.app_name),
+        )
+    }
+
+    /** Balonlu model görüntüsüyle rapor PDF'ini yazar; yazma arka planda yapılır. */
+    private fun writeQcPdf(open: () -> java.io.OutputStream, done: (Boolean) -> Unit) {
+        val report = currentInspection()
+        val texts = qcTexts(report)
+        val mvp = modelView.currentMvp()
+        val items = ArrayList(report.items)
+        modelView.captureScreenshot { bmp ->
+            if (isDestroyed) return@captureScreenshot
+            val image = bmp?.let { Inspection.drawBalloons(it, items, mvp, resources.displayMetrics.density) }
+            showBusy(getString(R.string.export_busy))
+            executor.execute {
+                val ok = runCatching { open().use { report.writePdf(it, image, texts) } }.isSuccess
+                runOnUiThread {
+                    if (isDestroyed) return@runOnUiThread
+                    hideBusy()
+                    done(ok)
+                }
+            }
+        }
+    }
+
+    private fun runQcPdf(uri: Uri) {
+        val name = displayName(uri)
+        writeQcPdf({ contentResolver.openOutputStream(uri, "w") ?: throw IOException("open") }) { ok ->
+            Toast.makeText(
+                this,
+                if (ok) getString(R.string.qc_saved, name) else getString(R.string.export_failed),
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+    private fun shareQcPdf() {
+        val dir = File(cacheDir, "shared").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val file = File(dir, baseFileName() + "_kalite_kontrol.pdf")
+        writeQcPdf({ file.outputStream() }) { ok ->
+            if (!ok) {
+                Toast.makeText(this, R.string.share_failed, Toast.LENGTH_SHORT).show()
+                return@writeQcPdf
+            }
+            try {
+                val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TEXT, currentName)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(send, getString(R.string.share_title)))
+                adAfterShare = true
+            } catch (e: Exception) {
+                Toast.makeText(this, R.string.share_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private var sheetPickMode = false
+    private var sheetSnackbar: Snackbar? = null
+
+    private fun startSheetPick() {
+        val mesh = currentMesh ?: return
+        if (mesh.isMeshFormat) {
+            Toast.makeText(this, R.string.sheet_cad_only, Toast.LENGTH_LONG).show()
+            return
+        }
+        val visibleParts = partVisible.indices.filter { partVisible[it] }
+        if (visibleParts.size == 1) {
+            runUnfold(mesh, visibleParts[0], -1)
+            return
+        }
+        if (measureMode) setMeasureMode(false)
+        if (selectMode) setSelectMode(false)
+        if (explodeFactor > 0f) closeExplode()
+        stopDxfPick()
+        sheetPickMode = true
+        sheetSnackbar?.dismiss()
+        val bar = Snackbar.make(findViewById(R.id.model_view), R.string.sheet_pick_hint, Snackbar.LENGTH_INDEFINITE)
+        bar.setAction(R.string.cancel) { }
+        bar.addCallback(object : Snackbar.Callback() {
+            override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                if (sheetSnackbar === transientBottomBar) {
+                    sheetSnackbar = null
+                    sheetPickMode = false
+                }
+            }
+        })
+        sheetSnackbar = bar
+        bar.show()
+    }
+
+    private fun stopSheetPick() {
+        sheetPickMode = false
+        val bar = sheetSnackbar
+        sheetSnackbar = null
+        bar?.dismiss()
+    }
+
+    private fun pickSheetFace(x: Float, y: Float) {
+        val mesh = currentMesh ?: return
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val visible = if (partVisible.all { it }) null else partVisible.copyOf()
+        val clip = if (sectionOn) clipPlane(mesh) else null
+        executor.execute {
+            val face = Picker.pickFace(mesh, mvp, w, h, x, y, visible, clip)
+            runOnUiThread {
+                if (mesh !== currentMesh || !sheetPickMode || face < 0) return@runOnUiThread
+                var part = 0
+                while (part + 1 < mesh.partFaceOffsets.size - 1 && mesh.partFaceOffsets[part + 1] <= face) part++
+                stopSheetPick()
+                runUnfold(mesh, part, face)
+            }
+        }
+    }
+
+    private fun runUnfold(mesh: StepMesh, part: Int, face: Int) {
+        val prefs = getSharedPreferences("workshop", MODE_PRIVATE)
+        val k = prefs.getFloat("k_factor", 0.44f).toDouble()
+        showBusy(getString(R.string.sheet_busy))
+        executor.execute {
+            val r = try {
+                SheetMetal.unfold(part, face, k)
+            } catch (_: Throwable) {
+                null
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                hideBusy()
+                if (mesh !== currentMesh) return@runOnUiThread
+                val msg = when {
+                    r == null -> R.string.sheet_failed
+                    r.status == SheetMetal.STATUS_NOT_PLANAR -> R.string.sheet_not_planar
+                    r.status == SheetMetal.STATUS_NO_THICKNESS -> R.string.sheet_not_sheet
+                    r.status != SheetMetal.STATUS_OK -> R.string.sheet_not_sheet
+                    else -> 0
+                }
+                if (msg != 0 || r == null) {
+                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                SheetMetal.show(
+                    context = this,
+                    r = r,
+                    onKFactor = { k2 ->
+                        prefs.edit().putFloat("k_factor", k2.toFloat()).apply()
+                        runUnfold(mesh, part, face)
+                    },
+                    onSave = {
+                        pendingDxf = r.dxf
+                        exportDxf.launch(baseFileName() + "_acinim.dxf")
+                    },
+                    onShare = { shareDxf(r.dxf, "_acinim.dxf") },
+                )
+            }
+        }
+    }
+
     companion object {
         private const val MENU_INFO = 1
         private const val MENU_SHARE = 2
@@ -1908,6 +2190,9 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_HOLES = 11
         private const val MENU_DXF = 12
         private const val MENU_DRAWING = 13
+        private const val MENU_SHEET = 20
+        private const val MENU_QC = 21
+        private const val MENU_FIT = 22
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
     }

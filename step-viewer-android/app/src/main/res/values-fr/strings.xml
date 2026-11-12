@@ -230,4 +230,9 @@ Découpes intérieures : %3$d
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Format du papier</string>
     <string name="drawing_info">Dessin technique · %1$s</string>
+    <string name="menu_sheet">Développé de tôlerie (DXF)</string>
+    <string name="menu_qc">Rapport de contrôle (PDF)</string>
+    <string name="menu_fit">Calcul des ajustements ISO</string>
+    <string name="fit_button">Tolérance</string>
+    <string name="qc_add_from_measure">Au rapport</string>
 </resources>
