@@ -345,6 +345,7 @@ class MainActivity : AppCompatActivity() {
         val popup = PopupMenu(this, anchor)
         val hasModel = currentMesh != null
         popup.menu.add(Menu.NONE, MENU_INFO, 0, R.string.menu_model_info).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_COST, 0, R.string.menu_cost).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_SHARE, 1, R.string.menu_share).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_MARKUP, 1, R.string.menu_markup).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_EXPORT, 1, R.string.menu_export).isEnabled = hasModel
@@ -365,6 +366,7 @@ class MainActivity : AppCompatActivity() {
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_INFO -> showModelInfo()
+                MENU_COST -> showCost()
                 MENU_SHARE -> shareScreenshot()
                 MENU_MARKUP -> startMarkup()
                 MENU_EXPORT -> showExportDialog()
@@ -1779,6 +1781,45 @@ class MainActivity : AppCompatActivity() {
         ).show()
     }
 
+    /** Maliyet hesabı: seçim varsa seçili parçalar, yoksa görünen parçalar. */
+    private fun showCost() {
+        val mesh = currentMesh ?: return
+        val parts: IntArray
+        val title: String
+        if (selStart >= 0) {
+            parts = (selStart until selEnd).toList().toIntArray()
+            title = selName
+        } else {
+            parts = partVisible.indices.filter { partVisible[it] }.toIntArray()
+            title = if (parts.size == mesh.partCount) getString(R.string.info_scope_all, mesh.partCount)
+            else getString(R.string.info_scope_visible, parts.size, mesh.partCount)
+        }
+        if (parts.isEmpty()) return
+        CostDialog(
+            context = this,
+            mesh = mesh,
+            parts = parts,
+            scopeTitle = title,
+            runInBackground = { task -> executor.execute(task) },
+            runOnUi = { task -> runOnUiThread { if (!isDestroyed) task() } },
+            loadHoles = {
+                val cached = holeCache
+                if (cached != null && holeCacheMesh === mesh) {
+                    cached
+                } else {
+                    val loaded = Holes.load()
+                    if (loaded != null) runOnUiThread {
+                        if (currentMesh === mesh) {
+                            holeCache = loaded
+                            holeCacheMesh = mesh
+                        }
+                    }
+                    loaded
+                }
+            },
+        ).show()
+    }
+
     /** Ekran görüntüsünü alıp işaretleme ekranını açar. */
     private fun startMarkup() {
         val overlayText = if (measureMode) measure.lastText else ""
@@ -1908,6 +1949,7 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_HOLES = 11
         private const val MENU_DXF = 12
         private const val MENU_DRAWING = 13
+        private const val MENU_COST = 14
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
     }

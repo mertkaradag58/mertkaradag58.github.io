@@ -264,4 +264,44 @@
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Kâğıt boyutu</string>
     <string name="drawing_info">Teknik resim · %1$s</string>
+
+    <!-- Maliyet hesabı -->
+    <string name="menu_cost">Maliyet hesabı</string>
+    <string name="cost_title">Maliyet hesabı</string>
+    <string name="cost_section_material">Malzeme</string>
+    <string name="cost_section_stock">Ham malzeme</string>
+    <string name="cost_section_labor">İşleme / işçilik</string>
+    <string name="cost_section_extra">Ek giderler ve kâr</string>
+    <string name="cost_section_result">Parça başı maliyet</string>
+    <string name="cost_price_per_kg">Malzeme fiyatı (%1$s/kg)</string>
+    <string name="cost_stock_type">Ham malzeme / yöntem</string>
+    <string name="cost_allowance">Her yüzde işleme payı (mm)</string>
+    <string name="cost_rate">Makine saat ücreti (%1$s/saat)</string>
+    <string name="cost_time">Parça başı süre (dk), boş = tahmin</string>
+    <string name="cost_time_estimate">Tahmin: %1$s dk (talaş hacmi, yüzey ve deliklerden)</string>
+    <string name="cost_setup">Seri başına hazırlık süresi (dk)</string>
+    <string name="cost_quantity">Adet</string>
+    <string name="cost_extra">Parça başı ek: kaplama, ısıl işlem… (%1$s)</string>
+    <string name="cost_overhead" formatted="false">Genel gider (%)</string>
+    <string name="cost_profit" formatted="false">Kâr (%)</string>
+    <string name="cost_vat" formatted="false">KDV (%)</string>
+    <string name="cost_parts_count">Parça parça hesaplandı: %1$d parça</string>
+    <string name="cost_part_mass">Bitmiş parça kütlesi: %1$s</string>
+    <string name="cost_missing_solid">%1$d parçada kapalı katı yok: yalnız ham malzemesi sayıldı.</string>
+    <string name="cost_holes">Delik sayısı: %1$d</string>
+    <string name="cost_stock_block_dims">Ham blok: %1$s × %2$s × %3$s mm</string>
+    <string name="cost_stock_round_dims">Yuvarlak çubuk: Ø%1$s × %2$s mm</string>
+    <string name="cost_stock_mass">Ham malzeme kütlesi: %1$s</string>
+    <string name="cost_scrap">Talaş / fire: %1$s (%%%2$s)</string>
+    <string name="cost_stock_net_info">Net hacim: malzeme bitmiş parça kütlesinden hesaplanır (3D baskı, döküm).</string>
+    <string name="cost_line_material">Malzeme: %1$s</string>
+    <string name="cost_line_machining">İşleme (%1$s dk): %2$s</string>
+    <string name="cost_line_setup">Hazırlık payı: %1$s</string>
+    <string name="cost_line_extra">Ek işlemler: %1$s</string>
+    <string name="cost_line_overhead">Genel gider (%%%1$s): %2$s</string>
+    <string name="cost_line_profit">Kâr (%%%1$s): %2$s</string>
+    <string name="cost_line_unit">KDV hariç birim fiyat: %1$s</string>
+    <string name="cost_line_vat">KDV (%%%1$s): %2$s</string>
+    <string name="cost_total">Birim: %1$s · %2$d adet toplam: %3$s</string>
+    <string name="cost_disclaimer">Kaba tahmindir. Ham malzeme her parçanın model eksenlerindeki sınır kutusundan çıkarılır; fiyatları, ücreti ve süreyi atölyenize göre düzenleyin. Girdiğiniz değerler hatırlanır.</string>
 </resources>
