@@ -25,20 +25,20 @@ android {
         targetSdk = 36
         // Play'e her yüklemede sürüm kodu artmalı: CI çalışma numarasından türetilir.
         versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
-        versionName = "1.0.0"
+        versionName = "1.0.1"
 
-        // AdMob kimlikleri gizli değildir. Gerçek kimlikler verilmezse Google'ın test reklamları kullanılır.
+        // AdMob kimlikleri gizli değildir. Varsayılanlar Cepte CAD için gerçek AdMob kimlikleridir.
         // -PadmobAppId=... veya ADMOB_APP_ID ortam değişkeniyle de değiştirilebilir.
         fun admob(prop: String, env: String, testId: String): String =
             (project.findProperty(prop) as String?)?.takeIf { it.isNotBlank() }
                 ?: System.getenv(env)?.takeIf { it.isNotBlank() }
                 ?: testId
         manifestPlaceholders["admobAppId"] =
-            admob("admobAppId", "ADMOB_APP_ID", "ca-app-pub-3940256099942544~3347511713")
+            admob("admobAppId", "ADMOB_APP_ID", "ca-app-pub-1908165236929579~1744415716")
         buildConfigField("String", "ADMOB_BANNER_ID",
-            "\"" + admob("admobBannerId", "ADMOB_BANNER_ID", "ca-app-pub-3940256099942544/9214589741") + "\"")
+            "\"" + admob("admobBannerId", "ADMOB_BANNER_ID", "ca-app-pub-1908165236929579/8533185347") + "\"")
         buildConfigField("String", "ADMOB_INTERSTITIAL_ID",
-            "\"" + admob("admobInterstitialId", "ADMOB_INTERSTITIAL_ID", "ca-app-pub-3940256099942544/1033173712") + "\"")
+            "\"" + admob("admobInterstitialId", "ADMOB_INTERSTITIAL_ID", "ca-app-pub-1908165236929579/2195182717") + "\"")
 
         ndk {
             abiFilters += listOf("arm64-v8a")
