@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fotoğraftan model (photocad) -->
+<resources>
+    <string name="pc_title">Fotoğraftan model</string>
+    <string name="pc_menu_entry">Fotoğraftan model (Beta)</string>
+    <string name="pc_menu_method">Yöntemi değiştir</string>
+    <string name="pc_menu_projects">Kayıtlı çizimler</string>
+    <string name="pc_menu_help">Nasıl kullanılır</string>
+    <string name="pc_menu_delete">Bu çizimi sil</string>
+    <string name="pc_start_title">Katı model nasıl oluşturulsun?</string>
+    <string name="pc_method_auto">Teknik resimden otomatik (PDF / resim) · hiçbir şey girmeden</string>
+    <string name="pc_auto_scan">Otomatik tara</string>
+    <string name="pc_scanning">Teknik resim taranıyor: görünüşler ve ölçüler bulunuyor…</string>
+    <string name="pc_auto_failed_title">Görünüş bulunamadı</string>
+    <string name="pc_auto_failed">Bu resimde kapalı bir kontur bulunamadı. Daha net bir PDF ya da resim genellikle işe yarar. İsterseniz bu ekranda görünüşlerin içine kendiniz dokunabilirsiniz.</string>
+    <string name="pc_auto_views">%1$d eşleşen görünüş bulundu ve birleştirildi.</string>
+    <string name="pc_auto_single">Yalnızca bir görünüş bulundu; 10 mm varsayılan kalınlıkla çekildi.</string>
+    <string name="pc_auto_scale_read">Ölçek, resimde okunan en büyük ölçüden (%1$s) alındı.</string>
+    <string name="pc_auto_scale_paper">Ölçü yazısı okunamadı; kağıt üzerindeki boyut (1:1) kullanıldı.</string>
+    <string name="pc_auto_scale_unknown">Ölçü yazısı okunamadı; genişlik 100 mm varsayıldı.</string>
+    <string name="pc_method_extrude">Kalınlık ver (plaka, sac) · üstten 1 fotoğraf</string>
+    <string name="pc_method_two_view">Çok görünüş (blok parça, teknik resim) · üst + ön (+ yan)</string>
+    <string name="pc_method_revolve">Döndür (mil, flanş, burç) · yandan 1 fotoğraf</string>
+    <string name="pc_open_saved">Kayıtlı çizimi aç (%1$d)</string>
+    <string name="pc_no_projects">Henüz kayıtlı çizim yok</string>
+    <string name="pc_view_top">Üst görünüş</string>
+    <string name="pc_view_front">Ön görünüş</string>
+    <string name="pc_view_side">Yan (isteğe bağlı)</string>
+    <string name="pc_drawing">Teknik resim</string>
+    <string name="pc_drawing_pdf">PDF dosyası</string>
+    <string name="pc_drawing_image">Resim dosyası</string>
+    <string name="pc_drawing_photo">Kağıttaki resmi fotoğrafla</string>
+    <string name="pc_pdf_choose_page">Sayfa seçin</string>
+    <string name="pc_pdf_page">Sayfa %1$d</string>
+    <string name="pc_same_image">Aynı resmi kullan</string>
+    <string name="pc_front_edge_bottom">Parçanın önü: resmin altında</string>
+    <string name="pc_front_edge_top">Parçanın önü: resmin üstünde</string>
+    <string name="pc_side_from_left">Yan görünüş: soldan bakış</string>
+    <string name="pc_side_from_right">Yan görünüş: sağdan bakış</string>
+    <string name="pc_hint_seed_drawing">Bu görünüşün çerçevesinin içine dokunun</string>
+    <string name="pc_hint_start_side_view">İsteğe bağlı: yan görünüş blok parçaları daha doğru yapar. Fotoğraf, teknik resim ya da Aynı resmi kullan.</string>
+    <string name="pc_auto_scaled_same">Aynı resim: diğer görünüşün ölçeği kullanıldı</string>
+    <string name="pc_camera">Fotoğraf çek</string>
+    <string name="pc_gallery">Galeri</string>
+    <string name="pc_video">Videodan kare</string>
+    <string name="pc_video_record">Video çek</string>
+    <string name="pc_video_pick">Video seç</string>
+    <string name="pc_draw">Elle çiz</string>
+    <string name="pc_scale">Ölçek</string>
+    <string name="pc_straighten">Düzle</string>
+    <string name="pc_straightened">Yataya / dikeye yakın kenarlar düzlendi</string>
+    <string name="pc_add_hole">Delik ekle</string>
+    <string name="pc_tune">Algılama ayarı</string>
+    <string name="pc_undo">Geri al</string>
+    <string name="pc_axis_h">Eksen: yatay</string>
+    <string name="pc_axis_v">Eksen: dikey</string>
+    <string name="pc_sensitivity">Hassasiyet (parçanın bir kısmı eksikse artırın, gölge de alınıyorsa azaltın)</string>
+    <string name="pc_detail">Detay (daha çok köşe noktası)</string>
+    <string name="pc_draw_done">Bitti</string>
+    <string name="pc_draw_undo_point">Son noktayı sil</string>
+    <string name="pc_draw_need3">En az 3 nokta gerekli</string>
+    <string name="pc_draw_as_hole">Yeni çizilen kontur delik olarak eklenecek</string>
+    <string name="pc_cancel">Vazgeç</string>
+    <string name="pc_delete">Sil</string>
+    <string name="pc_delete_confirm">Bu çizim, fotoğrafları ve STEP dosyası silinsin mi?</string>
+    <string name="pc_hint_start_top">Parçayı düz ve kontrastlı bir zemine koyup tam tepeden fotoğraflayın. İsterseniz elle çizin.</string>
+    <string name="pc_hint_start_front">Şimdi parçayı tam önden fotoğraflayın (sağ-sol yönü üst görünüşle aynı olsun).</string>
+    <string name="pc_hint_start_side">Parçayı ekseni yatay ya da dikey olacak şekilde yandan fotoğraflayın.</string>
+    <string name="pc_hint_seed">Parçanın üzerine dokunun</string>
+    <string name="pc_hint_draw">Köşelere sırayla dokunun. Kapatmak için ilk noktaya dokunun.</string>
+    <string name="pc_hint_scale">Ölçek ile bilinen bir ölçüyü girin</string>
+    <string name="pc_hint_edit">%1$s × %2$s mm · ölçü vermek için kenara veya deliğe dokunun · noktaları sürükleyin · uzun bas: nokta ekle / sil</string>
+    <string name="pc_loading_image">Fotoğraf yükleniyor…</string>
+    <string name="pc_image_failed">Fotoğraf açılamadı</string>
+    <string name="pc_video_failed">Video açılamadı</string>
+    <string name="pc_frame_title">Kare seçin</string>
+    <string name="pc_frame_hint">Kaydırıcıyı parçanın tam karşıdan göründüğü ana getirin.</string>
+    <string name="pc_frame_use">Bu kareyi kullan</string>
+    <string name="pc_detecting">Kontur bulunuyor…</string>
+    <string name="pc_detect_failed">Kontur bulunamadı. Parçaya tekrar dokunun, hassasiyeti değiştirin ya da elle çizin.</string>
+    <string name="pc_auto_scaled">Ön görünüş, üst görünüşün genişliğine göre ölçeklendi</string>
+    <string name="pc_scale_title">Gerçek ölçü</string>
+    <string name="pc_scale_note">Parçanın toplam genişliğini veya yüksekliğini girin. İkisini birden girerseniz fotoğraftaki hafif açı da düzeltilir.</string>
+    <string name="pc_width">Toplam genişlik</string>
+    <string name="pc_height">Toplam yükseklik</string>
+    <string name="pc_edge_title">Kenar ölçüsü</string>
+    <string name="pc_edge_length">Uzunluk</string>
+    <string name="pc_edge_note">Yatay ve dikey kenarlarda gerdirme yapılır: kenarın sağında (veya üstünde) kalan her şey birlikte kayar.</string>
+    <string name="pc_hole_title">Delik</string>
+    <string name="pc_diameter">Çap</string>
+    <string name="pc_build">STEP oluştur</string>
+    <string name="pc_build_go">Oluştur</string>
+    <string name="pc_name">Parça adı</string>
+    <string name="pc_thickness">Kalınlık</string>
+    <string name="pc_build_note_extrude">Kontur kalınlık kadar çekilir, delikler boydan boya geçer.</string>
+    <string name="pc_build_note_two_view">Üst, ön ve (varsa) yan konturlar çekilip kesiştirilir. Blok parçalar için uygundur; gizli cepler, kesitler ve eğimli yüzeyler çıkmaz.</string>
+    <string name="pc_build_note_revolve">Konturun yeşil eksenin bir yanındaki yarısı 360° döndürülür.</string>
+    <string name="pc_building">Katı model oluşturuluyor…</string>
+    <string name="pc_need_contour">Önce konturu bulun veya çizin</string>
+    <string name="pc_need_front">Ön görünüş henüz yok</string>
+    <string name="pc_revolve_tip">Fotoğrafı yandan çekin; tüm siluet olabilir, üst yarısı döndürülür.</string>
+    <string name="pc_err_title">Model oluşturulamadı</string>
+    <string name="pc_err_open">Kontur yok veya çok küçük.</string>
+    <string name="pc_err_bad">Kontur kendini kesiyor. Kesişen noktaları ayırın veya Düzle\'ye basıp tekrar deneyin.</string>
+    <string name="pc_err_empty">Sonuç boş çıktı. Çok görünüşte görünüşlerin genişlikleri ve yönleri uyumlu olmalı (Parçanın önü / Yan görünüş düğmelerini kontrol edin).</string>
+    <string name="pc_err_write">STEP dosyası yazılamadı.</string>
+    <string name="pc_err_param">Sıfırdan büyük bir kalınlık girin.</string>
+    <string name="pc_err_build">Geometri oluşturulamadı. Konturu sadeleştirip (Düzle, daha az nokta) tekrar deneyin.</string>
+    <string name="pc_result_title">STEP hazır</string>
+    <string name="pc_result">Boyut: %1$s × %2$s × %3$s mm
+Hacim: %4$s mm³
+Dosya: %5$s
+
+Bu, fotoğraftan çıkarılmış kaba bir modeldir; kritik ölçüleri kontrol edin. Çizimi sonradan Kayıtlı çizimler\'den açıp ölçüleri değiştirebilirsiniz.</string>
+    <string name="pc_view_model">Görüntüle</string>
+    <string name="pc_save">Kaydet…</string>
+    <string name="pc_share">Paylaş</string>
+    <string name="pc_saved">Kaydedildi</string>
+    <string name="pc_save_as">Farklı kaydet</string>
+    <string name="pc_save_mesh_note">STL / OBJ / GLB: görüntüleyicide aç, sonra ⋮ › Dışa aktar</string>
+    <string name="pc_save_failed">Kaydedilemedi</string>
+    <string name="pc_camera_denied">Fotoğraf çekmek için kamera izni gerekli</string>
+    <string name="pc_help">1. Parçayı farklı renkte düz bir zemine koyun (ör. koyu parça için beyaz kağıt) ve fotoğrafı tam karşıdan çekin. Perspektif bozulmasını azaltmak için biraz uzaktan ve hafif yakınlaştırarak çekin.
+
+2. Parçaya dokunun: dış kontur ve delikler otomatik bulunur. Gölge de alınıyorsa veya parçanın bir kısmı eksikse Algılama ayarı\'nı kullanın.
+
+3. Ölçek ile bilinen bir ölçüyü girin (ör. toplam genişlik). Sonra herhangi bir kenara veya deliğe dokunup gerçek ölçüsünü yazın. Düzle, yataya / dikeye yakın kenarları tam düz yapar.
+
+4. STEP oluşturun: plaka parçalar kalınlık vererek, blok parçalar iki görünüşten (üst + ön), mil ve flanşlar döndürerek.
+
+Tek fotoğraf gizli derinliği, dişleri, pahları veya iç cepleri yakalayamaz; sonuç hızlı ölçülendirme, teklif ve fikstür için kaba bir modeldir. Çizimler saklanır: sonradan açıp ölçüleri değiştirerek STEP\'i yeniden üretebilirsiniz.
+
+Teknik resim: Çok görünüş yöntemini seçin, sonra Teknik resim (PDF, resim ya da kağıdın fotoğrafı). Ön görünüşün çerçevesinin içine dokunun, ardından Üst ve Yan sekmelerine geçip aynı sayfada o görünüşlerin içine dokunun. Ölçek ile tek bir ölçü girin; diğer görünüşler aynı ölçeği kullanır. Hem ISO E (Avrupa) hem ISO A (Amerikan) resimlerde parçanın önü üst görünüşün alt kenarındadır, Parçanın önü: resmin altında kalsın. Ön görünüşün sağındaki görünüş ISO E\'de soldan, ISO A\'da sağdan bakıştır; Yan görünüş düğmesini buna göre seçin. Yalnızca dış konturlar ve yuvarlak delikler alınır; kesitler, gizli çizgiler, pahlar ve dişler dikkate alınmaz.</string>
+</resources>

@@ -8,15 +8,20 @@ import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
+import android.view.ViewConfiguration
+import kotlin.math.atan2
+import kotlin.math.hypot
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLDisplay
 
 /**
  * 3B model görünümü.
- * - Tek parmak: döndür (bırakınca ataletle devam eder)
- * - İki parmak: kıstırarak yakınlaştır, sürükleyerek kaydır
+ * - Tek parmak: döndür (parmak biraz kaydıktan sonra başlar; hızlı savrulursa ataletle devam eder)
+ * - İki parmak: kıstırarak parmakların arasına doğru yakınlaştır, sürükleyerek kaydır,
+ *   serbest döndürme modunda burarak çevir
  * - Çift dokunma: [onDoubleTap] (dokunulan noktayı dönme merkezi yapma)
+ * - Çift dokunup basılı tutarak yukarı/aşağı sürükleme: tek parmakla yakınlaştırma
  * - Tek dokunma: [onTap] ile bildirilir (ölçüm / seçim)
  * - Uzun basma: [onLongPress] ile bildirilir (parça seçimi)
  */
@@ -37,15 +42,36 @@ class ModelView @JvmOverloads constructor(
     /** Uzun basma (parça seçimi). */
     var onLongPress: ((x: Float, y: Float) -> Unit)? = null
 
+    /**
+     * Hassas imleç: true iken uzun basma imleci başlatır, parmak sürüklendikçe
+     * [onCursorMove], bırakılınca [onCursorUp] çağrılır (parmağın konumu).
+     */
+    var precisionCursor = false
+    var onCursorMove: ((x: Float, y: Float) -> Unit)? = null
+    var onCursorUp: ((x: Float, y: Float) -> Unit)? = null
+    private var cursorActive = false
+
     private var lastX = 0f
     private var lastY = 0f
     private var activePointers = 0
     private var multiTouchHappened = false
 
+    // Dokunma eşiği: parmak bu kadar kaymadan döndürme başlamaz (dokunuşta model titremesin)
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+    private val minFlingVelocity = 700f * resources.displayMetrics.density
+    private var downX = 0f
+    private var downY = 0f
+    private var rotating = false
+    private var scaledInGesture = false
+    /** Bu dokunuş bir çift dokunmanın ikincisi: döndürme yapılmaz (yakınlaştırma olabilir). */
+    private var doubleTapDown = false
+    private var lastTwist = Float.NaN
+
     private val scaleDetector = ScaleGestureDetector(context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                camera.zoomBy(detector.scaleFactor)
+                scaledInGesture = true
+                camera.zoomAt(detector.scaleFactor, detector.focusX, detector.focusY)
                 requestRender()
                 return true
             }
@@ -54,8 +80,17 @@ class ModelView @JvmOverloads constructor(
     private val gestureDetector = GestureDetector(context,
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                val cb = onDoubleTap
-                if (cb != null) cb(e.x, e.y) else spin360()
+                doubleTapDown = true
+                return true
+            }
+
+            // Çift dokunma parmak kalkınca işlenir; çift dokunup sürükleyerek yakınlaştırma
+            // yapıldıysa dönme merkezi değiştirilmez.
+            override fun onDoubleTapEvent(e: MotionEvent): Boolean {
+                if (e.actionMasked == MotionEvent.ACTION_UP && !scaledInGesture) {
+                    val cb = onDoubleTap
+                    if (cb != null) cb(e.x, e.y) else spin360()
+                }
                 return true
             }
 
@@ -65,11 +100,19 @@ class ModelView @JvmOverloads constructor(
             }
 
             override fun onLongPress(e: MotionEvent) {
-                if (!multiTouchHappened) onLongPress?.invoke(e.x, e.y)
+                if (multiTouchHappened) return
+                if (precisionCursor) {
+                    cursorActive = true
+                    camera.stopMotion()
+                    onCursorMove?.invoke(e.x, e.y)
+                } else {
+                    onLongPress?.invoke(e.x, e.y)
+                }
             }
 
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
-                if (!multiTouchHappened) {
+                // Yavaş bırakışta model kaymasın; yalnızca bilinçli savurma ataletle döner
+                if (!multiTouchHappened && !cursorActive && rotating && hypot(vx, vy) > minFlingVelocity) {
                     camera.fling(vx, vy)
                     requestRender()
                 }
@@ -96,8 +139,36 @@ class ModelView @JvmOverloads constructor(
         requestRender()
     }
 
-    fun setVisibility(triRanges: IntArray?, segRanges: IntArray?) {
-        queueEvent { renderer.setVisibility(triRanges, segRanges) }
+    fun setVisibility(
+        triRanges: IntArray?,
+        segRanges: IntArray?,
+        groups: List<ModelRenderer.StyleGroup> = emptyList(),
+    ) {
+        queueEvent { renderer.setVisibility(triRanges, segRanges, groups) }
+        requestRender()
+    }
+
+    fun setPalette(p: Palette) {
+        queueEvent { renderer.setPalette(p) }
+        requestRender()
+    }
+
+    /** Büyüteç görüntüsü: (x, y) çevresindeki [size] piksellik bölge, ana iş parçacığına verilir. */
+    fun setLoupe(x: Float, y: Float, size: Int, callback: ((android.graphics.Bitmap?) -> Unit)?) {
+        queueEvent {
+            if (callback == null || size <= 0) {
+                renderer.setLoupe(-1f, -1f, 0, null)
+            } else {
+                renderer.setLoupe(x, y, size) { bmp -> post { callback(bmp) } }
+            }
+        }
+        requestRender()
+    }
+
+    fun saveCameraState(): FloatArray = camera.saveState()
+
+    fun animateToState(state: FloatArray) {
+        camera.animateToState(state)
         requestRender()
     }
 
@@ -165,6 +236,10 @@ class ModelView @JvmOverloads constructor(
         requestRender()
     }
 
+    fun setFreeOrbit(free: Boolean) {
+        camera.freeOrbit = free
+    }
+
     fun setUpAxis(axis: Camera.UpAxis) {
         camera.upAxis = axis
         requestRender()
@@ -184,6 +259,29 @@ class ModelView @JvmOverloads constructor(
             // Dokunulunca animasyon, tur ve atalet durur
             camera.stopMotion()
             multiTouchHappened = false
+            rotating = false
+            scaledInGesture = false
+            doubleTapDown = false
+            downX = event.x
+            downY = event.y
+            cursorActive = false
+        }
+        if (cursorActive) {
+            // Hassas imleç: döndürme yok, yalnızca imleç hareket eder
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE -> onCursorMove?.invoke(event.x, event.y)
+                MotionEvent.ACTION_UP -> {
+                    cursorActive = false
+                    onCursorUp?.invoke(event.x, event.y)
+                }
+                MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN -> {
+                    cursorActive = false
+                    onCursorUp?.invoke(Float.NaN, Float.NaN)
+                }
+            }
+            // Uzun basma sonrası bırakma GestureDetector'a gitsin ki iç durumu sıfırlansın
+            if (event.actionMasked == MotionEvent.ACTION_UP) gestureDetector.onTouchEvent(event)
+            return true
         }
         gestureDetector.onTouchEvent(event)
         scaleDetector.onTouchEvent(event)
@@ -211,6 +309,7 @@ class ModelView @JvmOverloads constructor(
                     lastX = sx / n
                     lastY = sy / n
                 }
+                lastTwist = Float.NaN
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -223,9 +322,33 @@ class ModelView @JvmOverloads constructor(
                 val fx = sx / pointerCount
                 val fy = sy / pointerCount
                 if (activePointers == 1 && pointerCount == 1 && !multiTouchHappened) {
-                    camera.rotate(fx - lastX, fy - lastY)
+                    if (doubleTapDown || scaleDetector.isInProgress || scaledInGesture) {
+                        // Çift dokunup sürükleyerek yakınlaştırma: döndürme yok
+                    } else if (rotating) {
+                        camera.rotate(fx - lastX, fy - lastY)
+                    } else if (hypot(fx - downX, fy - downY) > touchSlop) {
+                        // Eşik aşıldı: döndürme buradan başlar (sıçramasız)
+                        rotating = true
+                        camera.beginRotate()
+                    }
                 } else if (activePointers >= 2) {
                     camera.pan(fx - lastX, fy - lastY)
+                    if (pointerCount >= 2) {
+                        val a = Math.toDegrees(
+                            atan2(
+                                (event.getY(1) - event.getY(0)).toDouble(),
+                                (event.getX(1) - event.getX(0)).toDouble(),
+                            )
+                        ).toFloat()
+                        if (!lastTwist.isNaN()) {
+                            var d = a - lastTwist
+                            if (d > 180f) d -= 360f
+                            if (d < -180f) d += 360f
+                            // Ekranda saat yönü burma modeli de saat yönünde çevirir
+                            camera.roll(-d)
+                        }
+                        lastTwist = a
+                    }
                 }
                 lastX = fx
                 lastY = fy

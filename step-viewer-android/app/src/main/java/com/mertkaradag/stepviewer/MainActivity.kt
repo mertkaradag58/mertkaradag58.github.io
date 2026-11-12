@@ -15,15 +15,19 @@ import android.text.util.Linkify
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.print.PrintHelper
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.TooltipCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -31,6 +35,9 @@ import androidx.core.view.updatePadding
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.ChipGroup
+import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
+import android.view.HapticFeedbackConstants
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.slider.Slider
 import com.google.android.material.snackbar.BaseTransientBottomBar
@@ -50,8 +57,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var titleText: TextView
     private lateinit var subtitleText: TextView
     private lateinit var emptyState: View
-    private lateinit var recentTitle: TextView
-    private lateinit var recentList: LinearLayout
     private lateinit var sideButtons: View
     private lateinit var toolbarCard: View
     private lateinit var measureCard: MaterialCardView
@@ -65,7 +70,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressCancel: View
     private lateinit var toolMeasure: View
     private lateinit var toolSection: View
-    private lateinit var toolDisplayLabel: TextView
     private lateinit var toolSelect: View
     private lateinit var selectCard: MaterialCardView
     private lateinit var selectName: TextView
@@ -75,6 +79,24 @@ class MainActivity : AppCompatActivity() {
     private lateinit var hiddenText: TextView
 
     private val executor = Executors.newSingleThreadExecutor()
+    /** Klasör tarama gibi model dışı dosya işleri (model yüklemesini bekletmesin). */
+    private val ioExecutor = Executors.newSingleThreadExecutor()
+    private lateinit var loupeView: LoupeView
+    private lateinit var home: HomeScreen
+    private lateinit var savedViews: SavedViews
+    private val notes = NotesController(this) { pushOverlay() }
+    private var sectionFace: FloatArray? = null   // [nx, ny, nz, px, py, pz]: yüzeyden kesit
+    private var pickTarget = PICK_NONE
+    private var pickSnackbar: Snackbar? = null
+    private lateinit var measureModeGroup: ChipGroup
+    private lateinit var measureUndo: View
+    /** Parça rengi (0 = dosyadaki renk) ve şeffaflığı. */
+    private var partColor = IntArray(0)
+    private var partTransparent = BooleanArray(0)
+    /** Hassas imleç: önizleme yakalaması sürüyor mu. */
+    private var cursorPreviewBusy = false
+    private var cursorX = -1f
+    private var cursorY = -1f
     private lateinit var recentFiles: RecentFiles
     private lateinit var measure: MeasureController
 
@@ -117,7 +139,8 @@ class MainActivity : AppCompatActivity() {
     private var pendingExport: Exporter.Format? = null
     private var pendingBomDensity = 0.0
 
-    private var displayMode = ModelRenderer.DisplayMode.SHADED_EDGES
+    private var displayMode =
+        if (Prefs.showEdges) ModelRenderer.DisplayMode.SHADED_EDGES else ModelRenderer.DisplayMode.SHADED
     private var orthographic = false
     private var yUp = false
 
@@ -152,6 +175,10 @@ class MainActivity : AppCompatActivity() {
         if (uri != null && job != null) runDrawingSave(uri, job, pdf = false)
     }
 
+    private val exportQcPdf = registerForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if (uri != null) runQcPdf(uri)
+    }
+
     private val exportCsv = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         if (uri != null) runBomExport(uri)
     }
@@ -183,11 +210,46 @@ class MainActivity : AppCompatActivity() {
             if (uri != null) loadModel(uri, persist = true)
         }
 
+    private val openFolder =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (uri != null) {
+                CadFiles.addFolder(this, uri)
+                home.refresh()
+            }
+        }
+
+    private val settingsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val data = result.data ?: return@registerForActivityResult
+            when (data.getStringExtra(SettingsActivity.EXTRA_ACTION)) {
+                SettingsActivity.ACTION_BUY -> billing.buyAdFree(this)
+                SettingsActivity.ACTION_RESTORE -> billing.restore()
+                SettingsActivity.ACTION_PRIVACY -> ads.showPrivacyOptions()
+                SettingsActivity.ACTION_TUTORIAL -> Onboarding(this) {}.show()
+                SettingsActivity.ACTION_ABOUT -> showAbout()
+            }
+            if (data.getBooleanExtra(SettingsActivity.EXTRA_QUALITY_CHANGED, false)) {
+                val uri = currentUri
+                if (uri != null && currentMesh != null) {
+                    Toast.makeText(this, R.string.quality_reload, Toast.LENGTH_SHORT).show()
+                    loadModel(uri, persist = false)
+                }
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashLog.install(this)
+        Prefs.init(this)
+        Units.load()
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            val light = !Prefs.isNight(this@MainActivity)
+            isAppearanceLightStatusBars = light
+            isAppearanceLightNavigationBars = light
+        }
         setContentView(R.layout.activity_main)
+        savedViews = SavedViews(this)
 
         recentFiles = RecentFiles(this)
         measure = MeasureController(
@@ -200,16 +262,44 @@ class MainActivity : AppCompatActivity() {
                 findViewById<View>(R.id.measure_scroll).scrollTo(0, 0)
                 measureOverlay = overlay
                 pushOverlay()
+                findViewById<View>(R.id.measure_actions).visibility =
+                    if (measure.candidates.isEmpty()) View.GONE else View.VISIBLE
             },
         )
 
         bindViews()
         applyInsets()
         setupToolbar()
+        setupMeasureModes()
         setupSection()
         setupSideButtons()
+        setupPanelTransitions()
         setupBackHandling()
-        showRecentFiles()
+        modelView.setPalette(Palette.current(this))
+        home = HomeScreen(
+            context = this,
+            container = findViewById(R.id.empty_content),
+            recent = recentFiles,
+            runInBackground = { task -> ioExecutor.execute(task) },
+            runOnUi = { task -> runOnUiThread { if (!isDestroyed) task() } },
+            onOpenFile = { pickFile() },
+            onPhotoCad = { openPhotoCad() },
+            onAddFolder = { addFolder() },
+            onOpenUri = { uri, _ -> loadModel(uri, persist = true) },
+            onRemoveFolder = { f ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(f.name)
+                    .setMessage(R.string.home_folder_remove_confirm)
+                    .setPositiveButton(R.string.home_folder_remove) { _, _ ->
+                        CadFiles.removeFolder(this, f.uri)
+                        home.refresh()
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            },
+        )
+        home.build()
+        updateDisplayLabel()
 
         ads = Ads(this, findViewById(R.id.ad_container))
         billing = Billing(
@@ -222,8 +312,41 @@ class MainActivity : AppCompatActivity() {
         billing.start()
 
         if (savedInstanceState == null) {
-            handleIntent(intent)
+            Session.clear()
+            val opened = handleIntent(intent)
             CrashLog.showPendingReport(this)
+            if (!opened && !Prefs.onboardingSeen) {
+                Onboarding(this) { Prefs.onboardingSeen = true }.show()
+            }
+        } else {
+            restoreSession()
+        }
+    }
+
+    /** Tema / dil değişince ekran yeniden oluşturulur: açık model geri yüklenir. */
+    private fun restoreSession() {
+        val mesh = Session.mesh ?: return
+        val uri = Session.uri
+        displayMode = Session.displayMode ?: displayMode
+        yUp = Session.yUp
+        if (yUp) modelView.camera.upAxis = Camera.UpAxis.Y
+        currentUri = uri
+        onModelLoaded(mesh, Session.name, -1.0, restoring = true)
+        Session.partVisible?.takeIf { it.size == mesh.partCount }?.copyInto(partVisible)
+        Session.partColor?.takeIf { it.size == mesh.partCount }?.copyInto(partColor)
+        Session.partTransparent?.takeIf { it.size == mesh.partCount }?.copyInto(partTransparent)
+        lastVisible = partVisible.copyOf()
+        applyVisibility(recordUndo = false)
+        Session.camera?.let { st -> modelView.post { modelView.animateToState(st) } }
+        updateDisplayLabel()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (currentMesh != null) {
+            Session.camera = modelView.saveCameraState()
+            Session.displayMode = displayMode
+            Session.yUp = yUp
         }
     }
 
@@ -232,8 +355,6 @@ class MainActivity : AppCompatActivity() {
         titleText = findViewById(R.id.title_text)
         subtitleText = findViewById(R.id.subtitle_text)
         emptyState = findViewById(R.id.empty_state)
-        recentTitle = findViewById(R.id.recent_title)
-        recentList = findViewById(R.id.recent_list)
         sideButtons = findViewById(R.id.side_buttons)
         toolbarCard = findViewById(R.id.toolbar_card)
         measureCard = findViewById(R.id.measure_card)
@@ -248,7 +369,6 @@ class MainActivity : AppCompatActivity() {
         progressCancel.setOnClickListener { cancelLoad() }
         toolMeasure = findViewById(R.id.tool_measure)
         toolSection = findViewById(R.id.tool_section)
-        toolDisplayLabel = findViewById(R.id.tool_display_label)
         toolSelect = findViewById(R.id.tool_select)
         selectCard = findViewById(R.id.select_card)
         selectName = findViewById(R.id.select_name)
@@ -261,9 +381,19 @@ class MainActivity : AppCompatActivity() {
         explodeCard = findViewById(R.id.explode_card)
         explodeSlider = findViewById(R.id.explode_slider)
 
+        findViewById<View>(R.id.measure_to_report).setOnClickListener { addMeasureToReport() }
+        findViewById<View>(R.id.measure_to_fit).setOnClickListener { openFitFromMeasure() }
+
+        loupeView = findViewById(R.id.loupe_view)
+        measureModeGroup = findViewById(R.id.measure_mode_group)
+        measureUndo = findViewById(R.id.measure_undo)
+        modelView.onCursorMove = { x, y -> onCursorMove(x, y) }
+        modelView.onCursorUp = { x, y -> onCursorUp(x, y) }
         modelView.onTap = { x, y -> onModelTap(x, y) }
         modelView.onDoubleTap = { x, y -> onModelDoubleTap(x, y) }
         modelView.onLongPress = { x, y -> onModelLongPress(x, y) }
+        modelView.setFreeOrbit(freeOrbit)
+        modelView.camera.rotateSpeed = ROTATE_SPEEDS[rotateSpeedLevel]
     }
 
     /** Uygulama kenardan kenara çizilir; çubuklar sistem çubuklarının altında kalmasın. */
@@ -288,8 +418,8 @@ class MainActivity : AppCompatActivity() {
     // -----------------------------------------------------------------------
 
     private fun setupToolbar() {
-        findViewById<View>(R.id.empty_open_button).setOnClickListener { pickFile() }
-        findViewById<View>(R.id.tool_open).setOnClickListener { pickFile() }
+        findViewById<View>(R.id.open_button).setOnClickListener { pickFile() }
+        findViewById<View>(R.id.tool_tools).setOnClickListener { showToolsSheet() }
         toolMeasure.setOnClickListener { setMeasureMode(!measureMode) }
         toolSelect.setOnClickListener { setSelectMode(!selectMode) }
         findViewById<View>(R.id.select_close).setOnClickListener { setSelectMode(false) }
@@ -303,15 +433,50 @@ class MainActivity : AppCompatActivity() {
         }
         toolSection.setOnClickListener { setSection(!sectionOn) }
         findViewById<View>(R.id.tool_parts).setOnClickListener { showParts() }
-        findViewById<View>(R.id.tool_display).setOnClickListener { cycleDisplayMode() }
         findViewById<View>(R.id.measure_close).setOnClickListener { setMeasureMode(false) }
-        findViewById<MaterialButton>(R.id.more_button).setOnClickListener { showMoreMenu(it) }
+        findViewById<View>(R.id.settings_button).setOnClickListener { openSettings() }
+        findViewById<View>(R.id.select_color).setOnClickListener { showColorDialog() }
+        findViewById<View>(R.id.select_transparent).setOnClickListener { toggleTransparency() }
+    }
+
+    private fun openSettings() {
+        val i = Intent(this, SettingsActivity::class.java)
+            .putExtra(SettingsActivity.EXTRA_AD_FREE, billing.adFree)
+            .putExtra(SettingsActivity.EXTRA_PRICE, billing.formattedPrice)
+            .putExtra(SettingsActivity.EXTRA_PRIVACY, ads.privacyOptionsRequired)
+        if (currentMesh != null) Session.camera = modelView.saveCameraState()
+        settingsLauncher.launch(i)
+    }
+
+    private fun addFolder() {
+        try {
+            openFolder.launch(null)
+        } catch (_: Exception) {
+            Toast.makeText(this, R.string.error_unknown, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setupMeasureModes() {
+        measureModeGroup.setOnCheckedStateChangeListener { _, ids ->
+            val mode = when (ids.firstOrNull()) {
+                R.id.mode_point -> MeasureController.Mode.POINT
+                R.id.mode_chain -> MeasureController.Mode.CHAIN
+                else -> MeasureController.Mode.SMART
+            }
+            measure.setMode(mode)
+            measureUndo.visibility = if (mode == MeasureController.Mode.CHAIN) View.VISIBLE else View.GONE
+        }
+        measureUndo.setOnClickListener { measure.undoLast() }
+    }
+
+    private fun haptic() {
+        if (Prefs.haptics) modelView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
     }
 
     private fun setupSideButtons() {
         findViewById<View>(R.id.fit_button).setOnClickListener { modelView.fit() }
         findViewById<View>(R.id.spin_button).setOnClickListener { modelView.spin360() }
-        findViewById<View>(R.id.views_button).setOnClickListener { showViewsMenu(it) }
+        findViewById<View>(R.id.views_button).setOnClickListener { showViewsSheet() }
         findViewById<View>(R.id.explode_button).setOnClickListener { toggleExplodeCard() }
         pmiButton.setOnClickListener { showPmiDialog() }
         findViewById<View>(R.id.ar_button).setOnClickListener { openAr() }
@@ -341,102 +506,274 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showMoreMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor)
+    /** Araçlar paneli: eski üç nokta menüsünün yerine kategorili, aramalı panel. */
+    private fun showToolsSheet() {
         val hasModel = currentMesh != null
-        popup.menu.add(Menu.NONE, MENU_INFO, 0, R.string.menu_model_info).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_SHARE, 1, R.string.menu_share).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_MARKUP, 1, R.string.menu_markup).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_EXPORT, 1, R.string.menu_export).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_BOM, 1, R.string.menu_bom).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_HOLES, 1, R.string.menu_holes).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_DXF, 1, R.string.menu_dxf).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_DRAWING, 1, R.string.menu_drawing).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_QUALITY, 2, R.string.menu_quality)
-        popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
+        val cats = listOf(
+            ToolsSheet.Category("model", getString(R.string.tab_model), R.drawable.ic_cube, 0xFF2F7BD8.toInt()),
+            ToolsSheet.Category("workshop", getString(R.string.tab_workshop), R.drawable.ic_shaft, getColor(R.color.accent)),
+            ToolsSheet.Category("share", getString(R.string.tab_share), R.drawable.ic_share, 0xFF17A673.toInt()),
+            ToolsSheet.Category("app", getString(R.string.tab_app), R.drawable.ic_settings, 0xFF7C5CE0.toInt()),
+        )
+        val t = ArrayList<ToolsSheet.Tool>()
+        fun add(
+            id: String, cat: String, icon: Int, title: Int, caption: String?, enabled: Boolean = true,
+            badge: String? = null, keywords: String = "", action: () -> Unit,
+        ) {
+            t += ToolsSheet.Tool(id, cat, icon, getString(title), caption, enabled, badge, keywords, action)
+        }
+        // Model
+        add("info", "model", R.drawable.ic_info, R.string.t_info, getString(R.string.c_info), hasModel) { showModelInfo() }
+        add("cost", "model", R.drawable.ic_calc, R.string.t_cost, getString(R.string.c_cost), hasModel) { showCost() }
+        add("holes", "model", R.drawable.ic_holes, R.string.t_holes, getString(R.string.c_holes), hasModel) { showHoleTable() }
+        add("bom", "model", R.drawable.ic_list, R.string.t_bom, getString(R.string.c_bom), hasModel) { showBomDialog() }
+        add("note_add", "model", R.drawable.ic_bookmark, R.string.t_note_add, getString(R.string.c_note_add), hasModel) {
+            startPick(PICK_NOTE, R.string.note_pick_hint)
+        }
+        add("notes", "model", R.drawable.ic_note, R.string.t_notes, getString(R.string.c_notes, notes.notes.size), hasModel) { notes.showList() }
+        add("explode", "model", R.drawable.ic_explode, R.string.t_explode, getString(R.string.c_explode), hasModel) { toggleExplodeCard() }
+        add("spin", "model", R.drawable.ic_rotate, R.string.t_spin, getString(R.string.c_spin), hasModel) { modelView.spin360() }
+        if (pmiButton.visibility == View.VISIBLE) {
+            add("pmi", "model", R.drawable.ic_pmi, R.string.t_pmi, getString(R.string.c_pmi)) { showPmiDialog() }
+        }
+        // Atölye
+        add("drawing", "workshop", R.drawable.ic_drawing, R.string.t_drawing, getString(R.string.c_drawing), hasModel) { showDrawing() }
+        add("dxf", "workshop", R.drawable.ic_dxf, R.string.t_dxf, getString(R.string.c_dxf), hasModel, keywords = getString(R.string.kw_dxf)) { startDxfPick() }
+        add("sheet", "workshop", R.drawable.ic_sheet, R.string.t_sheet, getString(R.string.c_sheet), hasModel) { startSheetPick() }
+        add("qc", "workshop", R.drawable.ic_qc, R.string.t_qc, getString(R.string.c_qc), hasModel) { showInspection() }
+        add("fit", "workshop", R.drawable.ic_shaft, R.string.t_fit, getString(R.string.c_fit)) { FitDialog(this).show() }
+        add("photo", "workshop", R.drawable.ic_camera_alt, R.string.t_photo, getString(R.string.c_photo), badge = getString(R.string.badge_beta)) { openPhotoCad() }
+        // Paylaş
+        add("share", "share", R.drawable.ic_share, R.string.t_share, getString(R.string.c_share), hasModel) { shareScreenshot() }
+        add("export", "share", R.drawable.ic_download, R.string.t_export, getString(R.string.c_export), hasModel) { showExportDialog() }
+        add("markup", "share", R.drawable.ic_pen, R.string.t_markup, getString(R.string.c_markup), hasModel) { startMarkup() }
+        add("print", "share", R.drawable.ic_print, R.string.t_print, getString(R.string.c_print), hasModel) { printScreenshot() }
+        add("ar", "share", R.drawable.ic_ar, R.string.t_ar, getString(R.string.c_ar), hasModel) { openAr() }
+        // Uygulama
+        add("settings", "app", R.drawable.ic_settings, R.string.t_settings, getString(R.string.c_settings)) { openSettings() }
+        add("quality", "app", R.drawable.ic_display, R.string.t_quality, getString(R.string.c_quality)) { showQualityDialog() }
         if (!billing.adFree) {
-            val price = billing.formattedPrice
-            val title = if (price != null) getString(R.string.menu_remove_ads_price, price)
-            else getString(R.string.menu_remove_ads)
-            popup.menu.add(Menu.NONE, MENU_REMOVE_ADS, 3, title)
-            popup.menu.add(Menu.NONE, MENU_RESTORE, 4, R.string.menu_restore_purchase)
-            if (ads.privacyOptionsRequired) popup.menu.add(Menu.NONE, MENU_PRIVACY, 5, R.string.menu_privacy)
-        }
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                MENU_INFO -> showModelInfo()
-                MENU_SHARE -> shareScreenshot()
-                MENU_MARKUP -> startMarkup()
-                MENU_EXPORT -> showExportDialog()
-                MENU_BOM -> showBomDialog()
-                MENU_HOLES -> showHoleTable()
-                MENU_DXF -> startDxfPick()
-                MENU_DRAWING -> showDrawing()
-                MENU_ABOUT -> showAbout()
-                MENU_QUALITY -> showQualityDialog()
-                MENU_PRIVACY -> ads.showPrivacyOptions()
-                MENU_REMOVE_ADS -> billing.buyAdFree(this)
-                MENU_RESTORE -> billing.restore()
+            add("noads", "app", R.drawable.ic_star, R.string.t_noads, billing.formattedPrice ?: getString(R.string.c_noads)) {
+                billing.buyAdFree(this)
             }
-            true
         }
-        popup.show()
+        add("about", "app", R.drawable.ic_info, R.string.t_about, getString(R.string.c_about)) { showAbout() }
+
+        haptic()
+        ToolsSheet(this, getString(R.string.tools_title), currentName.ifEmpty { null }, cats, t).show()
     }
 
-    private fun showViewsMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor)
-        val views = listOf(
-            R.string.view_iso to Camera.View.ISO,
-            R.string.view_front to Camera.View.FRONT,
-            R.string.view_back to Camera.View.BACK,
-            R.string.view_top to Camera.View.TOP,
-            R.string.view_bottom to Camera.View.BOTTOM,
-            R.string.view_left to Camera.View.LEFT,
-            R.string.view_right to Camera.View.RIGHT,
-        )
-        views.forEachIndexed { i, (label, _) -> popup.menu.add(Menu.NONE, i, i, label) }
-        popup.menu.add(1, MENU_ORTHO, 100, R.string.view_ortho).apply {
-            isCheckable = true
-            isChecked = orthographic
-        }
-        popup.menu.add(1, MENU_YUP, 101, R.string.view_y_up).apply {
-            isCheckable = true
-            isChecked = yUp
-        }
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                MENU_ORTHO -> {
-                    orthographic = !orthographic
-                    modelView.setOrthographic(orthographic)
+    private fun showViewsSheet() {
+        haptic()
+        ViewsSheet(this, object : ViewsSheet.Host {
+            override fun goToView(view: Camera.View) = modelView.animateTo(view)
+            override fun fitView() = modelView.fit()
+            override var displayMode: ModelRenderer.DisplayMode
+                get() = this@MainActivity.displayMode
+                set(v) {
+                    this@MainActivity.displayMode = v
+                    modelView.setDisplayMode(v)
+                    Session.displayMode = v
                 }
-                MENU_YUP -> {
-                    yUp = !yUp
-                    modelView.setUpAxis(if (yUp) Camera.UpAxis.Y else Camera.UpAxis.Z)
+            override var orthographic: Boolean
+                get() = this@MainActivity.orthographic
+                set(v) {
+                    this@MainActivity.orthographic = v
+                    modelView.setOrthographic(v)
                 }
-                else -> views.getOrNull(item.itemId)?.let { modelView.animateTo(it.second) }
+            override var yUp: Boolean
+                get() = this@MainActivity.yUp
+                set(v) {
+                    this@MainActivity.yUp = v
+                    modelView.setUpAxis(if (v) Camera.UpAxis.Y else Camera.UpAxis.Z)
+                }
+            override var freeOrbit: Boolean
+                get() = this@MainActivity.freeOrbit
+                set(v) {
+                    this@MainActivity.freeOrbit = v
+                    modelView.setFreeOrbit(v)
+                }
+            override var rotateSpeedLevel: Int
+                get() = this@MainActivity.rotateSpeedLevel
+                set(v) {
+                    this@MainActivity.rotateSpeedLevel = v
+                    modelView.camera.rotateSpeed = ROTATE_SPEEDS[v]
+                }
+            override fun savedViewNames(): List<String> = savedViews.list(currentName).map { it.name }
+            override fun goToSaved(index: Int) {
+                savedViews.list(currentName).getOrNull(index)?.let { modelView.animateToState(it.state) }
             }
-            true
+            override fun saveView() = saveCurrentView()
+            override fun manageViews() = this@MainActivity.manageViews()
+        }).show()
+    }
+
+    /** Alt çubuk düğmesi: seçili arka plan yumuşakça gelir, simge hafifçe zıplar. */
+    private fun setToolActive(tool: View, on: Boolean) {
+        if (tool.isActivated == on) return
+        tool.isActivated = on
+        val icon = (tool as? ViewGroup)?.getChildAt(0) ?: return
+        icon.animate().cancel()
+        if (on) {
+            icon.scaleX = 0.75f
+            icon.scaleY = 0.75f
+            icon.animate().scaleX(1f).scaleY(1f).setDuration(320)
+                .setInterpolator(android.view.animation.OvershootInterpolator(3f)).start()
         }
-        popup.show()
+    }
+
+    /** Paneller (ölçüm, kesit, seçim...) aşağıdan kayarak ve belirerek açılır. */
+    private fun setupPanelTransitions() {
+        val d = resources.displayMetrics.density
+        val lt = android.animation.LayoutTransition().apply {
+            setAnimator(
+                android.animation.LayoutTransition.APPEARING,
+                android.animation.ObjectAnimator.ofPropertyValuesHolder(
+                    null as Any?,
+                    android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 0f, 1f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, 36 * d, 0f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 0.94f, 1f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.94f, 1f),
+                ),
+            )
+            setAnimator(
+                android.animation.LayoutTransition.DISAPPEARING,
+                android.animation.ObjectAnimator.ofPropertyValuesHolder(
+                    null as Any?,
+                    android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, 0f, 24 * d),
+                ),
+            )
+            setDuration(android.animation.LayoutTransition.APPEARING, 280)
+            setDuration(android.animation.LayoutTransition.DISAPPEARING, 160)
+            setDuration(android.animation.LayoutTransition.CHANGE_APPEARING, 240)
+            setDuration(android.animation.LayoutTransition.CHANGE_DISAPPEARING, 240)
+            setStartDelay(android.animation.LayoutTransition.APPEARING, 0)
+            setStartDelay(android.animation.LayoutTransition.CHANGE_DISAPPEARING, 80)
+            setInterpolator(android.animation.LayoutTransition.APPEARING, android.view.animation.DecelerateInterpolator(2.2f))
+            setInterpolator(android.animation.LayoutTransition.CHANGE_APPEARING, android.view.animation.DecelerateInterpolator(2f))
+            setInterpolator(android.animation.LayoutTransition.CHANGE_DISAPPEARING, android.view.animation.DecelerateInterpolator(2f))
+        }
+        findViewById<ViewGroup>(R.id.bottom_area).layoutTransition = lt
+    }
+
+    /** Model ilk açıldığında üst çubuk, yan düğmeler ve alt çubuk sırayla yerine kayar. */
+    private fun animateViewerChrome() {
+        val d = resources.displayMetrics.density
+        val bars = (sideButtons as ViewGroup)
+        var k = 0
+        for (i in 0 until bars.childCount) {
+            val b = bars.getChildAt(i)
+            if (b.visibility != View.VISIBLE) continue
+            b.alpha = 0f
+            b.translationX = 40 * d
+            b.animate().alpha(1f).translationX(0f).setStartDelay(120L + k * 45L).setDuration(320)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(2f)).start()
+            k++
+        }
+        val top = findViewById<View>(R.id.top_bar)
+        top.alpha = 0f
+        top.translationY = -20 * d
+        top.animate().alpha(1f).translationY(0f).setStartDelay(60).setDuration(300).start()
+        val fab = findViewById<View>(R.id.tool_tools_circle)
+        fab.scaleX = 0f
+        fab.scaleY = 0f
+        fab.animate().scaleX(1f).scaleY(1f).setStartDelay(260).setDuration(380)
+            .setInterpolator(android.view.animation.OvershootInterpolator(2.2f)).start()
+    }
+
+    private fun showRotateSpeedDialog() {
+        val labels = arrayOf(
+            getString(R.string.rotate_speed_slow),
+            getString(R.string.rotate_speed_normal),
+            getString(R.string.rotate_speed_fast),
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.rotate_speed)
+            .setSingleChoiceItems(labels, rotateSpeedLevel) { d, which ->
+                rotateSpeedLevel = which
+                modelView.camera.rotateSpeed = ROTATE_SPEEDS[which]
+                d.dismiss()
+            }
+            .show()
     }
 
     private fun cycleDisplayMode() {
         displayMode = when (displayMode) {
             ModelRenderer.DisplayMode.SHADED_EDGES -> ModelRenderer.DisplayMode.SHADED
-            ModelRenderer.DisplayMode.SHADED -> ModelRenderer.DisplayMode.WIREFRAME
-            ModelRenderer.DisplayMode.WIREFRAME -> ModelRenderer.DisplayMode.SHADED_EDGES
+            ModelRenderer.DisplayMode.SHADED -> ModelRenderer.DisplayMode.XRAY
+            ModelRenderer.DisplayMode.XRAY -> ModelRenderer.DisplayMode.WIREFRAME
+            ModelRenderer.DisplayMode.WIREFRAME -> ModelRenderer.DisplayMode.HIDDEN_LINE
+            ModelRenderer.DisplayMode.HIDDEN_LINE -> ModelRenderer.DisplayMode.SHADED_EDGES
         }
-        toolDisplayLabel.setText(
+        updateDisplayLabel()
+        modelView.setDisplayMode(displayMode)
+        Session.displayMode = displayMode
+        Toast.makeText(this, displayModeName(), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun updateDisplayLabel() {}
+
+    private fun displayModeName(): String = getString(
             when (displayMode) {
                 ModelRenderer.DisplayMode.SHADED_EDGES -> R.string.display_shaded_edges
                 ModelRenderer.DisplayMode.SHADED -> R.string.display_shaded
                 ModelRenderer.DisplayMode.WIREFRAME -> R.string.display_wireframe
+                ModelRenderer.DisplayMode.XRAY -> R.string.display_xray
+                ModelRenderer.DisplayMode.HIDDEN_LINE -> R.string.display_hidden_line
             }
         )
-        modelView.setDisplayMode(displayMode)
+
+    // -----------------------------------------------------------------------
+    // Kayıtlı görünümler
+    // -----------------------------------------------------------------------
+
+    private fun saveCurrentView() {
+        if (currentMesh == null) return
+        val state = modelView.saveCameraState()
+        val input = android.widget.EditText(this).apply {
+            setText(getString(R.string.views_default_name, savedViews.list(currentName).size + 1))
+            selectAll()
+            setSingleLine()
+        }
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val box = android.widget.FrameLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.views_save)
+            .setView(box)
+            .setPositiveButton(R.string.markup_save) { _, _ ->
+                val name = input.text.toString().trim().ifBlank { getString(R.string.views_default_name, 1) }
+                savedViews.add(currentName, name, state)
+                Toast.makeText(this, getString(R.string.views_saved, name), Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun manageViews() {
+        val views = savedViews.list(currentName)
+        if (views.isEmpty()) return
+        val names = views.map { it.name }.toTypedArray()
+        val checked = BooleanArray(names.size)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.views_manage)
+            .setMultiChoiceItems(names, checked) { _, which, isChecked -> checked[which] = isChecked }
+            .setPositiveButton(R.string.views_delete_selected) { _, _ ->
+                for (i in names.indices) if (checked[i]) savedViews.remove(currentName, names[i])
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     // -----------------------------------------------------------------------
+    /** Fotoğraftan kaba katı model (STEP) ekranı. */
+    private fun openPhotoCad() {
+        startActivity(Intent(this, com.mertkaradag.stepviewer.photocad.PhotoCadActivity::class.java))
+    }
+
     // Dosya açma
     // -----------------------------------------------------------------------
 
@@ -447,6 +784,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Ayarlar ekranından dönüldüyse yeni ayarları uygula
+        Units.load()
+        modelView.setPalette(Palette.current(this))
+        if (measureMode) measure.redraw()
+        if (sectionOn) updateSection()
+        if (emptyState.visibility == View.VISIBLE) home.redrawLists()
         modelView.onResume()
         ads.onResume()
         if (adAfterShare) {
@@ -456,6 +799,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        if (currentMesh != null) Session.camera = modelView.saveCameraState()
         ads.onPause()
         modelView.onPause()
         super.onPause()
@@ -463,16 +807,21 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         tickHandler.removeCallbacks(tick)
+        ioExecutor.shutdownNow()
         ads.onDestroy()
         billing.destroy()
         executor.shutdownNow()
         super.onDestroy()
     }
 
-    private fun handleIntent(intent: Intent?) {
+    private fun handleIntent(intent: Intent?): Boolean {
         if (intent?.action == Intent.ACTION_VIEW) {
-            intent.data?.let { loadModel(it, persist = true) }
+            intent.data?.let {
+                loadModel(it, persist = true)
+                return true
+            }
         }
+        return false
     }
 
     private fun pickFile() {
@@ -497,10 +846,22 @@ class MainActivity : AppCompatActivity() {
 
     private val settings by lazy { getSharedPreferences("settings", MODE_PRIVATE) }
 
+    /** Serbest döndürme (iz topu) açık mı; kapalıyken döner tabla. */
+    private var freeOrbit: Boolean
+        get() = settings.getBoolean("free_orbit", false)
+        set(v) = settings.edit().putBoolean("free_orbit", v).apply()
+
+    /** 0 = yavaş, 1 = normal, 2 = hızlı. */
+    private var rotateSpeedLevel: Int
+        get() = settings.getInt("rotate_speed", 1).coerceIn(0, 2)
+        set(v) = settings.edit().putInt("rotate_speed", v).apply()
+
     /** 0 = hızlı, 1 = normal, 2 = hassas. */
     private var meshQuality: Int
-        get() = settings.getInt("mesh_quality", 1)
-        set(v) = settings.edit().putInt("mesh_quality", v).apply()
+        get() = Prefs.meshQuality
+        set(v) {
+            Prefs.meshQuality = v
+        }
 
     private fun deflectionFor(quality: Int): Double = when (quality) {
         0 -> 0.004
@@ -516,15 +877,7 @@ class MainActivity : AppCompatActivity() {
         loading = true
         val token = ++loadToken
         val name = displayName(uri)
-        progressText.text = getString(R.string.loading_file, name)
-        progressOverlay.visibility = View.VISIBLE
-        progressCancel.visibility = View.VISIBLE
-        tickInfo = ""
-        tickStarted = SystemClock.elapsedRealtime()
-        progressElapsed.text = ""
-        progressElapsed.visibility = View.VISIBLE
-        tickHandler.removeCallbacks(tick)
-        tickHandler.postDelayed(tick, 1000)
+        startProgress(getString(R.string.loading_file, name))
 
         if (persist) {
             // Son açılanlar listesinden tekrar açabilmek için kalıcı izin (mümkünse)
@@ -534,55 +887,199 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val quality = meshQuality
         executor.execute {
-            val started = SystemClock.elapsedRealtime()
-            var fellBack = false
-            val result: Result<StepMesh> = try {
-                val file = copyToCache(uri, name)
-                val mb = file.length() / (1024.0 * 1024.0)
-                runOnUiThread {
-                    if (token != loadToken) return@runOnUiThread
-                    tickInfo = String.format(Locale.getDefault(), "%.1f MB", mb)
-                    progressText.text = getString(R.string.meshing_file, name)
-                }
-                try {
-                    Result.success(StepNative.loadModel(file.absolutePath, deflectionFor(quality)))
-                } catch (e: Throwable) {
-                    val oom = e is OutOfMemoryError || (e is IOException && e.message?.startsWith("out_of_memory") == true)
-                    if (!oom || quality == 0 || token != loadToken) throw e
-                    // Bellek yetmedi: daha kaba ağla bir kez daha dene
-                    System.gc()
-                    runOnUiThread { if (token == loadToken) progressText.text = getString(R.string.oom_retry) }
-                    fellBack = true
-                    Result.success(StepNative.loadModel(file.absolutePath, deflectionFor(0)))
-                }
-            } catch (e: IOException) {
-                Result.failure(e)
-            } catch (e: OutOfMemoryError) {
-                Result.failure(IOException(getString(R.string.error_oom)))
-            } catch (e: SecurityException) {
-                recentFiles.remove(uri)
-                Result.failure(IOException(getString(R.string.error_permission)))
+            val file = try {
+                copyToCache(uri, name)
+            } catch (e: Exception) {
+                if (e is SecurityException) recentFiles.forget(uri)
+                val msg = if (e is SecurityException) getString(R.string.error_permission) else e.message
+                runOnUiThread { failLoad(token, msg) }
+                return@execute
             }
-            val seconds = (SystemClock.elapsedRealtime() - started) / 1000.0
-
-            runOnUiThread {
-                if (isDestroyed || token != loadToken) return@runOnUiThread // iptal edildi
-                loading = false
-                stopProgress()
-                result.onSuccess { mesh ->
-                    currentUri = uri
-                    onModelLoaded(mesh, name, seconds)
-                    if (hasPersistedPermission(uri)) recentFiles.add(uri, name)
-                    if (fellBack) Toast.makeText(this, R.string.oom_retried, Toast.LENGTH_LONG).show()
-                    ads.showInterstitial()
-                }.onFailure { e ->
-                    showRecentFiles()
-                    showError(localizedError(e.message))
+            if (!CadFiles.isZip(name)) {
+                meshFile(token, uri, name, name, file)
+                return@execute
+            }
+            // ZIP: içindeki model dosyalarını listele
+            val entries = try {
+                CadFiles.zipModels(file)
+            } catch (e: Exception) {
+                runOnUiThread { failLoad(token, getString(R.string.zip_failed)) }
+                return@execute
+            }
+            when {
+                entries.isEmpty() -> runOnUiThread { failLoad(token, getString(R.string.zip_empty)) }
+                entries.size == 1 -> extractAndMesh(token, uri, name, file, entries[0].name)
+                else -> runOnUiThread {
+                    if (token != loadToken || isDestroyed) return@runOnUiThread
+                    stopProgress()
+                    val labels = entries.map {
+                        it.name + if (it.size >= 0) "  (" + android.text.format.Formatter.formatShortFileSize(this, it.size) + ")" else ""
+                    }.toTypedArray()
+                    var chosen = false
+                    MaterialAlertDialogBuilder(this)
+                        .setTitle(getString(R.string.zip_choose, name))
+                        .setItems(labels) { _, which ->
+                            chosen = true
+                            startProgress(getString(R.string.loading_file, entries[which].name.substringAfterLast('/')))
+                            executor.execute { extractAndMesh(token, uri, name, file, entries[which].name) }
+                        }
+                        .setNegativeButton(R.string.cancel, null)
+                        .setOnDismissListener {
+                            if (!chosen && token == loadToken) {
+                                loading = false
+                                showRecentFiles()
+                            }
+                        }
+                        .show()
                 }
             }
         }
+    }
+
+    private fun extractAndMesh(token: Int, uri: Uri, zipName: String, zip: File, entry: String) {
+        val inner = try {
+            CadFiles.extract(zip, entry, File(cacheDir, "zip_model"))
+        } catch (e: Exception) {
+            runOnUiThread { failLoad(token, getString(R.string.zip_failed)) }
+            return
+        }
+        val innerName = entry.substringAfterLast('/')
+        meshFile(token, uri, "$innerName ($zipName)", zipName, inner)
+    }
+
+    private fun startProgress(text: String) {
+        progressText.text = text
+        progressOverlay.visibility = View.VISIBLE
+        progressCancel.visibility = View.VISIBLE
+        tickInfo = ""
+        tickStarted = SystemClock.elapsedRealtime()
+        progressElapsed.text = ""
+        progressElapsed.visibility = View.VISIBLE
+        tickHandler.removeCallbacks(tick)
+        tickHandler.postDelayed(tick, 1000)
+    }
+
+    private fun failLoad(token: Int, message: String?) {
+        if (isDestroyed || token != loadToken) return
+        loading = false
+        stopProgress()
+        showRecentFiles()
+        showError(localizedError(message))
+    }
+
+    /**
+     * Önbellekteki dosyayı ağa çevirir (arka plan iş parçacığında çağrılır).
+     * [title] ekranda görünen ad, [recentName] son açılanlar listesindeki ad.
+     */
+    private fun meshFile(token: Int, uri: Uri, title: String, recentName: String, file: File) {
+        val quality = meshQuality
+        val started = SystemClock.elapsedRealtime()
+        var fellBack = false
+        val mb = file.length() / (1024.0 * 1024.0)
+        runOnUiThread {
+            if (token != loadToken) return@runOnUiThread
+            tickInfo = String.format(Locale.getDefault(), "%.1f MB", mb)
+            progressText.text = getString(R.string.meshing_file, title)
+        }
+        val result: Result<StepMesh> = try {
+            try {
+                Result.success(StepNative.loadModel(file.absolutePath, deflectionFor(quality)))
+            } catch (e: Throwable) {
+                val oom = e is OutOfMemoryError || (e is IOException && e.message?.startsWith("out_of_memory") == true)
+                if (!oom || quality == 0 || token != loadToken) throw e
+                // Bellek yetmedi: daha kaba ağla bir kez daha dene
+                System.gc()
+                runOnUiThread { if (token == loadToken) progressText.text = getString(R.string.oom_retry) }
+                fellBack = true
+                Result.success(StepNative.loadModel(file.absolutePath, deflectionFor(0)))
+            }
+        } catch (e: IOException) {
+            Result.failure(e)
+        } catch (e: OutOfMemoryError) {
+            Result.failure(IOException(getString(R.string.error_oom)))
+        }
+        val seconds = (SystemClock.elapsedRealtime() - started) / 1000.0
+
+        runOnUiThread {
+            if (isDestroyed || token != loadToken) return@runOnUiThread // iptal edildi
+            loading = false
+            stopProgress()
+            result.onSuccess { mesh ->
+                currentUri = uri
+                onModelLoaded(mesh, title, seconds)
+                if (hasPersistedPermission(uri)) {
+                    recentFiles.add(uri, recentName)
+                    pendingThumbUri = uri.toString()
+                    pendingShortcut = uri to recentName
+                }
+                if (fellBack) Toast.makeText(this, R.string.oom_retried, Toast.LENGTH_LONG).show()
+                ads.showInterstitial()
+            }.onFailure { e ->
+                showRecentFiles()
+                showError(localizedError(e.message))
+            }
+        }
+    }
+
+    /** Yükleme bitince küçük resim alınacak dosya (kalıcı izni olan). */
+    private var pendingThumbUri: String? = null
+    private var pendingShortcut: Pair<Uri, String>? = null
+
+    /** İlk kare çizildikten sonra küçük resim ve ana ekran kısayolu. */
+    private fun afterFirstFrame(mesh: StepMesh) {
+        modelView.postDelayed({
+            if (currentMesh !== mesh || isDestroyed) return@postDelayed
+            val thumbUri = pendingThumbUri
+            val shortcut = pendingShortcut
+            pendingThumbUri = null
+            pendingShortcut = null
+            if (thumbUri != null) {
+                modelView.captureScreenshot { bmp ->
+                    if (bmp != null) {
+                        ioExecutor.execute {
+                            Thumbs.save(this, thumbUri, bmp)
+                            if (shortcut != null) runOnUiThread { pushShortcut(shortcut.first, shortcut.second) }
+                        }
+                    }
+                    if (Prefs.spinOnLoad && currentMesh === mesh) modelView.spin360()
+                }
+            } else if (Prefs.spinOnLoad) {
+                modelView.spin360()
+            }
+        }, 700)
+    }
+
+    /** Uygulama simgesine uzun basınca son dosyalar. */
+    private fun pushShortcut(uri: Uri, name: String) {
+        try {
+            val thumb = Thumbs.load(this, uri.toString())
+            val icon = if (thumb != null) IconCompat.createWithAdaptiveBitmap(padForAdaptive(thumb))
+            else IconCompat.createWithResource(this, R.mipmap.ic_launcher)
+            val intent = Intent(Intent.ACTION_VIEW, uri, this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val label = name.substringBeforeLast('.').ifBlank { name }
+            val info = ShortcutInfoCompat.Builder(this, "file_" + Integer.toHexString(uri.toString().hashCode()))
+                .setShortLabel(label.take(24))
+                .setLongLabel(name.take(40))
+                .setIcon(icon)
+                .setIntent(intent)
+                .build()
+            ShortcutManagerCompat.pushDynamicShortcut(this, info)
+        } catch (_: Throwable) {
+        }
+    }
+
+    /** Uyarlanabilir simge için resmi ortadaki güvenli alana yerleştirir. */
+    private fun padForAdaptive(src: Bitmap): Bitmap {
+        val size = 216
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        c.drawColor(Color.WHITE)
+        val inner = 144
+        val off = (size - inner) / 2f
+        c.drawBitmap(src, null, RectF(off, off, off + inner, off + inner), Paint(Paint.FILTER_BITMAP_FLAG))
+        return out
     }
 
     /**
@@ -596,6 +1093,9 @@ class MainActivity : AppCompatActivity() {
         stopProgress()
         currentMesh = null
         currentUri = null
+        Session.clear()
+        notes.clear()
+        stopPick()
         modelView.visibility = View.VISIBLE
         setMeasureMode(false)
         setSelectMode(false)
@@ -640,10 +1140,15 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun onModelLoaded(mesh: StepMesh, name: String, seconds: Double) {
+    private fun onModelLoaded(mesh: StepMesh, name: String, seconds: Double, restoring: Boolean = false) {
         currentMesh = mesh
         currentName = name
+        notes.load(name)
+        sectionFace = null
+        stopPick()
         partVisible = BooleanArray(mesh.partCount) { true }
+        partColor = IntArray(mesh.partCount)
+        partTransparent = BooleanArray(mesh.partCount)
         lastVisible = partVisible.copyOf()
         visibilityUndo.clear()
         partHighlight = IntArray(0)
@@ -657,6 +1162,7 @@ class MainActivity : AppCompatActivity() {
 
         modelView.setMesh(mesh)
         modelView.setDisplayMode(displayMode)
+        pushOverlay()
         explode = null
         explodeFactor = 0f
         explodeSlider.value = 0f
@@ -674,30 +1180,40 @@ class MainActivity : AppCompatActivity() {
         updateHiddenCard()
 
         titleText.text = name
-        subtitleText.text = getString(R.string.model_info_line, mesh.formatName, mesh.partCount, mesh.triangleCount, seconds)
+        if (!restoring) {
+            Session.subtitle = getString(R.string.model_info_line, mesh.formatName, mesh.partCount, mesh.triangleCount, seconds)
+        }
+        subtitleText.text = Session.subtitle
         subtitleText.visibility = View.VISIBLE
         emptyState.visibility = View.GONE
+        val firstShow = toolbarCard.visibility != View.VISIBLE
         toolbarCard.visibility = View.VISIBLE
         sideButtons.visibility = View.VISIBLE
+        if (firstShow) animateViewerChrome()
+
+        Session.mesh = mesh
+        Session.name = name
+        Session.uri = currentUri
+        Session.partVisible = partVisible
+        Session.partColor = partColor
+        Session.partTransparent = partTransparent
+        Session.displayMode = displayMode
+        Session.yUp = yUp
+        if (!restoring) {
+            Session.camera = null
+            afterFirstFrame(mesh)
+        }
     }
 
-    private fun hasPersistedPermission(uri: Uri): Boolean =
-        contentResolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
+    private fun hasPersistedPermission(uri: Uri): Boolean {
+        val s = uri.toString()
+        return contentResolver.persistedUriPermissions.any {
+            it.isReadPermission && (it.uri == uri || s.startsWith(it.uri.toString() + "/document/"))
+        }
+    }
 
     private fun showRecentFiles() {
-        val items = recentFiles.list()
-        recentList.removeAllViews()
-        recentTitle.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
-        val inflater = LayoutInflater.from(this)
-        for (item in items) {
-            val row = inflater.inflate(R.layout.item_recent, recentList, false)
-            row.findViewById<TextView>(R.id.recent_name).text = item.name
-            row.findViewById<TextView>(R.id.recent_date).text =
-                DateFormat.getMediumDateFormat(this).format(item.time) + " " +
-                    DateFormat.getTimeFormat(this).format(item.time)
-            row.setOnClickListener { loadModel(item.uri, persist = false) }
-            recentList.addView(row)
-        }
+        if (::home.isInitialized) home.redrawLists()
     }
 
     /** Yerel çekirdeğin hata kodlarını (ör. "read_failed:STEP") cihaz diline çevirir. */
@@ -767,10 +1283,15 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.explode_measure_off, Toast.LENGTH_SHORT).show()
         }
         if (enabled && selectMode) setSelectMode(false)
-        if (enabled) stopDxfPick()
+        if (enabled) {
+            stopDxfPick()
+            stopSheetPick()
+        }
         measureMode = enabled
-        toolMeasure.isActivated = enabled
+        setToolActive(toolMeasure, enabled)
         measureCard.visibility = if (enabled && currentMesh != null) View.VISIBLE else View.GONE
+        modelView.precisionCursor = enabled && Prefs.loupe
+        if (!enabled) hideCursor()
         measure.clear()
         if (!enabled) {
             measureOverlay = ModelRenderer.Overlay()
@@ -780,26 +1301,150 @@ class MainActivity : AppCompatActivity() {
 
     private fun onModelTap(x: Float, y: Float) {
         if (loading) return
+        if (pickTarget != PICK_NONE) {
+            handlePick(x, y)
+            return
+        }
         if (dxfPickMode) {
             pickDxfFace(x, y)
+            return
+        }
+        if (sheetPickMode) {
+            pickSheetFace(x, y)
             return
         }
         if (selectMode) {
             pickPartAt(x, y)
             return
         }
-        if (!measureMode) return
+        if (!measureMode) {
+            openNoteAt(x, y)
+            return
+        }
         val mesh = currentMesh ?: return
         val mvp = modelView.currentMvp()
         val w = modelView.width
         val h = modelView.height
-        val threshold = 18f * resources.displayMetrics.density
+        val density = resources.displayMetrics.density
+        val threshold = 18f * density
         val visible = if (partVisible.all { it }) null else partVisible.copyOf()
         val clip = if (sectionOn) clipPlane(mesh) else null
+        val mode = measure.mode
+        val snapOn = Prefs.snap
         executor.execute {
-            val hit = Picker.pick(mesh, mvp, w, h, x, y, threshold, visible, clip)
-            runOnUiThread { if (mesh === currentMesh && measureMode) measure.onPicked(hit) }
+            val sel: MeasureController.Sel? = when (mode) {
+                MeasureController.Mode.POINT ->
+                    Picker.snapPoint(mesh, mvp, w, h, x, y, threshold, visible, clip, snapOn) { circleCenter(it) }
+                        ?.let { MeasureController.Sel.of(it) }
+                MeasureController.Mode.CHAIN ->
+                    Picker.pick(mesh, mvp, w, h, x, y, threshold, visible, clip)?.let { MeasureController.Sel.of(it) }
+                MeasureController.Mode.SMART -> {
+                    // Köşeye çok yakın dokunulduysa köşe (nokta) seçilir; değilse kenar / yüzey
+                    val v = if (snapOn) {
+                        Picker.snapPoint(mesh, mvp, w, h, x, y, 11f * density, visible, clip, true) { null }
+                            ?.takeIf { it.kind == Picker.SnapKind.VERTEX }
+                    } else {
+                        null
+                    }
+                    if (v != null) MeasureController.Sel.of(v)
+                    else Picker.pick(mesh, mvp, w, h, x, y, threshold, visible, clip)?.let { MeasureController.Sel.of(it) }
+                }
+            }
+            runOnUiThread {
+                if (mesh === currentMesh && measureMode) {
+                    if (sel != null) haptic()
+                    measure.onPicked(sel)
+                }
+            }
         }
+    }
+
+    /** Kenar çember veya yay ise merkezi (arka plan iş parçacığında). */
+    private fun circleCenter(edge: Int): FloatArray? {
+        val info = StepNative.shapeInfo(StepNative.KIND_EDGE, edge) ?: return null
+        if (info[0].toInt() != GeomKind.CIRCLE) return null
+        return floatArrayOf(info[6].toFloat(), info[7].toFloat(), info[8].toFloat())
+    }
+
+    // -----------------------------------------------------------------------
+    // Hassas imleç ve büyüteç (ölçümde uzun bas)
+    // -----------------------------------------------------------------------
+
+    private fun onCursorMove(fx: Float, fy: Float) {
+        val mesh = currentMesh ?: return
+        if (!measureMode) return
+        val first = !loupeView.active
+        cursorX = fx.coerceIn(0f, modelView.width - 1f)
+        cursorY = (fy - loupeView.fingerOffset).coerceIn(0f, modelView.height - 1f)
+        if (first) haptic()
+        loupeView.setCursor(cursorX, cursorY)
+        modelView.setLoupe(cursorX, cursorY, loupeView.sampleSize) { bmp -> if (loupeView.active) loupeView.setImage(bmp) }
+        previewSnap(mesh)
+    }
+
+    /** İmlecin altında ne yakalanacağını gösterir (bir önceki hesap bitmeden yenisi başlamaz). */
+    private fun previewSnap(mesh: StepMesh) {
+        if (cursorPreviewBusy) return
+        cursorPreviewBusy = true
+        val x = cursorX
+        val y = cursorY
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val density = resources.displayMetrics.density
+        val visible = if (partVisible.all { it }) null else partVisible.copyOf()
+        val clip = if (sectionOn) clipPlane(mesh) else null
+        val mode = measure.mode
+        val snapOn = Prefs.snap
+        executor.execute {
+            val label: Pair<String, Boolean> = when (mode) {
+                MeasureController.Mode.POINT -> {
+                    val snap = Picker.snapPoint(mesh, mvp, w, h, x, y, 18f * density, visible, clip, snapOn) { circleCenter(it) }
+                    if (snap == null) "" to false
+                    else measure.snapName(snap.kind) to (snap.kind == Picker.SnapKind.VERTEX ||
+                        snap.kind == Picker.SnapKind.MIDPOINT || snap.kind == Picker.SnapKind.CENTER)
+                }
+                else -> {
+                    val v = if (snapOn && mode == MeasureController.Mode.SMART) {
+                        Picker.snapPoint(mesh, mvp, w, h, x, y, 11f * density, visible, clip, true) { null }
+                            ?.takeIf { it.kind == Picker.SnapKind.VERTEX }
+                    } else {
+                        null
+                    }
+                    if (v != null) {
+                        measure.snapName(v.kind) to true
+                    } else {
+                        when (Picker.pick(mesh, mvp, w, h, x, y, 18f * density, visible, clip)?.kind) {
+                            StepNative.KIND_EDGE -> getString(R.string.cursor_edge) to false
+                            StepNative.KIND_FACE -> getString(R.string.cursor_face) to false
+                            else -> "" to false
+                        }
+                    }
+                }
+            }
+            runOnUiThread {
+                cursorPreviewBusy = false
+                if (!loupeView.active || mesh !== currentMesh) return@runOnUiThread
+                loupeView.setSnap(label.first, label.second)
+                // İmleç bu arada hareket ettiyse yeni konum için tekrar hesapla
+                if (cursorX != x || cursorY != y) previewSnap(mesh)
+            }
+        }
+    }
+
+    private fun onCursorUp(fx: Float, fy: Float) {
+        val x = cursorX
+        val y = cursorY
+        hideCursor()
+        if (fx.isNaN() || x < 0f) return
+        onModelTap(x, y)
+    }
+
+    private fun hideCursor() {
+        cursorX = -1f
+        cursorY = -1f
+        loupeView.setCursor(-1f, -1f)
+        modelView.setLoupe(0f, 0f, 0, null)
     }
 
     // -----------------------------------------------------------------------
@@ -811,7 +1456,7 @@ class MainActivity : AppCompatActivity() {
         if (on && measureMode) setMeasureMode(false)
         if (on) stopDxfPick()
         selectMode = on
-        toolSelect.isActivated = on
+        setToolActive(toolSelect, on)
         if (!on) setSelection(-1, -1) else updateSelectCard()
     }
 
@@ -956,6 +1601,7 @@ class MainActivity : AppCompatActivity() {
                 edgeSegments = o.edgeSegments,
                 measureLine = o.measureLine,
                 partRanges = partHighlight,
+                points = mergePoints(o.points, notes.points()),
             )
         )
     }
@@ -971,6 +1617,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.chip_z -> 2
                 else -> 0
             }
+            sectionFace = null
             updateSection()
         }
         sectionSlider.addOnChangeListener { _, _, _ -> updateSection() }
@@ -979,11 +1626,14 @@ class MainActivity : AppCompatActivity() {
             updateSection()
         }
         findViewById<View>(R.id.section_close).setOnClickListener { setSection(false) }
+        findViewById<View>(R.id.section_face).setOnClickListener {
+            startPick(PICK_SECTION_FACE, R.string.section_pick_face)
+        }
     }
 
     private fun setSection(enabled: Boolean) {
         sectionOn = enabled && currentMesh != null
-        toolSection.isActivated = sectionOn
+        setToolActive(toolSection, sectionOn)
         sectionCard.visibility = if (sectionOn) View.VISIBLE else View.GONE
         updateSection()
     }
@@ -995,9 +1645,23 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val plane = clipPlane(mesh)
-        val axisName = arrayOf("X", "Y", "Z")[sectionAxis]
-        sectionLabel.text = getString(R.string.section_position, axisName, fmt(sectionPosition(mesh), 2))
+        if (sectionFace != null) {
+            sectionLabel.text = Units.localize(getString(R.string.section_face_depth, Units.fl(sectionFaceDepth(mesh).toDouble())))
+        } else {
+            val axisName = arrayOf("X", "Y", "Z")[sectionAxis]
+            sectionLabel.text = Units.localize(getString(R.string.section_position, axisName, Units.fl(sectionPosition(mesh).toDouble())))
+        }
         modelView.setClipPlane(plane)
+    }
+
+    /** Yüzeyden kesitte derinlik (mm): kaydırıcı sağda 0, solda modelin köşegeni kadar. */
+    private fun sectionFaceDepth(mesh: StepMesh): Float {
+        val b = mesh.bbox
+        val dx = b[3] - b[0]
+        val dy = b[4] - b[1]
+        val dz = b[5] - b[2]
+        val diag = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        return (1f - sectionSlider.value / 1000f) * diag
     }
 
     private fun sectionPosition(mesh: StepMesh): Float {
@@ -1009,6 +1673,19 @@ class MainActivity : AppCompatActivity() {
 
     /** [nx, ny, nz, d]: n·p + d >= 0 olan kısım görünür. */
     private fun clipPlane(mesh: StepMesh): FloatArray {
+        sectionFace?.let { f ->
+            // Yüzey normali dışarı bakar: düzlem yüzeyden [derinlik] kadar içeri kaydırılır ve
+            // yüzey tarafı kesilip atılır (çevirince tersi).
+            val depth = sectionFaceDepth(mesh)
+            val px = f[3] - f[0] * depth
+            val py = f[4] - f[1] * depth
+            val pz = f[5] - f[2] * depth
+            val sign = if (sectionFlip) 1f else -1f
+            return floatArrayOf(
+                sign * f[0], sign * f[1], sign * f[2],
+                -sign * (f[0] * px + f[1] * py + f[2] * pz),
+            )
+        }
         val pos = sectionPosition(mesh)
         val plane = FloatArray(4)
         val sign = if (sectionFlip) 1f else -1f
@@ -1037,7 +1714,10 @@ class MainActivity : AppCompatActivity() {
         ).show()
     }
 
-    /** Görünen parçaların üçgen ve kenar aralıklarını çiziciye verir. */
+    /**
+     * Görünen parçaların üçgen ve kenar aralıklarını çiziciye verir. Renk verilmiş veya şeffaf
+     * parçalar ayrı gruplarda çizilir.
+     */
     private fun applyVisibility(recordUndo: Boolean = true) {
         val mesh = currentMesh ?: return
         if (recordUndo && !lastVisible.contentEquals(partVisible)) {
@@ -1046,11 +1726,14 @@ class MainActivity : AppCompatActivity() {
         }
         lastVisible = partVisible.copyOf()
         updateHiddenCard()
-        if (partVisible.all { it }) {
+        val styled = partColor.any { it != 0 } || partTransparent.any { it }
+        if (partVisible.all { it } && !styled) {
             modelView.setVisibility(null, null)
             return
         }
-        val tri = ArrayList<Int>()
+        // Normal (renksiz, opak) görünen parçalar
+        val normal = BooleanArray(mesh.partCount) { partVisible[it] && partColor[it] == 0 && !partTransparent[it] }
+        val tri = triangleRanges(mesh, normal)
         val seg = ArrayList<Int>()
         var p = 0
         while (p < mesh.partCount) {
@@ -1058,18 +1741,116 @@ class MainActivity : AppCompatActivity() {
                 p++
                 continue
             }
-            // Ardışık görünen parçaları tek çizim çağrısında birleştir
             var q = p
             while (q + 1 < mesh.partCount && partVisible[q + 1]) q++
-            val t0 = mesh.faceOffsets[mesh.partFaceOffsets[p]]
-            val t1 = mesh.faceOffsets[mesh.partFaceOffsets[q + 1]]
-            if (t1 > t0) { tri += t0; tri += t1 - t0 }
             val s0 = mesh.edgeOffsets[mesh.partEdgeOffsets[p]]
             val s1 = mesh.edgeOffsets[mesh.partEdgeOffsets[q + 1]]
             if (s1 > s0) { seg += s0; seg += s1 - s0 }
             p = q + 1
         }
-        modelView.setVisibility(tri.toIntArray(), seg.toIntArray())
+        // Gruplar: (renk, şeffaf) çiftine göre
+        val groups = ArrayList<ModelRenderer.StyleGroup>()
+        if (styled) {
+            val keys = LinkedHashSet<Pair<Int, Boolean>>()
+            for (i in 0 until mesh.partCount) {
+                if (partVisible[i] && (partColor[i] != 0 || partTransparent[i])) keys += partColor[i] to partTransparent[i]
+            }
+            for ((color, transparent) in keys) {
+                val mask = BooleanArray(mesh.partCount) {
+                    partVisible[it] && partColor[it] == color && partTransparent[it] == transparent
+                }
+                val rgb = if (color == 0) null else floatArrayOf(
+                    Color.red(color) / 255f, Color.green(color) / 255f, Color.blue(color) / 255f,
+                )
+                groups += ModelRenderer.StyleGroup(triangleRanges(mesh, mask), rgb, if (transparent) 0.28f else 1f)
+            }
+        }
+        modelView.setVisibility(tri, seg.toIntArray(), groups)
+    }
+
+    /** Maskedeki parçaların üçgen aralıkları (ardışık parçalar birleştirilir). */
+    private fun triangleRanges(mesh: StepMesh, mask: BooleanArray): IntArray {
+        val tri = ArrayList<Int>()
+        var p = 0
+        while (p < mesh.partCount) {
+            if (!mask[p]) {
+                p++
+                continue
+            }
+            var q = p
+            while (q + 1 < mesh.partCount && mask[q + 1]) q++
+            val t0 = mesh.faceOffsets[mesh.partFaceOffsets[p]]
+            val t1 = mesh.faceOffsets[mesh.partFaceOffsets[q + 1]]
+            if (t1 > t0) { tri += t0; tri += t1 - t0 }
+            p = q + 1
+        }
+        return tri.toIntArray()
+    }
+
+    // -----------------------------------------------------------------------
+    // Parça rengi ve şeffaflık
+    // -----------------------------------------------------------------------
+
+    private fun showColorDialog() {
+        if (currentMesh == null || selStart < 0) return
+        val colors = intArrayOf(
+            0, 0xFFE8650E.toInt(), 0xFFD93B3B.toInt(), 0xFFF2B705.toInt(), 0xFF3FA34D.toInt(),
+            0xFF2F7BD8.toInt(), 0xFF6A4FC9.toInt(), 0xFF8C9AAE.toInt(), 0xFF2B2F36.toInt(), 0xFFF5F5F5.toInt(),
+            0xFFB87333.toInt(), 0xFF00A6A6.toInt(),
+        )
+        val d = resources.displayMetrics.density
+        val grid = android.widget.GridLayout(this).apply {
+            columnCount = 6
+            setPadding((20 * d).toInt(), (12 * d).toInt(), (20 * d).toInt(), 0)
+        }
+        var dialog: androidx.appcompat.app.AlertDialog? = null
+        for (c in colors) {
+            val sw = View(this).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    if (c == 0) {
+                        setColor(getColor(R.color.surface_variant))
+                        setStroke((2 * d).toInt(), getColor(R.color.text_secondary))
+                    } else {
+                        setColor(c)
+                        setStroke((1 * d).toInt(), Color.argb(80, 0, 0, 0))
+                    }
+                }
+                contentDescription = if (c == 0) getString(R.string.color_default) else String.format("#%06X", c and 0xFFFFFF)
+                setOnClickListener {
+                    for (p in selStart until selEnd) partColor[p] = c
+                    applyVisibility(recordUndo = false)
+                    dialog?.dismiss()
+                }
+            }
+            val size = (40 * d).toInt()
+            grid.addView(sw, android.widget.GridLayout.LayoutParams().apply {
+                width = size
+                height = size
+                setMargins((5 * d).toInt(), (5 * d).toInt(), (5 * d).toInt(), (5 * d).toInt())
+            })
+        }
+        dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.color_title, selName))
+            .setView(grid)
+            .setNeutralButton(R.string.color_reset_all) { _, _ ->
+                partColor.fill(0)
+                applyVisibility(recordUndo = false)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun toggleTransparency() {
+        if (selStart < 0 || currentMesh == null) return
+        val makeTransparent = !(selStart until selEnd).all { partTransparent[it] }
+        for (p in selStart until selEnd) partTransparent[p] = makeTransparent
+        applyVisibility(recordUndo = false)
+        Toast.makeText(
+            this,
+            if (makeTransparent) R.string.transparent_on else R.string.transparent_off,
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     // -----------------------------------------------------------------------
@@ -1440,6 +2221,7 @@ class MainActivity : AppCompatActivity() {
             totalHoles = groups.sumOf { it.holes.size },
             onSelect = { selectHoleGroup(mesh, it) },
             onSaveCsv = { exportHolesCsv.launch(baseFileName() + "_delik_tablosu.csv") },
+            onAddToReport = { addHolesToReport(groups) },
         ).show()
     }
 
@@ -1628,11 +2410,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun shareDxf(data: ByteArray) {
+    private fun shareDxf(data: ByteArray, suffix: String = "_kesim.dxf") {
         try {
             val dir = File(cacheDir, "shared").apply { mkdirs() }
             dir.listFiles()?.forEach { it.delete() }
-            val file = File(dir, baseFileName() + "_kesim.dxf")
+            val file = File(dir, baseFileName() + suffix)
             file.writeBytes(data)
             val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
             val send = Intent(Intent.ACTION_SEND).apply {
@@ -1779,6 +2561,45 @@ class MainActivity : AppCompatActivity() {
         ).show()
     }
 
+    /** Maliyet hesabı: seçim varsa seçili parçalar, yoksa görünen parçalar. */
+    private fun showCost() {
+        val mesh = currentMesh ?: return
+        val parts: IntArray
+        val title: String
+        if (selStart >= 0) {
+            parts = (selStart until selEnd).toList().toIntArray()
+            title = selName
+        } else {
+            parts = partVisible.indices.filter { partVisible[it] }.toIntArray()
+            title = if (parts.size == mesh.partCount) getString(R.string.info_scope_all, mesh.partCount)
+            else getString(R.string.info_scope_visible, parts.size, mesh.partCount)
+        }
+        if (parts.isEmpty()) return
+        CostDialog(
+            context = this,
+            mesh = mesh,
+            parts = parts,
+            scopeTitle = title,
+            runInBackground = { task -> executor.execute(task) },
+            runOnUi = { task -> runOnUiThread { if (!isDestroyed) task() } },
+            loadHoles = {
+                val cached = holeCache
+                if (cached != null && holeCacheMesh === mesh) {
+                    cached
+                } else {
+                    val loaded = Holes.load()
+                    if (loaded != null) runOnUiThread {
+                        if (currentMesh === mesh) {
+                            holeCache = loaded
+                            holeCacheMesh = mesh
+                        }
+                    }
+                    loaded
+                }
+            },
+        ).show()
+    }
+
     /** Ekran görüntüsünü alıp işaretleme ekranını açar. */
     private fun startMarkup() {
         val overlayText = if (measureMode) measure.lastText else ""
@@ -1894,6 +2715,382 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
+    // -----------------------------------------------------------------------
+    // Atölye: kalite kontrol raporu, geçme hesabı, sac açınımı
+    // -----------------------------------------------------------------------
+
+    private var inspection: Inspection? = null
+
+    private fun currentInspection(): Inspection {
+        val key = currentName.ifEmpty { "-" }
+        val cur = inspection
+        if (cur != null && cur.fileKey == key) return cur
+        return Inspection(this, key).also { inspection = it }
+    }
+
+    private fun addMeasureToReport() {
+        val cands = measure.candidates
+        if (cands.isEmpty()) return
+        if (cands.size == 1) {
+            addCandidate(cands[0])
+            return
+        }
+        val labels = cands.map { c ->
+            c.label + ": " + if (c.unit == Inspection.Dim.DEG) fmt(c.value, 2) + "°" else fmt(c.value)
+        }.toTypedArray()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.qc_pick_value)
+            .setItems(labels) { _, which -> addCandidate(cands[which]) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun addCandidate(c: MeasureController.Candidate) {
+        val report = currentInspection()
+        val item = report.newItem(c.label, roundNominal(c.value, c.unit), c.unit, c.anchor)
+        InspectionSheet.editItem(this, report, item, isNew = true) {
+            report.items += item
+            report.save()
+            Snackbar.make(findViewById(R.id.model_view), getString(R.string.qc_added, report.items.size), Snackbar.LENGTH_LONG)
+                .setAction(R.string.qc_open) { showInspection() }
+                .show()
+        }
+    }
+
+    /** CAD ölçüsünü makul basamağa yuvarlar (kayan nokta gürültüsü olmasın). */
+    private fun roundNominal(v: Double, unit: Inspection.Dim): Double {
+        val f = if (unit == Inspection.Dim.DEG) 100.0 else 1000.0
+        return kotlin.math.round(v * f) / f
+    }
+
+    private fun openFitFromMeasure() {
+        val c = measure.candidates.firstOrNull { it.isDiameter }
+            ?: measure.candidates.firstOrNull { it.unit == Inspection.Dim.MM }
+        FitDialog(this, c?.let { roundNominal(it.value, it.unit) }).show()
+    }
+
+    private fun addHolesToReport(groups: List<Holes.Group>) {
+        val report = currentInspection()
+        for (g in groups) {
+            val h = g.first
+            val label = getString(R.string.qc_hole_label, g.label, g.holes.size)
+            report.items += report.newItem(label, roundNominal(h.diameter, Inspection.Dim.MM), Inspection.Dim.MM, h.entry)
+        }
+        report.save()
+        showInspection()
+    }
+
+    private fun showInspection() {
+        if (currentMesh == null) return
+        InspectionSheet(
+            context = this,
+            report = currentInspection(),
+            onSavePdf = { exportQcPdf.launch(baseFileName() + "_kalite_kontrol.pdf") },
+            onSharePdf = { shareQcPdf() },
+            onSelect = { item -> item.anchor?.let { modelView.focusOn(it) } },
+        ).show()
+    }
+
+    private fun qcTexts(report: Inspection): Inspection.PdfTexts {
+        val (ok, nok, open) = report.counts()
+        val now = java.util.Date()
+        return Inspection.PdfTexts(
+            title = getString(R.string.qc_title),
+            fileLabel = getString(R.string.qc_pdf_file),
+            fileName = currentName,
+            dateLabel = getString(R.string.drawing_t_date),
+            date = DateFormat.getDateFormat(this).format(now) + " " + DateFormat.getTimeFormat(this).format(now),
+            inspectorLabel = getString(R.string.qc_inspector),
+            orderLabel = getString(R.string.qc_order),
+            generalLabel = getString(R.string.qc_pdf_general, "ISO 2768-" + report.generalClass),
+            headers = listOf(
+                "#", getString(R.string.qc_h_feature), getString(R.string.qc_h_nominal), getString(R.string.qc_h_tol),
+                "Min", "Max", getString(R.string.qc_h_actual), getString(R.string.qc_h_result),
+            ),
+            okText = getString(R.string.qc_ok),
+            nokText = getString(R.string.qc_nok),
+            summary = getString(R.string.qc_summary, report.items.size, ok, nok, open),
+            signature = getString(R.string.qc_signature),
+            app = getString(R.string.app_name),
+        )
+    }
+
+    /** Balonlu model görüntüsüyle rapor PDF'ini yazar; yazma arka planda yapılır. */
+    private fun writeQcPdf(open: () -> java.io.OutputStream, done: (Boolean) -> Unit) {
+        val report = currentInspection()
+        val texts = qcTexts(report)
+        val mvp = modelView.currentMvp()
+        val items = ArrayList(report.items)
+        modelView.captureScreenshot { bmp ->
+            if (isDestroyed) return@captureScreenshot
+            val image = bmp?.let { Inspection.drawBalloons(it, items, mvp, resources.displayMetrics.density) }
+            showBusy(getString(R.string.export_busy))
+            executor.execute {
+                val ok = runCatching { open().use { report.writePdf(it, image, texts) } }.isSuccess
+                runOnUiThread {
+                    if (isDestroyed) return@runOnUiThread
+                    hideBusy()
+                    done(ok)
+                }
+            }
+        }
+    }
+
+    private fun runQcPdf(uri: Uri) {
+        val name = displayName(uri)
+        writeQcPdf({ contentResolver.openOutputStream(uri, "w") ?: throw IOException("open") }) { ok ->
+            Toast.makeText(
+                this,
+                if (ok) getString(R.string.qc_saved, name) else getString(R.string.export_failed),
+                Toast.LENGTH_LONG,
+            ).show()
+        }
+    }
+
+    private fun shareQcPdf() {
+        val dir = File(cacheDir, "shared").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val file = File(dir, baseFileName() + "_kalite_kontrol.pdf")
+        writeQcPdf({ file.outputStream() }) { ok ->
+            if (!ok) {
+                Toast.makeText(this, R.string.share_failed, Toast.LENGTH_SHORT).show()
+                return@writeQcPdf
+            }
+            try {
+                val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_TEXT, currentName)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(send, getString(R.string.share_title)))
+                adAfterShare = true
+            } catch (e: Exception) {
+                Toast.makeText(this, R.string.share_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private var sheetPickMode = false
+    private var sheetSnackbar: Snackbar? = null
+
+    private fun startSheetPick() {
+        val mesh = currentMesh ?: return
+        if (mesh.isMeshFormat) {
+            Toast.makeText(this, R.string.sheet_cad_only, Toast.LENGTH_LONG).show()
+            return
+        }
+        val visibleParts = partVisible.indices.filter { partVisible[it] }
+        if (visibleParts.size == 1) {
+            runUnfold(mesh, visibleParts[0], -1)
+            return
+        }
+        if (measureMode) setMeasureMode(false)
+        if (selectMode) setSelectMode(false)
+        if (explodeFactor > 0f) closeExplode()
+        stopDxfPick()
+        sheetPickMode = true
+        sheetSnackbar?.dismiss()
+        val bar = Snackbar.make(findViewById(R.id.model_view), R.string.sheet_pick_hint, Snackbar.LENGTH_INDEFINITE)
+        bar.setAction(R.string.cancel) { }
+        bar.addCallback(object : Snackbar.Callback() {
+            override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                if (sheetSnackbar === transientBottomBar) {
+                    sheetSnackbar = null
+                    sheetPickMode = false
+                }
+            }
+        })
+        sheetSnackbar = bar
+        bar.show()
+    }
+
+    private fun stopSheetPick() {
+        sheetPickMode = false
+        val bar = sheetSnackbar
+        sheetSnackbar = null
+        bar?.dismiss()
+    }
+
+    private fun pickSheetFace(x: Float, y: Float) {
+        val mesh = currentMesh ?: return
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val visible = if (partVisible.all { it }) null else partVisible.copyOf()
+        val clip = if (sectionOn) clipPlane(mesh) else null
+        executor.execute {
+            val face = Picker.pickFace(mesh, mvp, w, h, x, y, visible, clip)
+            runOnUiThread {
+                if (mesh !== currentMesh || !sheetPickMode || face < 0) return@runOnUiThread
+                var part = 0
+                while (part + 1 < mesh.partFaceOffsets.size - 1 && mesh.partFaceOffsets[part + 1] <= face) part++
+                stopSheetPick()
+                runUnfold(mesh, part, face)
+            }
+        }
+    }
+
+    private fun runUnfold(mesh: StepMesh, part: Int, face: Int) {
+        val prefs = getSharedPreferences("workshop", MODE_PRIVATE)
+        val k = prefs.getFloat("k_factor", 0.44f).toDouble()
+        showBusy(getString(R.string.sheet_busy))
+        executor.execute {
+            val r = try {
+                SheetMetal.unfold(part, face, k)
+            } catch (_: Throwable) {
+                null
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                hideBusy()
+                if (mesh !== currentMesh) return@runOnUiThread
+                val msg = when {
+                    r == null -> R.string.sheet_failed
+                    r.status == SheetMetal.STATUS_NOT_PLANAR -> R.string.sheet_not_planar
+                    r.status == SheetMetal.STATUS_NO_THICKNESS -> R.string.sheet_not_sheet
+                    r.status != SheetMetal.STATUS_OK -> R.string.sheet_not_sheet
+                    else -> 0
+                }
+                if (msg != 0 || r == null) {
+                    Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                SheetMetal.show(
+                    context = this,
+                    r = r,
+                    onKFactor = { k2 ->
+                        prefs.edit().putFloat("k_factor", k2.toFloat()).apply()
+                        runUnfold(mesh, part, face)
+                    },
+                    onSave = {
+                        pendingDxf = r.dxf
+                        exportDxf.launch(baseFileName() + "_acinim.dxf")
+                    },
+                    onShare = { shareDxf(r.dxf, "_acinim.dxf") },
+                )
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Dokunarak seçim (not konumu, kesit yüzeyi) ve notlar
+    // -----------------------------------------------------------------------
+
+    private fun startPick(target: Int, hint: Int) {
+        if (currentMesh == null) return
+        if (measureMode) setMeasureMode(false)
+        if (selectMode) setSelectMode(false)
+        stopDxfPick()
+        pickSnackbar?.dismiss()
+        pickTarget = target
+        val bar = Snackbar.make(findViewById(R.id.model_view), hint, Snackbar.LENGTH_INDEFINITE)
+        bar.setAction(R.string.cancel) { }
+        bar.addCallback(object : Snackbar.Callback() {
+            override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                if (pickSnackbar === transientBottomBar) {
+                    pickSnackbar = null
+                    pickTarget = PICK_NONE
+                }
+            }
+        })
+        pickSnackbar = bar
+        bar.show()
+    }
+
+    private fun stopPick() {
+        pickTarget = PICK_NONE
+        val bar = pickSnackbar
+        pickSnackbar = null
+        bar?.dismiss()
+    }
+
+    private fun handlePick(x: Float, y: Float) {
+        val mesh = currentMesh ?: return
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val visible = if (partVisible.all { it }) null else partVisible.copyOf()
+        val clip = if (sectionOn) clipPlane(mesh) else null
+        val threshold = 18f * resources.displayMetrics.density
+        val target = pickTarget
+        executor.execute {
+            when (target) {
+                PICK_NOTE -> {
+                    val s = Picker.snapPoint(mesh, mvp, w, h, x, y, threshold, visible, clip, false) { null }
+                    runOnUiThread {
+                        if (mesh !== currentMesh || pickTarget != PICK_NOTE || s == null) return@runOnUiThread
+                        stopPick()
+                        notes.addAt(s.point)
+                    }
+                }
+                PICK_SECTION_FACE -> {
+                    val face = Picker.pickFace(mesh, mvp, w, h, x, y, visible, clip)
+                    val info = if (face >= 0) {
+                        try {
+                            StepNative.shapeInfo(StepNative.KIND_FACE, face)
+                        } catch (_: Throwable) {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                    runOnUiThread {
+                        if (mesh !== currentMesh || pickTarget != PICK_SECTION_FACE || face < 0) return@runOnUiThread
+                        if (info == null || info.size < 12 || info[0].toInt() != GeomKind.PLANE) {
+                            Toast.makeText(this, R.string.section_face_not_planar, Toast.LENGTH_SHORT).show()
+                            return@runOnUiThread
+                        }
+                        stopPick()
+                        sectionFace = floatArrayOf(
+                            info[9].toFloat(), info[10].toFloat(), info[11].toFloat(),
+                            info[6].toFloat(), info[7].toFloat(), info[8].toFloat(),
+                        )
+                        sectionFlip = false
+                        sectionSlider.value = 950f
+                        if (!sectionOn) setSection(true) else updateSection()
+                        haptic()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun openNoteAt(x: Float, y: Float) {
+        if (notes.notes.isEmpty()) return
+        val note = notes.findNear(
+            modelView.currentMvp(), modelView.width, modelView.height, x, y,
+            24f * resources.displayMetrics.density,
+        ) ?: return
+        notes.open(note)
+    }
+
+    private fun mergePoints(a: FloatArray?, b: FloatArray): FloatArray? = when {
+        a == null || a.isEmpty() -> b.takeIf { it.isNotEmpty() }
+        b.isEmpty() -> a
+        else -> a + b
+    }
+
+    private fun printScreenshot() {
+        val overlayText = if (measureMode) measure.lastText else ""
+        modelView.captureScreenshot { bmp ->
+            if (bmp == null || isDestroyed) {
+                Toast.makeText(this, R.string.print_failed, Toast.LENGTH_SHORT).show()
+                return@captureScreenshot
+            }
+            try {
+                val helper = PrintHelper(this)
+                helper.scaleMode = PrintHelper.SCALE_MODE_FIT
+                helper.orientation = if (bmp.width > bmp.height) PrintHelper.ORIENTATION_LANDSCAPE
+                else PrintHelper.ORIENTATION_PORTRAIT
+                helper.printBitmap(baseFileName(), annotate(bmp, currentName, overlayText))
+            } catch (_: Exception) {
+                Toast.makeText(this, R.string.print_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     companion object {
         private const val MENU_INFO = 1
         private const val MENU_SHARE = 2
@@ -1908,7 +3105,25 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_HOLES = 11
         private const val MENU_DXF = 12
         private const val MENU_DRAWING = 13
+        private const val MENU_COST = 14
+        private const val MENU_PHOTO_CAD = 15
+        private const val MENU_SHEET = 20
+        private const val MENU_QC = 21
+        private const val MENU_FIT = 22
+        private const val MENU_SETTINGS = 23
+        private const val MENU_NOTE_ADD = 24
+        private const val MENU_NOTES = 25
+        private const val MENU_PRINT = 26
+        private const val PICK_NONE = 0
+        private const val PICK_NOTE = 1
+        private const val PICK_SECTION_FACE = 2
+        private const val MENU_SAVE_VIEW = 60
+        private const val MENU_MANAGE_VIEWS = 61
+        private const val MENU_SAVED_BASE = 1000
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
+        private const val MENU_FREE_ORBIT = 52
+        private const val MENU_ROTATE_SPEED = 53
+        private val ROTATE_SPEEDS = floatArrayOf(0.55f, 1f, 1.7f)
     }
 }

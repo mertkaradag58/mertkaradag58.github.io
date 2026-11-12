@@ -10,6 +10,8 @@ object StepNative {
 
     const val KIND_EDGE = 0
     const val KIND_FACE = 1
+    /** Yalnız Kotlin tarafında: ölçümde seçilen nokta. */
+    const val KIND_POINT = 2
 
     /**
      * STEP / IGES / BREP dosyasını okur ve üçgenler (biçim içerikten algılanır).
@@ -22,7 +24,8 @@ object StepNative {
 
     /**
      * Kenar veya yüzey bilgisi:
-     * [tür, uzunluk, alan, yarıçap, yarıçap2, açı, cx, cy, cz, dx, dy, dz]; bulunamazsa null.
+     * [tür, uzunluk, alan, yarıçap, yarıçap2, açı, cx, cy, cz, dx, dy, dz, çevre]; bulunamazsa null.
+     * Çevre yalnız CAD yüzeylerinde (yoksa 0).
      * Tür: [GeomKind] sabitleri.
      */
     external fun shapeInfo(kind: Int, id: Int): DoubleArray?
@@ -33,6 +36,9 @@ object StepNative {
      * (olmayan değerler -1); başarısızsa null.
      */
     external fun measurePair(kindA: Int, idA: Int, kindB: Int, idB: Int): DoubleArray?
+
+    /** Nokta ile kenar/yüzey arası: [mesafe, nokta xyz, şekil üzerindeki en yakın nokta xyz] veya null. */
+    external fun measurePoint(x: Double, y: Double, z: Double, kind: Int, id: Int): DoubleArray?
 
     /** Hacim/alan/ağırlık merkezi: [hacim mm³, alan mm², cx, cy, cz, katı var mı]. null = tüm model. */
     external fun massProps(partIds: IntArray?): DoubleArray?
@@ -61,6 +67,12 @@ object StepNative {
      * DoubleArray sınır kutusu]. Bkz. [TechDrawing.load]. Arka planda çağrılmalı.
      */
     external fun drawingViews(partIds: IntArray?, zUp: Boolean, hidden: Boolean): Array<Any>?
+
+    /**
+     * Sac açınımı (yalnızca CAD). faceId < 0: parçanın en büyük düz yüzü taban olur.
+     * Bkz. [SheetMetal.unfold]. Arka planda çağrılmalı.
+     */
+    external fun unfoldSheet(partId: Int, faceId: Int, kFactor: Double): Array<Any>?
 }
 
 /** C++ GeomKind ile aynı değerler. */

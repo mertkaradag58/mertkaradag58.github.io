@@ -16,6 +16,7 @@
 #include "drawing_views.h"
 #include "dxf_export.h"
 #include "hole_finder.h"
+#include "sheet_unfold.h"
 #include "step_mesher.h"
 
 #define LOG_TAG "StepViewer"
@@ -206,7 +207,7 @@ Java_com_mertkaradag_stepviewer_StepNative_shapeInfo(JNIEnv* env, jobject /*thiz
   }
   return ToJava(env, std::vector<double>{static_cast<double>(i.kind), i.length, i.area, i.radius, i.radius2,
                       i.angleDeg, i.center[0], i.center[1], i.center[2], i.dir[0], i.dir[1],
-                      i.dir[2]});
+                      i.dir[2], i.perimeter});
 }
 
 // Dönüş: [mesafe, p1x, p1y, p1z, p2x, p2y, p2z, açı, merkez/eksen mesafesi, paralel düzlem
@@ -225,6 +226,22 @@ Java_com_mertkaradag_stepviewer_StepNative_measurePair(JNIEnv* env, jobject /*th
   }
   return ToJava(env, std::vector<double>{m.distance, m.p1[0], m.p1[1], m.p1[2], m.p2[0], m.p2[1], m.p2[2],
                       m.angleDeg, m.centerDistance, m.parallelDistance});
+}
+
+// Nokta ile kenar/yüzey arası. Dönüş: [mesafe, nokta xyz, en yakın nokta xyz] veya null
+extern "C" JNIEXPORT jdoubleArray JNICALL
+Java_com_mertkaradag_stepviewer_StepNative_measurePoint(JNIEnv* env, jobject /*thiz*/, jdouble x,
+                                                        jdouble y, jdouble z, jint kind, jint id) {
+  const double p[3] = {x, y, z};
+  stepviewer::PairMeasure m;
+  if (auto mesh = CurrentMesh()) {
+    if (!stepviewer::MeshMeasurePoint(*mesh, p, kind, id, m)) return nullptr;
+  } else {
+    TopoDS_Shape s;
+    if (!GetStoredShape(kind, id, s) || !stepviewer::MeasurePointShape(p, s, m)) return nullptr;
+  }
+  return ToJava(env, std::vector<double>{m.distance, m.p1[0], m.p1[1], m.p1[2], m.p2[0], m.p2[1],
+                                         m.p2[2]});
 }
 
 // partIds null ise tüm model. Dönüş: [hacim, alan, cx, cy, cz, katı var mı (1/0)] veya null
@@ -442,5 +459,52 @@ Java_com_mertkaradag_stepviewer_StepNative_drawingViews(JNIEnv* env, jobject /*t
   env->SetObjectArrayElement(result, 0, js);
   env->SetObjectArrayElement(result, 1, jr);
   env->SetObjectArrayElement(result, 2, jb);
+  return result;
+}
+
+// Sac açınımı (yalnızca CAD). faceId < 0 ise parçanın en büyük düz yüzü taban olur.
+// Dönüş: [byte[] DXF, double[] {durum, kalınlık, k, genişlik, yükseklik, alan, atlanan yüz},
+// double[] büküm başına 9 değer (açı, iç R, boy, pay, yukarı 1/0, x1, y1, x2, y2),
+// float[] kesim çizgileri, float[] büküm çizgileri] veya null.
+extern "C" JNIEXPORT jobjectArray JNICALL
+Java_com_mertkaradag_stepviewer_StepNative_unfoldSheet(JNIEnv* env, jobject /*thiz*/, jint partId,
+                                                       jint faceId, jdouble kFactor) {
+  TopoDS_Shape part;
+  TopoDS_Face base;
+  {
+    std::lock_guard<std::mutex> lock(gStore.mutex);
+    if (gStore.mesh || partId < 0 || static_cast<size_t>(partId) >= gStore.parts.size()) return nullptr;
+    part = gStore.parts[static_cast<size_t>(partId)];
+    if (faceId >= 0 && static_cast<size_t>(faceId) < gStore.faces.size()) {
+      base = gStore.faces[static_cast<size_t>(faceId)];
+    }
+  }
+  stepviewer::SheetResult r;
+  stepviewer::UnfoldSheet(part, base, kFactor, r);
+  std::vector<double> info{static_cast<double>(r.status), r.thickness, r.kFactor, r.width, r.height, r.area,
+                           static_cast<double>(r.skippedFaces)};
+  std::vector<double> bends;
+  for (const auto& b : r.bends) {
+    bends.insert(bends.end(), {b.angleDeg, b.innerRadius, b.length, b.allowance, b.up ? 1.0 : 0.0, b.x1, b.y1,
+                               b.x2, b.y2});
+  }
+  jclass objClass = env->FindClass("java/lang/Object");
+  if (objClass == nullptr) return nullptr;
+  jobjectArray result = env->NewObjectArray(5, objClass, nullptr);
+  if (result == nullptr) return nullptr;
+  jbyteArray jtext = env->NewByteArray(static_cast<jsize>(r.dxf.size()));
+  jdoubleArray jinfo = ToJava(env, info);
+  jdoubleArray jbends = ToJava(env, bends);
+  jfloatArray jout = ToJava(env, r.outline.data(), r.outline.size());
+  jfloatArray jbl = ToJava(env, r.bendLines.data(), r.bendLines.size());
+  if (!jtext || !jinfo || !jbends || !jout || !jbl) return nullptr;
+  if (!r.dxf.empty()) {
+    env->SetByteArrayRegion(jtext, 0, static_cast<jsize>(r.dxf.size()), reinterpret_cast<const jbyte*>(r.dxf.data()));
+  }
+  env->SetObjectArrayElement(result, 0, jtext);
+  env->SetObjectArrayElement(result, 1, jinfo);
+  env->SetObjectArrayElement(result, 2, jbends);
+  env->SetObjectArrayElement(result, 3, jout);
+  env->SetObjectArrayElement(result, 4, jbl);
   return result;
 }

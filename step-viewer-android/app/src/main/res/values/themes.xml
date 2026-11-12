@@ -1,20 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.StepViewer" parent="Theme.Material3.Dark.NoActionBar">
+    <!-- Açık / koyu tema renkleri values/colors.xml ve values-night/colors.xml içinde -->
+    <style name="Theme.StepViewer" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/accent</item>
-        <item name="colorOnPrimary">#FF002544</item>
-        <item name="colorPrimaryContainer">@color/accent_dark</item>
-        <item name="colorOnPrimaryContainer">#FFD3E4FF</item>
-        <item name="colorSecondary">@color/measure</item>
-        <item name="colorSurface">#FF1C2027</item>
+        <item name="colorOnPrimary">@color/on_accent</item>
+        <item name="colorPrimaryContainer">@color/accent_container</item>
+        <item name="colorOnPrimaryContainer">@color/on_accent_container</item>
+        <item name="colorSecondary">@color/accent</item>
+        <item name="colorOnSecondary">@color/on_accent</item>
+        <item name="colorSecondaryContainer">@color/accent_container</item>
+        <item name="colorOnSecondaryContainer">@color/on_accent_container</item>
+        <item name="colorTertiary">@color/select</item>
+        <item name="colorSurface">@color/surface_solid</item>
         <item name="colorOnSurface">@color/text</item>
-        <item name="colorSurfaceContainer">#FF1F232B</item>
-        <item name="colorSurfaceContainerHigh">#FF262B34</item>
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+        <item name="colorSurfaceContainerLowest">@color/surface_solid</item>
+        <item name="colorSurfaceContainerLow">@color/surface_solid</item>
+        <item name="colorSurfaceContainer">@color/surface_solid</item>
+        <item name="colorSurfaceContainerHigh">@color/surface_solid</item>
+        <item name="colorSurfaceContainerHighest">@color/surface_variant</item>
+        <item name="colorOutlineVariant">@color/outline</item>
         <item name="android:colorBackground">@color/background</item>
         <item name="android:windowBackground">@color/background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightStatusBar">@bool/light_bars</item>
     </style>
 
     <!-- Alt araç çubuğu düğmesi (simge + yazı) -->
@@ -24,8 +34,8 @@
         <item name="android:layout_weight">1</item>
         <item name="android:orientation">vertical</item>
         <item name="android:gravity">center</item>
-        <item name="android:paddingTop">8dp</item>
-        <item name="android:paddingBottom">6dp</item>
+        <item name="android:paddingTop">9dp</item>
+        <item name="android:paddingBottom">7dp</item>
         <item name="android:layout_marginStart">2dp</item>
         <item name="android:layout_marginEnd">2dp</item>
         <item name="android:background">@drawable/tool_background</item>
@@ -36,7 +46,8 @@
     <style name="ToolIcon">
         <item name="android:layout_width">24dp</item>
         <item name="android:layout_height">24dp</item>
-        <item name="tint">@color/text</item>
+        <item name="tint">@color/tool_content</item>
+        <item name="android:duplicateParentState">true</item>
         <item name="android:importantForAccessibility">no</item>
     </style>
 
@@ -44,12 +55,24 @@
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:layout_marginTop">3dp</item>
-        <item name="android:textColor">@color/text</item>
+        <item name="android:textColor">@color/tool_content</item>
+        <item name="android:duplicateParentState">true</item>
         <item name="android:textSize">11sp</item>
         <item name="android:maxLines">1</item>
     </style>
 
-    <!-- Sağdaki yuvarlak küçük düğmeler -->
+    <!-- Üst çubuktaki yuvarlak simge düğmeleri (cam görünümlü) -->
+    <style name="TopIconButton" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginStart">6dp</item>
+        <item name="iconSize">22dp</item>
+        <item name="backgroundTint">@color/surface</item>
+        <item name="iconTint">@color/text</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
+    </style>
+
+    <!-- Sağdaki yuvarlak köşeli küçük düğmeler -->
     <style name="SideButton" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
         <item name="android:layout_width">48dp</item>
         <item name="android:layout_height">48dp</item>
@@ -57,5 +80,7 @@
         <item name="iconSize">22dp</item>
         <item name="backgroundTint">@color/surface</item>
         <item name="iconTint">@color/text</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Medium</item>
+        <item name="android:elevation">2dp</item>
     </style>
 </resources>
