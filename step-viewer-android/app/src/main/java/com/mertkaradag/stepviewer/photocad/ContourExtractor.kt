@@ -251,6 +251,7 @@ object ContourExtractor {
             val square = abs(bw - bh) / max(bw, bh) < 0.1f
             val fill = area / (Math.PI.toFloat() * bw * bh / 4f)
             if (!square || fill < 0.72f || fill > 1.08f) continue
+            if (cornerFilled(il, n - 1, w, x0, y0, x1, y1)) continue
             // Çizgi kalınlığının yarısı kadar büyüt (bölge çizginin içinden ölçülür)
             circles.add(floatArrayOf((x0 + x1 + 1) / 2f, (y0 + y1 + 1) / 2f, (bw + bh) / 4f + 1f))
         }
@@ -375,6 +376,13 @@ object ContourExtractor {
     fun analyzeDrawing(bmp: Bitmap): DrawingResult? {
         val w = bmp.width
         val h = bmp.height
+        return analyzeMask(thickLines(bmp), w, h, null)
+    }
+
+    /** Sayfa görüntüsündeki mürekkep; çizgi kalınlığı iki tepeliyse yalnızca kalın çizgiler. */
+    private fun thickLines(bmp: Bitmap): BooleanArray {
+        val w = bmp.width
+        val h = bmp.height
         val px = IntArray(w * h)
         bmp.getPixels(px, 0, w, 0, 0, w, h)
         val lum = FloatArray(w * h)
@@ -439,6 +447,14 @@ object ContourExtractor {
         val split = total > 0 && mHigh / max(mLow, 0.1) >= 1.5 && lowShare in 0.08..0.92
         val thick = if (split) BooleanArray(w * h) { ink[it] && th[it] > thr } else ink.copyOf()
         close(thick, w, h, 1)
+        return thick
+    }
+
+    /**
+     * Görünen kenar çizgilerinin maskesinden görünüşleri bulur ve eşleştirir.
+     * @param circles vektörel PDF'ten gelen tam daireler (cx, cy, r; piksel) veya null
+     */
+    fun analyzeMask(thick: BooleanArray, w: Int, h: Int, circles: List<FloatArray>?): DrawingResult? {
 
         // Bileşenler ve sınır kutuları
         val labels = IntArray(w * h) { -1 }
@@ -494,7 +510,7 @@ object ContourExtractor {
         }
 
         fun build(c: Cand): DrawingView? {
-            val loops = viewLoops(c, thick, w, h, stack) ?: return null
+            val loops = viewLoops(c, thick, w, h, stack, circles) ?: return null
             return DrawingView(c.x0, c.y0, c.x1, c.y1, loops)
         }
 
@@ -547,7 +563,9 @@ object ContourExtractor {
     }
 
     /** Adayın dış konturu + içindeki daire delikler (resim pikseli). */
-    private fun viewLoops(c: Cand, thick: BooleanArray, w: Int, h: Int, stack: IntArray): List<Sketch.Loop>? {
+    private fun viewLoops(
+        c: Cand, thick: BooleanArray, w: Int, h: Int, stack: IntArray, vector: List<FloatArray>?,
+    ): List<Sketch.Loop>? {
         val ww = c.bw + 2; val wh = c.bh + 2
         // En büyük bileşen
         val lab = IntArray(ww * wh) { -1 }
@@ -567,6 +585,19 @@ object ContourExtractor {
         val loops = ArrayList<Sketch.Loop>()
         loops.add(toLoop(pts, eps, 1f, allowCircle = true) ?: return null)
 
+        if (vector != null) {
+            // Vektörel PDF: merkezi görünüşün içinde olan, görünüşün kendisi olmayan daireler
+            val inside = vector.filter { v ->
+                val x = (v[0] - ox).roundToInt(); val y = (v[1] - oy).roundToInt()
+                x in 0 until ww && y in 0 until wh && part[y * ww + x] &&
+                    v[2] >= 1.5f && 2 * v[2] < 0.9f * min(c.bw, c.bh)
+            }
+            val keepV = inside.filter { ci ->
+                inside.none { o -> o !== ci && o[2] < ci[2] && hypot(o[0] - ci[0], o[1] - ci[1]) < ci[2] }
+            }
+            for (ci in keepV) loops.add(Sketch.Loop(circle = true, cx = ci[0], cy = ci[1], r = ci[2]))
+            return loops
+        }
         // Delikler: görünüşün içinde, kalın çizgilerle çevrili daire biçimli boş bölgeler
         val inner = BooleanArray(ww * wh) {
             if (!part[it]) false else {
@@ -590,6 +621,7 @@ object ContourExtractor {
             if (abs(bw - bh) / max(bw, bh) > 0.12f) continue
             val fill = area / (Math.PI.toFloat() * bw * bh / 4f)
             if (fill < 0.72f || fill > 1.08f) continue
+            if (cornerFilled(il, m - 1, ww, x0, y0, x1, y1)) continue // çeyrek daire vb.
             circles.add(floatArrayOf((x0 + x1 + 1) / 2f + ox, (y0 + y1 + 1) / 2f + oy, (bw + bh) / 4f + 1.5f))
         }
         val keep = circles.filter { ci ->
@@ -597,6 +629,13 @@ object ContourExtractor {
         }
         for (ci in keep) loops.add(Sketch.Loop(circle = true, cx = ci[0], cy = ci[1], r = ci[2]))
         return loops
+    }
+
+    /** Bölge, sınır kutusunun köşelerine yakın bir noktayı içeriyor mu? (Tam dairede içermez.) */
+    private fun cornerFilled(labels: IntArray, label: Int, w: Int, x0: Int, y0: Int, x1: Int, y1: Int): Boolean {
+        val dx = ((x1 - x0) * 0.12f).roundToInt(); val dy = ((y1 - y0) * 0.12f).roundToInt()
+        return labels[(y0 + dy) * w + x0 + dx] == label || labels[(y0 + dy) * w + x1 - dx] == label ||
+            labels[(y1 - dy) * w + x0 + dx] == label || labels[(y1 - dy) * w + x1 - dx] == label
     }
 
     /** 4-komşu dolgu, her piksel için [visit] çağrılır; piksel sayısını döndürür. */

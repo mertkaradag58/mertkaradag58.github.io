@@ -67,6 +67,8 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
     private var autoPending = false
     /** PDF sayfasından: kağıt üzerindeki mm / piksel (ölçü okunamazsa kullanılır). */
     private var paperMmPerPx = 0.0
+    /** Son yüklenen PDF'in içeriği (vektör çizgileri okumak için); resimse null. */
+    @Volatile private var pdfBytes: ByteArray? = null
     /** Otomatik taramanın sonuç ekranına eklenecek açıklaması. */
     private var autoNote: String? = null
 
@@ -531,6 +533,7 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
 
     private fun loadImage(uri: Uri, lineArt: Boolean = false) {
         paperMmPerPx = 0.0
+        pdfBytes = null
         val target = current
         showProgress(getString(R.string.pc_loading_image))
         executor.execute {
@@ -563,6 +566,12 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         val renderer = try { android.graphics.pdf.PdfRenderer(pfd) } catch (_: Exception) { null }
         if (renderer == null) { pfd.close(); toast(R.string.pc_image_failed); return }
         val count = renderer.pageCount
+        pdfBytes = null
+        if (count == 1) executor.execute {
+            pdfBytes = try {
+                contentResolver.openInputStream(uri)?.use { it.readBytes() }?.takeIf { it.size < 40 * 1024 * 1024 }
+            } catch (_: Exception) { null } catch (_: OutOfMemoryError) { null }
+        }
         fun render(page: Int) {
             val target = current
             showProgress(getString(R.string.pc_loading_image))
@@ -661,7 +670,19 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         showProgress(getString(R.string.pc_scanning))
         val paper = paperMmPerPx
         executor.execute {
-            val res = try { ContourExtractor.analyzeDrawing(bmp) } catch (_: Exception) { null } catch (_: OutOfMemoryError) { null }
+            val bytes = pdfBytes
+            var res: ContourExtractor.DrawingResult? = null
+            // Vektörel PDF: çizgiler dosyadan okunur, ölçü ve eksen çizgileri budanır
+            if (bytes != null && paper > 0) {
+                res = try {
+                    vectorMask(bytes, bmp, paper)?.let { (mask, circles) ->
+                        ContourExtractor.analyzeMask(mask, bmp.width, bmp.height, circles)
+                    }
+                } catch (_: Exception) { null } catch (_: OutOfMemoryError) { null }
+            }
+            if (res == null) {
+                res = try { ContourExtractor.analyzeDrawing(bmp) } catch (_: Exception) { null } catch (_: OutOfMemoryError) { null }
+            }
             val value = if (res != null) readLargestDimension(bmp, res) else 0.0
             runOnUiThread {
                 hideProgress()
@@ -676,6 +697,64 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
                 applyAuto(bmp, res, value, paper)
             }
         }
+    }
+
+    /**
+     * PDF'in budanmış vektör çizgilerini sayfa görüntüsüyle aynı boyutta maskeye çizer. Çizgiler
+     * sayfa görüntüsüyle örtüşmüyorsa (döndürülmüş sayfa, form içeriği vb.) null döner.
+     */
+    private fun vectorMask(pdf: ByteArray, bmp: Bitmap, paperMm: Double): Pair<BooleanArray, List<FloatArray>>? {
+        val vec = PdfVector.extract(pdf) ?: return null
+        val w = bmp.width; val h = bmp.height
+        val f = (25.4 / 72.0 / paperMm).toFloat() // piksel / PDF noktası
+        val pageH = h / f
+        val pts = FloatArray(vec.segments.size)
+        var i = 0
+        while (i + 3 < pts.size) {
+            pts[i] = vec.segments[i] * f; pts[i + 1] = (pageH - vec.segments[i + 1]) * f
+            pts[i + 2] = vec.segments[i + 2] * f; pts[i + 3] = (pageH - vec.segments[i + 3]) * f
+            i += 4
+        }
+        val alpha = Bitmap.createBitmap(w, h, Bitmap.Config.ALPHA_8)
+        val paint = android.graphics.Paint().apply {
+            isAntiAlias = false; style = android.graphics.Paint.Style.STROKE; strokeWidth = 3f
+            strokeCap = android.graphics.Paint.Cap.SQUARE; color = 0xFF000000.toInt()
+        }
+        android.graphics.Canvas(alpha).drawLines(pts, paint)
+        val buf = java.nio.ByteBuffer.allocate(alpha.rowBytes * h)
+        alpha.copyPixelsToBuffer(buf)
+        val raw = buf.array()
+        val stride = alpha.rowBytes
+        alpha.recycle()
+        val mask = BooleanArray(w * h)
+        for (y in 0 until h) for (x in 0 until w) mask[y * w + x] = raw[y * stride + x].toInt() != 0
+        // Doğrulama: maske pikselleri sayfa görüntüsündeki koyu çizgilere denk gelmeli
+        val px = IntArray(w * h)
+        bmp.getPixels(px, 0, w, 0, 0, w, h)
+        fun darkAt(x: Int, y: Int): Boolean {
+            if (x < 0 || y < 0 || x >= w || y >= h) return false
+            val c = px[y * w + x]
+            return (c shr 16 and 255) + (c shr 8 and 255) + (c and 255) < 600
+        }
+        var total = 0; var hit = 0
+        var k = 0
+        while (k < mask.size) {
+            if (mask[k]) {
+                total++
+                val x = k % w; val y = k / w
+                var found = false
+                var dy = -2
+                while (dy <= 2 && !found) {
+                    for (dx in -2..2) if (darkAt(x + dx, y + dy)) { found = true; break }
+                    dy++
+                }
+                if (found) hit++
+            }
+            k += 7
+        }
+        if (total < 50 || hit < 0.6 * total) return null
+        val circles = vec.circles.map { floatArrayOf(it[0] * f, (pageH - it[1]) * f, it[2] * f) }
+        return mask to circles
     }
 
     /** Görünüşlerin çevresindeki ölçü yazılarından en büyük sayıyı okur (cihaz içi OCR); yoksa 0. */
