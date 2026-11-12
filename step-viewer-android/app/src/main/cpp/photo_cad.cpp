@@ -13,7 +13,9 @@
 #include <BRep_Builder.hxx>
 #include <Bnd_Box.hxx>
 #include <GProp_GProps.hxx>
+#include <BRepTools.hxx>
 #include <IFSelect_ReturnStatus.hxx>
+#include <IGESControl_Writer.hxx>
 #include <Interface_Static.hxx>
 #include <STEPCAFControl_Writer.hxx>
 #include <STEPControl_StepModelType.hxx>
@@ -422,6 +424,18 @@ PhotoCadResult BuildPhotoSolid(PhotoCadMode mode, const Sketch& aIn, const Sketc
     if (!WriteStep(shape, outPath, name)) {
       res.error = "write_failed";
       return res;
+    }
+    // Aynı adla IGES ve BREP kopyaları (kaydetme seçenekleri için); hata olursa yok sayılır.
+    const size_t dot = outPath.find_last_of('.');
+    const std::string base = dot == std::string::npos ? outPath : outPath.substr(0, dot);
+    try {
+      IGESControl_Writer iges("MM", 1);  // 1 = BRep (katı) modu
+      if (iges.AddShape(shape)) {
+        iges.ComputeModel();
+        iges.Write((base + ".igs").c_str());
+      }
+      BRepTools::Write(shape, (base + ".brep").c_str());
+    } catch (const Standard_Failure&) {
     }
     res.ok = true;
   } catch (const Standard_Failure& e) {

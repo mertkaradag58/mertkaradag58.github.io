@@ -106,6 +106,8 @@ This is a rough model from a photo; check critical dimensions. You can reopen th
     <string name="pc_save">Save…</string>
     <string name="pc_share">Share</string>
     <string name="pc_saved">Saved</string>
+    <string name="pc_save_as">Save as</string>
+    <string name="pc_save_mesh_note">STL / OBJ / GLB: open in viewer, then ⋮ › Export</string>
     <string name="pc_save_failed">Could not save</string>
     <string name="pc_camera_denied">Camera permission is needed to take a photo</string>
     <string name="pc_help">1. Place the part on a plain surface with a different colour (e.g. white paper for a dark part) and take the photo straight on, from as far away as possible and zoomed in a little, so that perspective distortion stays small.

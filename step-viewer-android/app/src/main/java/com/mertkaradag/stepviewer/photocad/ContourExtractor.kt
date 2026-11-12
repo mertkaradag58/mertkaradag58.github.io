@@ -2,9 +2,11 @@ package com.mertkaradag.stepviewer.photocad
 
 import android.graphics.Bitmap
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
@@ -252,12 +254,92 @@ object ContourExtractor {
             // Çizgi kalınlığının yarısı kadar büyüt (bölge çizginin içinden ölçülür)
             circles.add(floatArrayOf((x0 + x1 + 1) / 2f, (y0 + y1 + 1) / 2f, (bw + bh) / 4f + 1f))
         }
+        // Eksen çizgisi daireyi böldüğünde bölge yöntemi kaçırır: çizgi bileşenlerinden daire ara
+        circlesFromInk(labels, sizes.size, comp, partMask, w, h, minR, outerB, circles)
         // İç içe dairelerde (havşa, kademe) en küçüğü kalır
         val keep = circles.filter { c ->
             circles.none { o -> o !== c && o[2] < c[2] && hypot(o[0] - c[0], o[1] - c[1]) < c[2] }
         }
         for (c in keep) loops.add(Sketch.Loop(circle = true, cx = c[0] * outScale, cy = c[1] * outScale, r = c[2] * outScale))
         return Result(loops, w, h)
+    }
+
+    /**
+     * Parçanın içindeki çizgi bileşenlerinde tam daire arar: merkez adayı (sınır kutusu merkezi ve
+     * ağırlık merkezi) çevresinde uzaklık histogramının tepe noktası yarıçaptır; o yarıçaptaki
+     * pikseller 36 açı diliminin en az 32'sini dolduruyorsa dairedir. Eksen çizgileri simetrik
+     * olduğu için merkezi bozmaz.
+     */
+    private fun circlesFromInk(
+        labels: IntArray, labelCount: Int, outlineLabel: Int, partMask: BooleanArray, w: Int, h: Int,
+        minR: Float, outerB: FloatArray, out: ArrayList<FloatArray>,
+    ) {
+        val x0 = IntArray(labelCount) { w }; val y0 = IntArray(labelCount) { h }
+        val x1 = IntArray(labelCount) { -1 }; val y1 = IntArray(labelCount) { -1 }
+        val cnt = IntArray(labelCount)
+        for (y in 0 until h) for (x in 0 until w) {
+            val l = labels[y * w + x]
+            if (l < 0 || l == outlineLabel) continue
+            if (x < x0[l]) x0[l] = x; if (x > x1[l]) x1[l] = x
+            if (y < y0[l]) y0[l] = y; if (y > y1[l]) y1[l] = y
+            cnt[l]++
+        }
+        for (l in 0 until labelCount) {
+            if (l == outlineLabel || cnt[l] < 20) continue
+            val bw = x1[l] - x0[l] + 1; val bh = y1[l] - y0[l] + 1
+            if (min(bw, bh) < 2 * minR) continue
+            if (bw > 0.9f * (outerB[2] - outerB[0]) && bh > 0.9f * (outerB[3] - outerB[1])) continue
+            val mx = (x0[l] + x1[l]) / 2; val my = (y0[l] + y1[l]) / 2
+            if (!partMask[my.coerceIn(0, h - 1) * w + mx.coerceIn(0, w - 1)]) continue
+            // Pikselleri topla
+            val xs = ArrayList<Int>(cnt[l]); val ys = ArrayList<Int>(cnt[l])
+            var sx = 0.0; var sy = 0.0
+            for (y in y0[l]..y1[l]) for (x in x0[l]..x1[l]) {
+                if (labels[y * w + x] != l) continue
+                xs.add(x); ys.add(y); sx += x; sy += y
+            }
+            val cands = arrayOf(
+                floatArrayOf((x0[l] + x1[l] + 1) / 2f, (y0[l] + y1[l] + 1) / 2f),
+                floatArrayOf((sx / xs.size).toFloat() + 0.5f, (sy / ys.size).toFloat() + 0.5f),
+            )
+            var found: FloatArray? = null
+            for (c in cands) {
+                val maxR = max(bw, bh) / 2 + 2
+                val hist = IntArray(maxR + 2)
+                for (i in xs.indices) {
+                    val d = hypot(xs[i] + 0.5f - c[0], ys[i] + 0.5f - c[1]).roundToInt()
+                    if (d <= maxR) hist[d]++
+                }
+                // Küçükten büyüğe: tam çevreyi dolduran ilk tepe
+                var r = minR.roundToInt()
+                while (r <= maxR) {
+                    val around = hist[r] + (if (r > 0) hist[r - 1] else 0) + hist[r + 1]
+                    if (around >= 0.7 * 2 * Math.PI * r) {
+                        val tol = max(1.5f, 0.06f * r)
+                        val bins = BooleanArray(36)
+                        var sum = 0.0; var nIn = 0
+                        for (i in xs.indices) {
+                            val dx = xs[i] + 0.5f - c[0]; val dy = ys[i] + 0.5f - c[1]
+                            val d = hypot(dx, dy)
+                            if (abs(d - r) > tol) continue
+                            val a = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())) + 180.0
+                            bins[(a / 10.0).toInt().coerceIn(0, 35)] = true
+                            sum += d; nIn++
+                        }
+                        if (bins.count { it } >= 32 && nIn > 0) {
+                            found = floatArrayOf(c[0], c[1], (sum / nIn).toFloat())
+                            break
+                        }
+                    }
+                    r++
+                }
+                if (found != null) break
+            }
+            val f = found ?: continue
+            // Bölge yöntemiyle bulunmuş aynı daire varsa ekleme
+            if (out.any { hypot(it[0] - f[0], it[1] - f[1]) < 0.3f * f[2] && abs(it[2] - f[2]) < 0.25f * f[2] }) continue
+            out.add(f)
+        }
     }
 
     /** 4-komşu dolgu, her piksel için [visit] çağrılır; piksel sayısını döndürür. */

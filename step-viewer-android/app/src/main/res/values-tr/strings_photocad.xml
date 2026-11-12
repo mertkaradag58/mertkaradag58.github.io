@@ -106,6 +106,8 @@ Bu, fotoğraftan çıkarılmış kaba bir modeldir; kritik ölçüleri kontrol e
     <string name="pc_save">Kaydet…</string>
     <string name="pc_share">Paylaş</string>
     <string name="pc_saved">Kaydedildi</string>
+    <string name="pc_save_as">Farklı kaydet</string>
+    <string name="pc_save_mesh_note">STL / OBJ / GLB: görüntüleyicide aç, sonra ⋮ › Dışa aktar</string>
     <string name="pc_save_failed">Kaydedilemedi</string>
     <string name="pc_camera_denied">Fotoğraf çekmek için kamera izni gerekli</string>
     <string name="pc_help">1. Parçayı farklı renkte düz bir zemine koyun (ör. koyu parça için beyaz kağıt) ve fotoğrafı tam karşıdan çekin. Perspektif bozulmasını azaltmak için biraz uzaktan ve hafif yakınlaştırarak çekin.

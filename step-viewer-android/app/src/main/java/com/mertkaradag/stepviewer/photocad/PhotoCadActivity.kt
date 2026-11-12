@@ -447,12 +447,14 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
 
     private fun openProject(p: PhotoCadProject, view: Int) {
         project = p
+        val decoded = HashMap<String, Bitmap>() // aynı sayfayı paylaşan görünüşler tek resim kullanır
         for (i in 0..2) {
             bitmaps[i] = null; analysis[i] = null; undo[i].clear()
             lastSeed[i][0] = -1f; lastSeed[i][1] = -1f
             p.sketches[i].image?.let { name ->
                 val f = p.imageFile(name)
-                if (f.exists()) BitmapFactory.decodeFile(f.absolutePath)?.let { setBitmap(i, it) }
+                val bmp = decoded[name] ?: (if (f.exists()) BitmapFactory.decodeFile(f.absolutePath) else null)
+                if (bmp != null) { decoded[name] = bmp; setBitmap(i, bmp, p.sketches[i].lineArt) }
             }
         }
         viewToggle.visibility = if (p.mode == PhotoCadNative.MODE_TWO_VIEW) View.VISIBLE else View.GONE
@@ -1063,8 +1065,25 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
             .setTitle(R.string.pc_result_title)
             .setMessage(msg)
             .setPositiveButton(R.string.pc_view_model) { _, _ -> openInViewer(file) }
-            .setNeutralButton(R.string.pc_save) { _, _ -> pendingSave = file; saveStep.launch(file.name) }
-            .setNegativeButton(R.string.pc_share) { _, _ -> share(file) }
+            .setNeutralButton(R.string.pc_save) { _, _ -> showSaveFormats(file, share = false) }
+            .setNegativeButton(R.string.pc_share) { _, _ -> showSaveFormats(file, share = true) }
+            .show()
+    }
+
+    /** STEP / IGES / BREP seçimi (IGES ve BREP, STEP ile birlikte üretilir). */
+    private fun showSaveFormats(step: File, share: Boolean) {
+        val base = step.absolutePath.substringBeforeLast('.')
+        val files = listOf(step, File("$base.igs"), File("$base.brep")).filter { it.exists() && it.length() > 0 }
+        val labels = files.map {
+            when (it.extension) { "igs" -> "IGES (.igs)"; "brep" -> "BREP (.brep)"; else -> "STEP (.step)" }
+        }.toMutableList()
+        labels.add(getString(R.string.pc_save_mesh_note))
+        MaterialAlertDialogBuilder(this)
+            .setTitle(if (share) R.string.pc_share else R.string.pc_save_as)
+            .setItems(labels.toTypedArray()) { _, w ->
+                if (w >= files.size) { openInViewer(step); return@setItems }
+                if (share) share(files[w]) else { pendingSave = files[w]; saveStep.launch(files[w].name) }
+            }
             .show()
     }
 
