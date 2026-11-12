@@ -54,14 +54,14 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
     private val executor = Executors.newSingleThreadExecutor()
     private lateinit var project: PhotoCadProject
     private var current = 0
-    private val bitmaps = arrayOfNulls<Bitmap>(2)
+    private val bitmaps = arrayOfNulls<Bitmap>(3)
     /** Çözümleme için küçültülmüş resim ve asıl resme oranı. */
-    private val analysis = arrayOfNulls<Bitmap>(2)
-    private val analysisScale = floatArrayOf(1f, 1f)
-    private val lastSeed = arrayOf(floatArrayOf(-1f, -1f), floatArrayOf(-1f, -1f))
+    private val analysis = arrayOfNulls<Bitmap>(3)
+    private val analysisScale = floatArrayOf(1f, 1f, 1f)
+    private val lastSeed = Array(3) { floatArrayOf(-1f, -1f) }
     private var sensitivity = 0.5f
     private var detail = 0.5f
-    private val undo = arrayOf(ArrayDeque<List<Sketch.Loop>>(), ArrayDeque<List<Sketch.Loop>>())
+    private val undo = Array(3) { ArrayDeque<List<Sketch.Loop>>() }
     private var busy = false
 
     private lateinit var sketchView: SketchView
@@ -99,6 +99,16 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
     }
     private val pickVideo = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { showFramePicker(it) }
+    }
+    /** Teknik resim olarak açılan resim / PDF. */
+    private val pickDrawingImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let { loadImage(it, lineArt = true) }
+    }
+    private val pickPdf = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { loadPdf(it) }
+    }
+    private val takeDrawingPicture = registerForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        if (ok) loadImage(Uri.fromFile(captureFile), lineArt = true)
     }
     private var pendingSave: File? = null
     private val saveStep = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
@@ -198,8 +208,9 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
             isSelectionRequired = true
             addView(toggleButton(R.string.pc_view_top, 101))
             addView(toggleButton(R.string.pc_view_front, 102))
+            addView(toggleButton(R.string.pc_view_side, 103))
             check(101)
-            addOnButtonCheckedListener { _, id, checked -> if (checked) switchView(if (id == 102) 1 else 0) }
+            addOnButtonCheckedListener { _, id, checked -> if (checked) switchView(id - 101) }
             visibility = View.GONE
         }
         root.addView(viewToggle, LinearLayout.LayoutParams(-1, -2).apply { setMargins(dp(12), dp(4), dp(12), dp(4)) })
@@ -318,6 +329,10 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         actions.addView(chip(R.string.pc_camera) { withCamera { takePicture.launch(shareUri(captureFile)) } })
         actions.addView(chip(R.string.pc_gallery) { pickImage.launch("image/*") })
         actions.addView(chip(R.string.pc_video) { showVideoSource() })
+        actions.addView(chip(R.string.pc_drawing) { showDrawingSource() })
+        sharedImageSource()?.let { src ->
+            actions.addView(chip(R.string.pc_same_image) { useSameImage(src) })
+        }
         actions.addView(chip(R.string.pc_draw) { startDrawing() })
         if (!sketch.isEmpty) {
             actions.addView(chip(R.string.pc_scale) { showScaleDialog(null) })
@@ -330,6 +345,16 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         if (bitmaps[current] != null) actions.addView(chip(R.string.pc_tune) {
             tunePanel.visibility = if (tunePanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         })
+        if (project.mode == PhotoCadNative.MODE_TWO_VIEW && current == 0) {
+            actions.addView(chip(if (project.flipTop) R.string.pc_front_edge_top else R.string.pc_front_edge_bottom) {
+                project.flipTop = !project.flipTop; refreshActions(); saveProject()
+            })
+        }
+        if (project.mode == PhotoCadNative.MODE_TWO_VIEW && current == 2) {
+            actions.addView(chip(if (project.sideRight) R.string.pc_side_from_right else R.string.pc_side_from_left) {
+                project.sideRight = !project.sideRight; refreshActions(); saveProject()
+            })
+        }
         if (project.mode == PhotoCadNative.MODE_REVOLVE) {
             actions.addView(chip(if (project.axis == 0) R.string.pc_axis_h else R.string.pc_axis_v) {
                 project.axis = 1 - project.axis
@@ -345,15 +370,17 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         val s = sketch
         val text = when {
             sketchView.mode == SketchView.Mode.DRAW -> getString(R.string.pc_hint_draw)
-            sketchView.mode == SketchView.Mode.SEED -> getString(R.string.pc_hint_seed)
+            sketchView.mode == SketchView.Mode.SEED ->
+                getString(if (s.lineArt) R.string.pc_hint_seed_drawing else R.string.pc_hint_seed)
             s.image == null && s.isEmpty -> getString(
                 when {
                     project.mode == PhotoCadNative.MODE_TWO_VIEW && current == 1 -> R.string.pc_hint_start_front
+                    project.mode == PhotoCadNative.MODE_TWO_VIEW && current == 2 -> R.string.pc_hint_start_side_view
                     project.mode == PhotoCadNative.MODE_TWO_VIEW -> R.string.pc_hint_start_top
                     project.mode == PhotoCadNative.MODE_REVOLVE -> R.string.pc_hint_start_side
                     else -> R.string.pc_hint_start_top
                 })
-            s.isEmpty -> getString(R.string.pc_hint_seed)
+            s.isEmpty -> getString(if (s.lineArt) R.string.pc_hint_seed_drawing else R.string.pc_hint_seed)
             !s.scaled -> getString(R.string.pc_hint_scale)
             else -> {
                 val sz = s.sizeMm()
@@ -393,7 +420,7 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
             .setTitle(R.string.pc_menu_method)
             .setSingleChoiceItems(methodLabels(), project.mode) { d, which ->
                 project.mode = which
-                if (which != PhotoCadNative.MODE_TWO_VIEW && current == 1) current = 0
+                if (which != PhotoCadNative.MODE_TWO_VIEW) current = 0
                 openProject(project, current)
                 d.dismiss()
             }
@@ -420,7 +447,7 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
 
     private fun openProject(p: PhotoCadProject, view: Int) {
         project = p
-        for (i in 0..1) {
+        for (i in 0..2) {
             bitmaps[i] = null; analysis[i] = null; undo[i].clear()
             lastSeed[i][0] = -1f; lastSeed[i][1] = -1f
             p.sketches[i].image?.let { name ->
@@ -429,8 +456,8 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
             }
         }
         viewToggle.visibility = if (p.mode == PhotoCadNative.MODE_TWO_VIEW) View.VISIBLE else View.GONE
-        current = if (p.mode == PhotoCadNative.MODE_TWO_VIEW) view.coerceIn(0, 1) else 0
-        viewToggle.check(if (current == 1) 102 else 101)
+        current = if (p.mode == PhotoCadNative.MODE_TWO_VIEW) view.coerceIn(0, 2) else 0
+        viewToggle.check(101 + current)
         switchView(current)
     }
 
@@ -478,21 +505,93 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
             .show()
     }
 
-    private fun loadImage(uri: Uri) {
+    private fun loadImage(uri: Uri, lineArt: Boolean = false) {
         val target = current
         showProgress(getString(R.string.pc_loading_image))
         executor.execute {
-            val bmp = try { decodeImage(uri) } catch (e: Exception) { null } catch (e: OutOfMemoryError) { null }
+            val bmp = try { decodeImage(uri, if (lineArt) DRAWING_PX else PHOTO_PX) } catch (e: Exception) { null } catch (e: OutOfMemoryError) { null }
             runOnUiThread {
                 hideProgress()
                 if (bmp == null) { toast(R.string.pc_image_failed); return@runOnUiThread }
-                useBitmap(target, bmp)
+                useBitmap(target, bmp, lineArt)
             }
         }
     }
 
-    private fun useBitmap(target: Int, bmp: Bitmap) {
-        val name = if (target == 0) "a.jpg" else "b.jpg"
+    private fun showDrawingSource() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.pc_drawing)
+            .setItems(arrayOf(getString(R.string.pc_drawing_pdf), getString(R.string.pc_drawing_image),
+                getString(R.string.pc_drawing_photo))) { _, w ->
+                when (w) {
+                    0 -> pickPdf.launch(arrayOf("application/pdf"))
+                    1 -> pickDrawingImage.launch("image/*")
+                    else -> withCamera { takeDrawingPicture.launch(shareUri(captureFile)) }
+                }
+            }
+            .show()
+    }
+
+    private fun loadPdf(uri: Uri) {
+        val pfd = try { contentResolver.openFileDescriptor(uri, "r") } catch (_: Exception) { null }
+        if (pfd == null) { toast(R.string.pc_image_failed); return }
+        val renderer = try { android.graphics.pdf.PdfRenderer(pfd) } catch (_: Exception) { null }
+        if (renderer == null) { pfd.close(); toast(R.string.pc_image_failed); return }
+        val count = renderer.pageCount
+        fun render(page: Int) {
+            val target = current
+            showProgress(getString(R.string.pc_loading_image))
+            executor.execute {
+                val bmp = try {
+                    renderer.openPage(page).use { p ->
+                        val f = DRAWING_PX.toFloat() / max(p.width, p.height)
+                        val b = Bitmap.createBitmap((p.width * f).roundToInt().coerceAtLeast(1),
+                            (p.height * f).roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+                        b.eraseColor(android.graphics.Color.WHITE)
+                        p.render(b, null, null, android.graphics.pdf.PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        b
+                    }
+                } catch (_: Exception) { null } catch (_: OutOfMemoryError) { null }
+                try { renderer.close(); pfd.close() } catch (_: Exception) {}
+                runOnUiThread {
+                    hideProgress()
+                    if (bmp == null) toast(R.string.pc_image_failed) else useBitmap(target, bmp, true)
+                }
+            }
+        }
+        if (count <= 1) { render(0); return }
+        val labels = Array(count) { getString(R.string.pc_pdf_page, it + 1) }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.pc_pdf_choose_page)
+            .setItems(labels) { _, w -> render(w) }
+            .setOnCancelListener { try { renderer.close(); pfd.close() } catch (_: Exception) {} }
+            .show()
+    }
+
+    /** Bu görünüşte resim yokken başka bir görünüşün resmi (aynı teknik resim sayfası). */
+    private fun sharedImageSource(): Int? {
+        if (project.mode != PhotoCadNative.MODE_TWO_VIEW || bitmaps[current] != null) return null
+        return (0..2).firstOrNull { it != current && bitmaps[it] != null && project.sketches[it].image != null }
+    }
+
+    private fun useSameImage(src: Int) {
+        val from = project.sketches[src]
+        val s = sketch
+        if (!s.isEmpty) undo[current].addLast(s.snapshot())
+        s.loops.clear()
+        s.image = from.image
+        s.imageW = from.imageW; s.imageH = from.imageH
+        s.lineArt = from.lineArt
+        // Aynı resim = aynı ölçek
+        s.sx = from.sx; s.sy = from.sy; s.scaled = from.scaled
+        lastSeed[current][0] = -1f
+        bitmaps[src]?.let { setBitmap(current, it, s.lineArt) }
+        switchView(current)
+        saveProject()
+    }
+
+    private fun useBitmap(target: Int, bmp: Bitmap, lineArt: Boolean = false) {
+        val name = "img_${System.currentTimeMillis()}.jpg"
         try {
             project.dir.mkdirs()
             FileOutputStream(project.imageFile(name)).use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
@@ -500,10 +599,23 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         val s = project.sketches[target]
         if (!s.isEmpty) { undo[target].addLast(s.snapshot()) }
         s.loops.clear()
+        val old = s.image
         s.image = name
         s.imageW = bmp.width; s.imageH = bmp.height
+        s.lineArt = lineArt
+        s.scaled = false
         lastSeed[target][0] = -1f
-        setBitmap(target, bmp)
+        setBitmap(target, bmp, lineArt)
+        // Kullanılmayan eski resmi sil
+        if (old != null && project.sketches.none { it.image == old }) project.imageFile(old).delete()
+        // Teknik resimde diğer boş görünüşler de aynı sayfayı kullanır
+        if (lineArt && project.mode == PhotoCadNative.MODE_TWO_VIEW) {
+            for (i in 0..2) if (i != target && project.sketches[i].image == null) {
+                val o = project.sketches[i]
+                o.image = name; o.imageW = bmp.width; o.imageH = bmp.height; o.lineArt = true
+                setBitmap(i, bmp, true)
+            }
+        }
         if (target == current) {
             switchView(target)
             sketchView.mode = SketchView.Mode.SEED
@@ -512,9 +624,10 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         saveProject()
     }
 
-    private fun setBitmap(i: Int, bmp: Bitmap) {
+    private fun setBitmap(i: Int, bmp: Bitmap, lineArt: Boolean = project.sketches[i].lineArt) {
         bitmaps[i] = bmp
-        val f = 900f / max(bmp.width, bmp.height)
+        // Teknik resimde ince çizgiler kaybolmasın diye daha yüksek çözünürlük
+        val f = (if (lineArt) 1600f else 900f) / max(bmp.width, bmp.height)
         if (f < 1f) {
             analysis[i] = Bitmap.createScaledBitmap(bmp, (bmp.width * f).roundToInt(), (bmp.height * f).roundToInt(), true)
             analysisScale[i] = 1f / f
@@ -524,13 +637,13 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         }
     }
 
-    /** En uzun kenarı 1600 px olacak şekilde, EXIF yönü uygulanmış resim. */
-    private fun decodeImage(uri: Uri): Bitmap? {
+    /** En uzun kenarı [maxPx] olacak şekilde, EXIF yönü uygulanmış resim. */
+    private fun decodeImage(uri: Uri, maxPx: Int): Bitmap? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0) return null
         var sample = 1
-        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 1600) sample *= 2
+        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxPx) sample *= 2
         val raw = contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
         } ?: return null
@@ -544,11 +657,11 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
                 }
             } ?: 0
         } catch (_: Exception) { 0 }
-        return fitBitmap(raw, rotation)
+        return fitBitmap(raw, rotation, maxPx)
     }
 
-    private fun fitBitmap(raw: Bitmap, rotation: Int): Bitmap {
-        val f = minOf(1f, 1600f / max(raw.width, raw.height))
+    private fun fitBitmap(raw: Bitmap, rotation: Int, maxPx: Int = PHOTO_PX): Bitmap {
+        val f = minOf(1f, maxPx.toFloat() / max(raw.width, raw.height))
         if (rotation == 0 && f >= 1f) return raw
         val mat = Matrix().apply { postScale(f, f); postRotate(rotation.toFloat()) }
         return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, mat, true)
@@ -611,7 +724,7 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
                 if (f != null) {
                     // getFrameAtTime yönü uygulamış döner (API 28+); eski sürümlerde elle çevir
                     val rot = if (android.os.Build.VERSION.SDK_INT >= 28) 0 else rotation
-                    useBitmap(current, fitBitmap(f, rot))
+                    useBitmap(current, fitBitmap(f, rot, PHOTO_PX))
                 }
             }
             .setNegativeButton(R.string.pc_cancel, null)
@@ -637,10 +750,11 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         val k = analysisScale[current]
         val target = current
         val sens = sensitivity; val det = detail
+        val lineArt = sketch.lineArt
         showProgress(getString(R.string.pc_detecting))
         executor.execute {
             val r = try {
-                ContourExtractor.extract(bmp, if (x >= 0) x / k else -1f, if (y >= 0) y / k else -1f, sens, det, k)
+                ContourExtractor.extract(bmp, if (x >= 0) x / k else -1f, if (y >= 0) y / k else -1f, sens, det, k, lineArt)
             } catch (e: Exception) { null } catch (e: OutOfMemoryError) { null }
             runOnUiThread {
                 hideProgress()
@@ -671,10 +785,19 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
     private fun autoScale(i: Int) {
         val s = project.sketches[i]
         if (s.scaled || s.isEmpty) return
-        val other = project.sketches[1 - i]
-        if (project.mode == PhotoCadNative.MODE_TWO_VIEW && other.scaled && !other.isEmpty) {
+        val multi = project.mode == PhotoCadNative.MODE_TWO_VIEW
+        val same = project.sketches.withIndex().firstOrNull { (j, o) -> j != i && o.scaled && o.image == s.image && s.image != null }
+        // Ön görünüş: üst ile aynı genişlik; yan görünüş: ön ile aynı yükseklik
+        val ref = when (i) {
+            2 -> project.sketches[1].takeIf { it.scaled && !it.isEmpty }
+            else -> project.sketches[1 - i].takeIf { it.scaled && !it.isEmpty }
+        }
+        if (multi && same != null) {
+            s.sx = same.value.sx; s.sy = same.value.sy; s.scaled = true
+            toast(R.string.pc_auto_scaled_same, long = true)
+        } else if (multi && ref != null) {
             s.sx = 1.0; s.sy = 1.0
-            s.setSize(other.sizeMm()[0], 0.0)
+            if (i == 2) s.setSize(0.0, ref.sizeMm()[1]) else s.setSize(ref.sizeMm()[0], 0.0)
             toast(R.string.pc_auto_scaled, long = true)
         } else {
             s.sx = 1.0; s.sy = 1.0
@@ -760,6 +883,12 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
                     hChanged -> s.setSize(0.0, h!!)
                     else -> return@setPositiveButton
                 }
+                // Aynı teknik resim sayfasındaki diğer görünüşler aynı ölçekte
+                if (project.mode == PhotoCadNative.MODE_TWO_VIEW && s.image != null && s.lineArt) {
+                    for (o in project.sketches) if (o !== s && o.image == s.image) {
+                        o.sx = s.sx; o.sy = s.sy; o.scaled = true
+                    }
+                }
                 sketchView.invalidate(); refreshActions(); saveProject()
                 after?.invoke()
             }
@@ -836,15 +965,16 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
 
     private fun onBuildClicked() {
         val twoView = project.mode == PhotoCadNative.MODE_TWO_VIEW
-        for (i in 0 until if (twoView) 2 else 1) {
+        for (i in 0 until if (twoView) 3 else 1) {
             val s = project.sketches[i]
+            if (i == 2 && s.isEmpty) continue // yan görünüş isteğe bağlı
             if (s.isEmpty) {
-                if (twoView && i != current) { viewToggle.check(if (i == 1) 102 else 101) }
+                if (twoView && i != current) { viewToggle.check(101 + i) }
                 toast(if (twoView && i == 1) R.string.pc_need_front else R.string.pc_need_contour, long = true)
                 return
             }
             if (!s.scaled) {
-                if (i != current) viewToggle.check(if (i == 1) 102 else 101)
+                if (i != current) viewToggle.check(101 + i)
                 showScaleDialog { onBuildClicked() }
                 return
             }
@@ -883,7 +1013,11 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
     private fun runBuild() {
         if (busy) return
         val a = project.sketches[0].encode() ?: return
-        val b = if (project.mode == PhotoCadNative.MODE_TWO_VIEW) project.sketches[1].encode() else null
+        val multi = project.mode == PhotoCadNative.MODE_TWO_VIEW
+        val b = if (multi) project.sketches[1].encode() else null
+        val c = if (multi) project.sketches[2].encode() else null
+        val flags = (if (project.flipTop) PhotoCadNative.FLAG_FLIP_TOP else 0) or
+            (if (project.sideRight) PhotoCadNative.FLAG_SIDE_RIGHT else 0)
         val out = project.stepFile()
         val mode = project.mode; val param = project.thickness; val axis = project.axis
         val name = project.name
@@ -892,7 +1026,7 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         showProgress(getString(R.string.pc_building))
         executor.execute {
             val r: Result<DoubleArray> = try {
-                Result.success(PhotoCadNative.buildSolid(mode, a, b, param, axis, out.absolutePath, name))
+                Result.success(PhotoCadNative.buildSolid(mode, a, b, c, param, axis, flags, out.absolutePath, name))
             } catch (e: IOException) {
                 Result.failure(e)
             } catch (e: Throwable) {
@@ -971,6 +1105,8 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
 
     companion object {
         const val EXTRA_PROJECT = "project"
+        private const val PHOTO_PX = 1600
+        private const val DRAWING_PX = 2400
         private const val KEY_PROJECT = "project"
         private const val KEY_VIEW = "view"
     }

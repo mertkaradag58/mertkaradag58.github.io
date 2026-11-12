@@ -27,7 +27,9 @@ object ContourExtractor {
      */
     fun extract(
         bmp: Bitmap, seedX: Float, seedY: Float, sensitivity: Float, detail: Float, outScale: Float,
+        lineArt: Boolean = false,
     ): Result? {
+        if (lineArt) return extractLineArt(bmp, seedX, seedY, sensitivity, detail, outScale)
         val w = bmp.width
         val h = bmp.height
         val px = IntArray(w * h)
@@ -131,6 +133,153 @@ object ContourExtractor {
             toLoop(pts, eps, outScale, allowCircle = true)?.let { loops.add(it) }
         }
         return Result(loops, w, h)
+    }
+
+    /**
+     * Teknik resim (beyaz zemin üzerinde çizgiler): dokunulan noktayı çevreleyen çizgi bileşeni
+     * bulunur, içi doldurulur, ince çizgiler (eksen, ölçü, kesik çizgi) açma ile atılır, dış kontur
+     * izlenir. İçerideki kapalı bölgelerden yalnızca daireye benzeyenler delik sayılır.
+     */
+    private fun extractLineArt(
+        bmp: Bitmap, seedX: Float, seedY: Float, sensitivity: Float, detail: Float, outScale: Float,
+    ): Result? {
+        val w = bmp.width
+        val h = bmp.height
+        val px = IntArray(w * h)
+        bmp.getPixels(px, 0, w, 0, 0, w, h)
+        // Koyuluk (kağıt rengine göre): kağıt = parlak piksellerin medyanı
+        val lum = FloatArray(w * h)
+        for (i in px.indices) {
+            val c = px[i]
+            lum[i] = 0.299f * (c shr 16 and 255) + 0.587f * (c shr 8 and 255) + 0.114f * (c and 255)
+        }
+        val sample = ArrayList<Float>()
+        var k = 0
+        while (k < lum.size) { sample.add(lum[k]); k += 7 }
+        val paper = median(sample)
+        val dark = FloatArray(w * h) { max(0f, paper - lum[it]) }
+        var maxD = 1f
+        for (d in dark) if (d > maxD) maxD = d
+        var t = otsu(dark, maxD)
+        t *= (1.6f - 1.2f * sensitivity.coerceIn(0f, 1f))
+        t = max(t, 12f)
+        val ink = BooleanArray(w * h) { dark[it] > t }
+        close(ink, w, h, 1)
+
+        val labels = IntArray(w * h) { -1 }
+        val sizes = ArrayList<Int>()
+        val stack = IntArray(w * h)
+        for (i in ink.indices) {
+            if (!ink[i] || labels[i] >= 0) continue
+            sizes.add(flood(ink, true, labels, sizes.size, i, w, h, stack))
+        }
+        if (sizes.isEmpty()) return null
+        val sx0 = seedX.toInt().coerceIn(0, w - 1)
+        val sy0 = seedY.toInt().coerceIn(0, h - 1)
+        // Dokunulan noktayı çevreleyen bileşen: 8 yöne ışın, en çok vurulan etiket
+        var comp = labels[sy0 * w + sx0]
+        if (comp < 0 && seedX >= 0) {
+            val hits = HashMap<Int, Int>()
+            for (dir in 0 until 8) {
+                var x = sx0; var y = sy0
+                while (x in 0 until w && y in 0 until h) {
+                    val l = labels[y * w + x]
+                    if (l >= 0) { hits[l] = (hits[l] ?: 0) + 1; break }
+                    x += DX[dir]; y += DY[dir]
+                }
+            }
+            comp = hits.maxByOrNull { it.value * 1_000_000L + sizes[it.key] }?.key ?: -1
+        }
+        if (comp < 0) comp = sizes.indices.maxBy { sizes[it] }
+
+        // Bileşenin içi: dışarıdan ulaşılamayan her şey
+        val notComp = BooleanArray(w * h) { labels[it] != comp }
+        val outside = IntArray(w * h) { -1 }
+        for (x in 0 until w) for (y in intArrayOf(0, h - 1)) {
+            val i = y * w + x
+            if (notComp[i] && outside[i] < 0) flood(notComp, true, outside, 0, i, w, h, stack)
+        }
+        for (y in 0 until h) for (x in intArrayOf(0, w - 1)) {
+            val i = y * w + x
+            if (notComp[i] && outside[i] < 0) flood(notComp, true, outside, 0, i, w, h, stack)
+        }
+        val filled = BooleanArray(w * h) { outside[it] < 0 }
+        // İnce çizgileri (eksen, ölçü, uzatma çizgileri) at
+        val rad = max(2, min(w, h) / 250)
+        open(filled, w, h, rad)
+
+        val fl = IntArray(w * h) { -1 }
+        val fsizes = ArrayList<Int>()
+        for (i in filled.indices) {
+            if (!filled[i] || fl[i] >= 0) continue
+            fsizes.add(flood(filled, true, fl, fsizes.size, i, w, h, stack))
+        }
+        if (fsizes.isEmpty()) return null
+        var part = fl[sy0 * w + sx0]
+        if (part < 0) part = fsizes.indices.maxBy { fsizes[it] }
+        if (fsizes[part] < 100) return null
+        val partMask = BooleanArray(w * h) { fl[it] == part }
+
+        val eps = max(0.8f, min(w, h) * (0.008f - 0.0075f * detail.coerceIn(0f, 1f)))
+        val loops = ArrayList<Sketch.Loop>()
+        val outerPts = trace(partMask, w, h, partMask.indexOfFirst { it }) ?: return null
+        loops.add(toLoop(outerPts, eps, outScale, allowCircle = true) ?: return null)
+
+        // Delikler: çizgilerle kapalı, parçanın içindeki daireye benzer boş bölgeler
+        val inner = BooleanArray(w * h) { partMask[it] && notComp[it] && !ink[it] }
+        val il = IntArray(w * h) { -1 }
+        val circles = ArrayList<FloatArray>() // cx, cy, r (analiz pikseli)
+        val minR = max(3f, min(w, h) / 200f)
+        val outerB = floatArrayOf(Float.MAX_VALUE, Float.MAX_VALUE, -Float.MAX_VALUE, -Float.MAX_VALUE)
+        for (i in 0 until outerPts.size / 2) {
+            outerB[0] = min(outerB[0], outerPts[2 * i]); outerB[1] = min(outerB[1], outerPts[2 * i + 1])
+            outerB[2] = max(outerB[2], outerPts[2 * i]); outerB[3] = max(outerB[3], outerPts[2 * i + 1])
+        }
+        var n = 0
+        for (i in inner.indices) {
+            if (!inner[i] || il[i] >= 0) continue
+            var x0 = w; var y0 = h; var x1 = -1; var y1 = -1
+            val area = floodBox(inner, il, n++, i, w, h, stack) { x, y ->
+                if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y
+            }
+            val bw = (x1 - x0 + 1).toFloat(); val bh = (y1 - y0 + 1).toFloat()
+            if (min(bw, bh) < 2 * minR) continue
+            // Dış konturun kendisi olmasın
+            if (bw > 0.9f * (outerB[2] - outerB[0]) && bh > 0.9f * (outerB[3] - outerB[1])) continue
+            val square = abs(bw - bh) / max(bw, bh) < 0.1f
+            val fill = area / (Math.PI.toFloat() * bw * bh / 4f)
+            if (!square || fill < 0.72f || fill > 1.08f) continue
+            // Çizgi kalınlığının yarısı kadar büyüt (bölge çizginin içinden ölçülür)
+            circles.add(floatArrayOf((x0 + x1 + 1) / 2f, (y0 + y1 + 1) / 2f, (bw + bh) / 4f + 1f))
+        }
+        // İç içe dairelerde (havşa, kademe) en küçüğü kalır
+        val keep = circles.filter { c ->
+            circles.none { o -> o !== c && o[2] < c[2] && hypot(o[0] - c[0], o[1] - c[1]) < c[2] }
+        }
+        for (c in keep) loops.add(Sketch.Loop(circle = true, cx = c[0] * outScale, cy = c[1] * outScale, r = c[2] * outScale))
+        return Result(loops, w, h)
+    }
+
+    /** 4-komşu dolgu, her piksel için [visit] çağrılır; piksel sayısını döndürür. */
+    private inline fun floodBox(
+        m: BooleanArray, labels: IntArray, label: Int, start: Int, w: Int, h: Int, stack: IntArray,
+        visit: (Int, Int) -> Unit,
+    ): Int {
+        var sp = 0
+        stack[sp++] = start
+        labels[start] = label
+        var count = 0
+        while (sp > 0) {
+            val i = stack[--sp]
+            count++
+            val x = i % w; val y = i / w
+            visit(x, y)
+            if (x > 0 && m[i - 1] && labels[i - 1] < 0) { labels[i - 1] = label; stack[sp++] = i - 1 }
+            if (x < w - 1 && m[i + 1] && labels[i + 1] < 0) { labels[i + 1] = label; stack[sp++] = i + 1 }
+            if (y > 0 && m[i - w] && labels[i - w] < 0) { labels[i - w] = label; stack[sp++] = i - w }
+            if (y < h - 1 && m[i + w] && labels[i + w] < 0) { labels[i + w] = label; stack[sp++] = i + w }
+        }
+        return count
     }
 
     private fun sq(v: Float) = v * v

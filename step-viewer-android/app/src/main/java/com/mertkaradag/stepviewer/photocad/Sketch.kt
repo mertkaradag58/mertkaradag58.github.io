@@ -37,6 +37,8 @@ class Sketch {
     var image: String? = null
     var imageW = 0
     var imageH = 0
+    /** Fotoğraf değil teknik resim (beyaz zemin üzerinde çizgiler). */
+    var lineArt = false
 
     val outer: Loop? get() = loops.firstOrNull()
     val isEmpty: Boolean get() = loops.isEmpty() || (!loops[0].circle && loops[0].size < 3)
@@ -193,7 +195,7 @@ class Sketch {
     fun toJson(): JSONObject = JSONObject().apply {
         put("sx", sx); put("sy", sy); put("scaled", scaled)
         image?.let { put("image", it) }
-        put("w", imageW); put("h", imageH)
+        put("w", imageW); put("h", imageH); put("lineArt", lineArt)
         put("loops", JSONArray().apply {
             for (l in loops) put(JSONObject().apply {
                 put("circle", l.circle)
@@ -210,7 +212,7 @@ class Sketch {
             sx = o.optDouble("sx", 1.0); sy = o.optDouble("sy", 1.0)
             scaled = o.optBoolean("scaled", false)
             image = if (o.has("image")) o.getString("image") else null
-            imageW = o.optInt("w"); imageH = o.optInt("h")
+            imageW = o.optInt("w"); imageH = o.optInt("h"); lineArt = o.optBoolean("lineArt")
             val arr = o.optJSONArray("loops") ?: JSONArray()
             for (i in 0 until arr.length()) {
                 val lo = arr.getJSONObject(i)

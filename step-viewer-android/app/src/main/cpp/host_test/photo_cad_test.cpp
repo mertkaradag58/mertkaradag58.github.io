@@ -13,11 +13,12 @@ using namespace stepviewer;
 
 static bool Check(const char* label, PhotoCadMode mode, const std::vector<double>& a,
                   const std::vector<double>& b, double param, int axis, const std::string& out,
-                  double expectVolume) {
-  Sketch sa, sb;
+                  double expectVolume, const std::vector<double>& c = {}, int flags = 0) {
+  Sketch sa, sb, sc;
+  if (!c.empty()) DecodeSketch(c.data(), c.size(), sc);
   if (!DecodeSketch(a.data(), a.size(), sa)) { std::printf("%s: decode a failed\n", label); return false; }
   if (!b.empty() && !DecodeSketch(b.data(), b.size(), sb)) { std::printf("%s: decode b failed\n", label); return false; }
-  PhotoCadResult r = BuildPhotoSolid(mode, sa, sb, param, axis, out, label);
+  PhotoCadResult r = BuildPhotoSolid(mode, sa, sb, param, axis, out, label, sc, flags);
   if (!r.ok) { std::printf("%s: HATA %s\n", label, r.error.c_str()); return false; }
   STEPControl_Reader reader;
   if (reader.ReadFile(out.c_str()) != IFSelect_RetDone || reader.TransferRoots() == 0) {
@@ -70,6 +71,17 @@ int main(int argc, char** argv) {
   std::vector<double> flange = {1, 0, 8, -30, 0, 30, 0, 30, 10, 15, 10, 15, 30, -15, 30, -15, 10, -30, 10};
   ok &= Check("flans", PhotoCadMode::Revolve, flange, {}, 0, 1, dir + "/flans.step",
               M_PI * 900 * 10 + M_PI * 225 * 20);
+  // 6) Üç görünüş: üst 60x40 kare, ön 60x30 kare, yan (soldan) 40 genişlik: önde 10 mm yüksek
+  //    basamak, arkada 30 mm. Soldan bakışta resimde sağ = ön: ön (sağ) kısım alçak.
+  //    Beklenen: ön 20 mm derinlik x 10 yükseklik + arka 20 x 30 => (20*10 + 20*30) * 60
+  std::vector<double> top3 = {1, 0, 4, 0, 0, 60, 0, 60, 40, 0, 40};
+  std::vector<double> front3 = {1, 0, 4, 0, 0, 60, 0, 60, 30, 0, 30};
+  std::vector<double> side3 = {1, 0, 6, 0, 0, 40, 0, 40, 10, 20, 10, 20, 30, 0, 30};
+  ok &= Check("uc_gorunus", PhotoCadMode::TwoView, top3, front3, 0, 0, dir + "/uc.step",
+              (20 * 10 + 20 * 30) * 60.0, side3);
+  // Sağdan bakış + üst görünüş ters: hacim aynı kalmalı
+  ok &= Check("uc_gorunus_ters", PhotoCadMode::TwoView, top3, front3, 0, 0, dir + "/uc2.step",
+              (20 * 10 + 20 * 30) * 60.0, side3, kFlipTop | kSideRight);
   std::printf(ok ? "TUMU TAMAM\n" : "BASARISIZ\n");
   return ok ? 0 : 1;
 }
