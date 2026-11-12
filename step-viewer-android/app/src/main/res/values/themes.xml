@@ -34,8 +34,8 @@
         <item name="android:layout_weight">1</item>
         <item name="android:orientation">vertical</item>
         <item name="android:gravity">center</item>
-        <item name="android:paddingTop">8dp</item>
-        <item name="android:paddingBottom">6dp</item>
+        <item name="android:paddingTop">9dp</item>
+        <item name="android:paddingBottom">7dp</item>
         <item name="android:layout_marginStart">2dp</item>
         <item name="android:layout_marginEnd">2dp</item>
         <item name="android:background">@drawable/tool_background</item>
@@ -59,6 +59,17 @@
         <item name="android:duplicateParentState">true</item>
         <item name="android:textSize">11sp</item>
         <item name="android:maxLines">1</item>
+    </style>
+
+    <!-- Üst çubuktaki yuvarlak simge düğmeleri (cam görünümlü) -->
+    <style name="TopIconButton" parent="Widget.Material3.Button.IconButton.Filled.Tonal">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_marginStart">6dp</item>
+        <item name="iconSize">22dp</item>
+        <item name="backgroundTint">@color/surface</item>
+        <item name="iconTint">@color/text</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Full</item>
     </style>
 
     <!-- Sağdaki yuvarlak köşeli küçük düğmeler -->

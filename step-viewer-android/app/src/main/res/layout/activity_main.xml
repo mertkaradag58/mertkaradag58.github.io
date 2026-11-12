@@ -77,21 +77,15 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/settings_button"
-            style="@style/Widget.Material3.Button.IconButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            style="@style/TopIconButton"
             android:contentDescription="@string/settings"
-            app:icon="@drawable/ic_settings"
-            app:iconTint="@color/text" />
+            app:icon="@drawable/ic_settings" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/more_button"
-            style="@style/Widget.Material3.Button.IconButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:contentDescription="@string/more"
-            app:icon="@drawable/ic_more_vert"
-            app:iconTint="@color/text" />
+            android:id="@+id/open_button"
+            style="@style/TopIconButton"
+            android:contentDescription="@string/open"
+            app:icon="@drawable/ic_folder_open" />
     </LinearLayout>
 
     <!-- Sağ kenar: hızlı görünüm düğmeleri -->
@@ -145,6 +139,7 @@
     <!-- Alt bölüm: paneller + araç çubuğu -->
     <LinearLayout
         android:id="@+id/bottom_area"
+        android:animateLayoutChanges="true"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
@@ -673,34 +668,24 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Araç çubuğu -->
+        <!-- Araç çubuğu: yüzen hap; ortada Araçlar paneli -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/toolbar_card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:visibility="gone"
-            app:cardBackgroundColor="@color/surface"
-            app:cardCornerRadius="24dp"
-            app:strokeWidth="0dp">
+            app:cardBackgroundColor="@color/surface_solid"
+            app:cardCornerRadius="30dp"
+            app:cardElevation="6dp"
+            app:strokeColor="@color/outline"
+            app:strokeWidth="1dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:padding="6dp">
-
-                <LinearLayout
-                    android:id="@+id/tool_open"
-                    style="@style/ToolButton">
-
-                    <ImageView
-                        style="@style/ToolIcon"
-                        android:src="@drawable/ic_folder_open" />
-
-                    <TextView
-                        style="@style/ToolLabel"
-                        android:text="@string/open" />
-                </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/tool_select"
@@ -728,6 +713,34 @@
                         android:text="@string/measure" />
                 </LinearLayout>
 
+                <FrameLayout
+                    android:id="@+id/tool_tools"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.1"
+                    android:clickable="true"
+                    android:contentDescription="@string/tools_title"
+                    android:focusable="true">
+
+                    <FrameLayout
+                        android:id="@+id/tool_tools_circle"
+                        android:layout_width="54dp"
+                        android:layout_height="54dp"
+                        android:layout_gravity="center"
+                        android:background="@drawable/tools_fab"
+                        android:elevation="4dp">
+
+                        <ImageView
+                            android:id="@+id/tool_tools_icon"
+                            android:layout_width="26dp"
+                            android:layout_height="26dp"
+                            android:layout_gravity="center"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_apps"
+                            app:tint="@color/on_accent" />
+                    </FrameLayout>
+                </FrameLayout>
+
                 <LinearLayout
                     android:id="@+id/tool_section"
                     style="@style/ToolButton">
@@ -752,20 +765,6 @@
                     <TextView
                         style="@style/ToolLabel"
                         android:text="@string/parts" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/tool_display"
-                    style="@style/ToolButton">
-
-                    <ImageView
-                        style="@style/ToolIcon"
-                        android:src="@drawable/ic_display" />
-
-                    <TextView
-                        android:id="@+id/tool_display_label"
-                        style="@style/ToolLabel"
-                        android:text="@string/display_shaded_edges" />
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

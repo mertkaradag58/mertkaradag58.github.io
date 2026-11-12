@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Alt çubuğun ortasındaki Araçlar düğmesi: turuncu degrade daire -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#55FFFFFF">
+    <item>
+        <shape android:shape="oval">
+            <gradient
+                android:angle="315"
+                android:endColor="#FFE8650E"
+                android:startColor="#FFFFA45C" />
+        </shape>
+    </item>
+</ripple>

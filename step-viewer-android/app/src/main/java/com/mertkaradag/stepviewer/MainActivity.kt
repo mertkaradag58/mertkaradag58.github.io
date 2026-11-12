@@ -15,6 +15,7 @@ import android.text.util.Linkify
 import android.view.LayoutInflater
 import android.view.Menu
 import android.view.View
+import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -22,7 +23,6 @@ import androidx.print.PrintHelper
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.TooltipCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.ShortcutInfoCompat
@@ -70,7 +70,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressCancel: View
     private lateinit var toolMeasure: View
     private lateinit var toolSection: View
-    private lateinit var toolDisplayLabel: TextView
     private lateinit var toolSelect: View
     private lateinit var selectCard: MaterialCardView
     private lateinit var selectName: TextView
@@ -274,6 +273,7 @@ class MainActivity : AppCompatActivity() {
         setupMeasureModes()
         setupSection()
         setupSideButtons()
+        setupPanelTransitions()
         setupBackHandling()
         modelView.setPalette(Palette.current(this))
         home = HomeScreen(
@@ -369,7 +369,6 @@ class MainActivity : AppCompatActivity() {
         progressCancel.setOnClickListener { cancelLoad() }
         toolMeasure = findViewById(R.id.tool_measure)
         toolSection = findViewById(R.id.tool_section)
-        toolDisplayLabel = findViewById(R.id.tool_display_label)
         toolSelect = findViewById(R.id.tool_select)
         selectCard = findViewById(R.id.select_card)
         selectName = findViewById(R.id.select_name)
@@ -419,7 +418,8 @@ class MainActivity : AppCompatActivity() {
     // -----------------------------------------------------------------------
 
     private fun setupToolbar() {
-        findViewById<View>(R.id.tool_open).setOnClickListener { pickFile() }
+        findViewById<View>(R.id.open_button).setOnClickListener { pickFile() }
+        findViewById<View>(R.id.tool_tools).setOnClickListener { showToolsSheet() }
         toolMeasure.setOnClickListener { setMeasureMode(!measureMode) }
         toolSelect.setOnClickListener { setSelectMode(!selectMode) }
         findViewById<View>(R.id.select_close).setOnClickListener { setSelectMode(false) }
@@ -433,9 +433,7 @@ class MainActivity : AppCompatActivity() {
         }
         toolSection.setOnClickListener { setSection(!sectionOn) }
         findViewById<View>(R.id.tool_parts).setOnClickListener { showParts() }
-        findViewById<View>(R.id.tool_display).setOnClickListener { cycleDisplayMode() }
         findViewById<View>(R.id.measure_close).setOnClickListener { setMeasureMode(false) }
-        findViewById<MaterialButton>(R.id.more_button).setOnClickListener { showMoreMenu(it) }
         findViewById<View>(R.id.settings_button).setOnClickListener { openSettings() }
         findViewById<View>(R.id.select_color).setOnClickListener { showColorDialog() }
         findViewById<View>(R.id.select_transparent).setOnClickListener { toggleTransparency() }
@@ -478,7 +476,7 @@ class MainActivity : AppCompatActivity() {
     private fun setupSideButtons() {
         findViewById<View>(R.id.fit_button).setOnClickListener { modelView.fit() }
         findViewById<View>(R.id.spin_button).setOnClickListener { modelView.spin360() }
-        findViewById<View>(R.id.views_button).setOnClickListener { showViewsMenu(it) }
+        findViewById<View>(R.id.views_button).setOnClickListener { showViewsSheet() }
         findViewById<View>(R.id.explode_button).setOnClickListener { toggleExplodeCard() }
         pmiButton.setOnClickListener { showPmiDialog() }
         findViewById<View>(R.id.ar_button).setOnClickListener { openAr() }
@@ -508,122 +506,180 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showMoreMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor)
+    /** Araçlar paneli: eski üç nokta menüsünün yerine kategorili, aramalı panel. */
+    private fun showToolsSheet() {
         val hasModel = currentMesh != null
-        popup.menu.add(Menu.NONE, MENU_INFO, 0, R.string.menu_model_info).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_COST, 0, R.string.menu_cost).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_SHARE, 1, R.string.menu_share).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_MARKUP, 1, R.string.menu_markup).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_EXPORT, 1, R.string.menu_export).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_BOM, 1, R.string.menu_bom).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_HOLES, 1, R.string.menu_holes).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_DXF, 1, R.string.menu_dxf).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_DRAWING, 1, R.string.menu_drawing).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_PHOTO_CAD, 2, R.string.pc_menu_entry)
-        popup.menu.add(Menu.NONE, MENU_SHEET, 1, R.string.menu_sheet).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_QC, 1, R.string.menu_qc).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_FIT, 1, R.string.menu_fit)
-        popup.menu.add(Menu.NONE, MENU_QUALITY, 2, R.string.menu_quality)
-        popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
-        popup.menu.add(Menu.NONE, MENU_NOTE_ADD, 2, R.string.menu_note_add).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_NOTES, 2, getString(R.string.menu_notes, notes.notes.size)).isEnabled = hasModel
-        popup.menu.add(Menu.NONE, MENU_PRINT, 2, R.string.menu_print).isEnabled = hasModel
+        val cats = listOf(
+            ToolsSheet.Category("model", getString(R.string.tab_model), R.drawable.ic_cube, 0xFF2F7BD8.toInt()),
+            ToolsSheet.Category("workshop", getString(R.string.tab_workshop), R.drawable.ic_shaft, getColor(R.color.accent)),
+            ToolsSheet.Category("share", getString(R.string.tab_share), R.drawable.ic_share, 0xFF17A673.toInt()),
+            ToolsSheet.Category("app", getString(R.string.tab_app), R.drawable.ic_settings, 0xFF7C5CE0.toInt()),
+        )
+        val t = ArrayList<ToolsSheet.Tool>()
+        fun add(
+            id: String, cat: String, icon: Int, title: Int, caption: String?, enabled: Boolean = true,
+            badge: String? = null, keywords: String = "", action: () -> Unit,
+        ) {
+            t += ToolsSheet.Tool(id, cat, icon, getString(title), caption, enabled, badge, keywords, action)
+        }
+        // Model
+        add("info", "model", R.drawable.ic_info, R.string.t_info, getString(R.string.c_info), hasModel) { showModelInfo() }
+        add("cost", "model", R.drawable.ic_calc, R.string.t_cost, getString(R.string.c_cost), hasModel) { showCost() }
+        add("holes", "model", R.drawable.ic_holes, R.string.t_holes, getString(R.string.c_holes), hasModel) { showHoleTable() }
+        add("bom", "model", R.drawable.ic_list, R.string.t_bom, getString(R.string.c_bom), hasModel) { showBomDialog() }
+        add("note_add", "model", R.drawable.ic_bookmark, R.string.t_note_add, getString(R.string.c_note_add), hasModel) {
+            startPick(PICK_NOTE, R.string.note_pick_hint)
+        }
+        add("notes", "model", R.drawable.ic_note, R.string.t_notes, getString(R.string.c_notes, notes.notes.size), hasModel) { notes.showList() }
+        add("explode", "model", R.drawable.ic_explode, R.string.t_explode, getString(R.string.c_explode), hasModel) { toggleExplodeCard() }
+        add("spin", "model", R.drawable.ic_rotate, R.string.t_spin, getString(R.string.c_spin), hasModel) { modelView.spin360() }
+        if (pmiButton.visibility == View.VISIBLE) {
+            add("pmi", "model", R.drawable.ic_pmi, R.string.t_pmi, getString(R.string.c_pmi)) { showPmiDialog() }
+        }
+        // Atölye
+        add("drawing", "workshop", R.drawable.ic_drawing, R.string.t_drawing, getString(R.string.c_drawing), hasModel) { showDrawing() }
+        add("dxf", "workshop", R.drawable.ic_dxf, R.string.t_dxf, getString(R.string.c_dxf), hasModel, keywords = getString(R.string.kw_dxf)) { startDxfPick() }
+        add("sheet", "workshop", R.drawable.ic_sheet, R.string.t_sheet, getString(R.string.c_sheet), hasModel) { startSheetPick() }
+        add("qc", "workshop", R.drawable.ic_qc, R.string.t_qc, getString(R.string.c_qc), hasModel) { showInspection() }
+        add("fit", "workshop", R.drawable.ic_shaft, R.string.t_fit, getString(R.string.c_fit)) { FitDialog(this).show() }
+        add("photo", "workshop", R.drawable.ic_camera_alt, R.string.t_photo, getString(R.string.c_photo), badge = getString(R.string.badge_beta)) { openPhotoCad() }
+        // Paylaş
+        add("share", "share", R.drawable.ic_share, R.string.t_share, getString(R.string.c_share), hasModel) { shareScreenshot() }
+        add("export", "share", R.drawable.ic_download, R.string.t_export, getString(R.string.c_export), hasModel) { showExportDialog() }
+        add("markup", "share", R.drawable.ic_pen, R.string.t_markup, getString(R.string.c_markup), hasModel) { startMarkup() }
+        add("print", "share", R.drawable.ic_print, R.string.t_print, getString(R.string.c_print), hasModel) { printScreenshot() }
+        add("ar", "share", R.drawable.ic_ar, R.string.t_ar, getString(R.string.c_ar), hasModel) { openAr() }
+        // Uygulama
+        add("settings", "app", R.drawable.ic_settings, R.string.t_settings, getString(R.string.c_settings)) { openSettings() }
+        add("quality", "app", R.drawable.ic_display, R.string.t_quality, getString(R.string.c_quality)) { showQualityDialog() }
         if (!billing.adFree) {
-            val price = billing.formattedPrice
-            val title = if (price != null) getString(R.string.menu_remove_ads_price, price)
-            else getString(R.string.menu_remove_ads)
-            popup.menu.add(Menu.NONE, MENU_REMOVE_ADS, 3, title)
-        }
-        popup.menu.add(Menu.NONE, MENU_SETTINGS, 6, R.string.settings)
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                MENU_INFO -> showModelInfo()
-                MENU_COST -> showCost()
-                MENU_SHARE -> shareScreenshot()
-                MENU_MARKUP -> startMarkup()
-                MENU_EXPORT -> showExportDialog()
-                MENU_BOM -> showBomDialog()
-                MENU_HOLES -> showHoleTable()
-                MENU_DXF -> startDxfPick()
-                MENU_DRAWING -> showDrawing()
-                MENU_PHOTO_CAD -> openPhotoCad()
-                MENU_SHEET -> startSheetPick()
-                MENU_QC -> showInspection()
-                MENU_FIT -> FitDialog(this).show()
-                MENU_ABOUT -> showAbout()
-                MENU_QUALITY -> showQualityDialog()
-                MENU_PRIVACY -> ads.showPrivacyOptions()
-                MENU_REMOVE_ADS -> billing.buyAdFree(this)
-                MENU_RESTORE -> billing.restore()
-                MENU_SETTINGS -> openSettings()
-                MENU_NOTE_ADD -> startPick(PICK_NOTE, R.string.note_pick_hint)
-                MENU_NOTES -> notes.showList()
-                MENU_PRINT -> printScreenshot()
+            add("noads", "app", R.drawable.ic_star, R.string.t_noads, billing.formattedPrice ?: getString(R.string.c_noads)) {
+                billing.buyAdFree(this)
             }
-            true
         }
-        popup.show()
+        add("about", "app", R.drawable.ic_info, R.string.t_about, getString(R.string.c_about)) { showAbout() }
+
+        haptic()
+        ToolsSheet(this, getString(R.string.tools_title), currentName.ifEmpty { null }, cats, t).show()
     }
 
-    private fun showViewsMenu(anchor: View) {
-        val popup = PopupMenu(this, anchor)
-        val views = listOf(
-            R.string.view_iso to Camera.View.ISO,
-            R.string.view_front to Camera.View.FRONT,
-            R.string.view_back to Camera.View.BACK,
-            R.string.view_top to Camera.View.TOP,
-            R.string.view_bottom to Camera.View.BOTTOM,
-            R.string.view_left to Camera.View.LEFT,
-            R.string.view_right to Camera.View.RIGHT,
-        )
-        views.forEachIndexed { i, (label, _) -> popup.menu.add(Menu.NONE, i, i, label) }
-        popup.menu.add(1, MENU_ORTHO, 100, R.string.view_ortho).apply {
-            isCheckable = true
-            isChecked = orthographic
-        }
-        popup.menu.add(1, MENU_YUP, 101, R.string.view_y_up).apply {
-            isCheckable = true
-            isChecked = yUp
-        }
-        popup.menu.add(1, MENU_FREE_ORBIT, 102, R.string.view_free_orbit).apply {
-            isCheckable = true
-            isChecked = freeOrbit
-        }
-        popup.menu.add(1, MENU_ROTATE_SPEED, 103, R.string.rotate_speed)
-        val saved = savedViews.list(currentName)
-        saved.forEachIndexed { i, v -> popup.menu.add(2, MENU_SAVED_BASE + i, 200 + i, "★ " + v.name) }
-        popup.menu.add(3, MENU_SAVE_VIEW, 300, R.string.views_save)
-        if (saved.isNotEmpty()) popup.menu.add(3, MENU_MANAGE_VIEWS, 301, R.string.views_manage)
-        popup.setOnMenuItemClickListener { item ->
-            when (item.itemId) {
-                MENU_FREE_ORBIT -> {
-                    freeOrbit = !freeOrbit
-                    modelView.setFreeOrbit(freeOrbit)
-                    Toast.makeText(
-                        this,
-                        if (freeOrbit) R.string.free_orbit_on else R.string.free_orbit_off,
-                        Toast.LENGTH_LONG,
-                    ).show()
+    private fun showViewsSheet() {
+        haptic()
+        ViewsSheet(this, object : ViewsSheet.Host {
+            override fun goToView(view: Camera.View) = modelView.animateTo(view)
+            override fun fitView() = modelView.fit()
+            override var displayMode: ModelRenderer.DisplayMode
+                get() = this@MainActivity.displayMode
+                set(v) {
+                    this@MainActivity.displayMode = v
+                    modelView.setDisplayMode(v)
+                    Session.displayMode = v
                 }
-                MENU_ROTATE_SPEED -> showRotateSpeedDialog()
-                MENU_SAVE_VIEW -> saveCurrentView()
-                MENU_MANAGE_VIEWS -> manageViews()
-                in MENU_SAVED_BASE until MENU_SAVED_BASE + saved.size ->
-                    modelView.animateToState(saved[item.itemId - MENU_SAVED_BASE].state)
-                MENU_ORTHO -> {
-                    orthographic = !orthographic
-                    modelView.setOrthographic(orthographic)
+            override var orthographic: Boolean
+                get() = this@MainActivity.orthographic
+                set(v) {
+                    this@MainActivity.orthographic = v
+                    modelView.setOrthographic(v)
                 }
-                MENU_YUP -> {
-                    yUp = !yUp
-                    modelView.setUpAxis(if (yUp) Camera.UpAxis.Y else Camera.UpAxis.Z)
+            override var yUp: Boolean
+                get() = this@MainActivity.yUp
+                set(v) {
+                    this@MainActivity.yUp = v
+                    modelView.setUpAxis(if (v) Camera.UpAxis.Y else Camera.UpAxis.Z)
                 }
-                else -> views.getOrNull(item.itemId)?.let { modelView.animateTo(it.second) }
+            override var freeOrbit: Boolean
+                get() = this@MainActivity.freeOrbit
+                set(v) {
+                    this@MainActivity.freeOrbit = v
+                    modelView.setFreeOrbit(v)
+                }
+            override var rotateSpeedLevel: Int
+                get() = this@MainActivity.rotateSpeedLevel
+                set(v) {
+                    this@MainActivity.rotateSpeedLevel = v
+                    modelView.camera.rotateSpeed = ROTATE_SPEEDS[v]
+                }
+            override fun savedViewNames(): List<String> = savedViews.list(currentName).map { it.name }
+            override fun goToSaved(index: Int) {
+                savedViews.list(currentName).getOrNull(index)?.let { modelView.animateToState(it.state) }
             }
-            true
+            override fun saveView() = saveCurrentView()
+            override fun manageViews() = this@MainActivity.manageViews()
+        }).show()
+    }
+
+    /** Alt çubuk düğmesi: seçili arka plan yumuşakça gelir, simge hafifçe zıplar. */
+    private fun setToolActive(tool: View, on: Boolean) {
+        if (tool.isActivated == on) return
+        tool.isActivated = on
+        val icon = (tool as? ViewGroup)?.getChildAt(0) ?: return
+        icon.animate().cancel()
+        if (on) {
+            icon.scaleX = 0.75f
+            icon.scaleY = 0.75f
+            icon.animate().scaleX(1f).scaleY(1f).setDuration(320)
+                .setInterpolator(android.view.animation.OvershootInterpolator(3f)).start()
         }
-        popup.show()
+    }
+
+    /** Paneller (ölçüm, kesit, seçim...) aşağıdan kayarak ve belirerek açılır. */
+    private fun setupPanelTransitions() {
+        val d = resources.displayMetrics.density
+        val lt = android.animation.LayoutTransition().apply {
+            setAnimator(
+                android.animation.LayoutTransition.APPEARING,
+                android.animation.ObjectAnimator.ofPropertyValuesHolder(
+                    null as Any?,
+                    android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 0f, 1f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, 36 * d, 0f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.SCALE_X, 0.94f, 1f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.SCALE_Y, 0.94f, 1f),
+                ),
+            )
+            setAnimator(
+                android.animation.LayoutTransition.DISAPPEARING,
+                android.animation.ObjectAnimator.ofPropertyValuesHolder(
+                    null as Any?,
+                    android.animation.PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0f),
+                    android.animation.PropertyValuesHolder.ofFloat(View.TRANSLATION_Y, 0f, 24 * d),
+                ),
+            )
+            setDuration(android.animation.LayoutTransition.APPEARING, 280)
+            setDuration(android.animation.LayoutTransition.DISAPPEARING, 160)
+            setDuration(android.animation.LayoutTransition.CHANGE_APPEARING, 240)
+            setDuration(android.animation.LayoutTransition.CHANGE_DISAPPEARING, 240)
+            setStartDelay(android.animation.LayoutTransition.APPEARING, 0)
+            setStartDelay(android.animation.LayoutTransition.CHANGE_DISAPPEARING, 80)
+            setInterpolator(android.animation.LayoutTransition.APPEARING, android.view.animation.DecelerateInterpolator(2.2f))
+            setInterpolator(android.animation.LayoutTransition.CHANGE_APPEARING, android.view.animation.DecelerateInterpolator(2f))
+            setInterpolator(android.animation.LayoutTransition.CHANGE_DISAPPEARING, android.view.animation.DecelerateInterpolator(2f))
+        }
+        findViewById<ViewGroup>(R.id.bottom_area).layoutTransition = lt
+    }
+
+    /** Model ilk açıldığında üst çubuk, yan düğmeler ve alt çubuk sırayla yerine kayar. */
+    private fun animateViewerChrome() {
+        val d = resources.displayMetrics.density
+        val bars = (sideButtons as ViewGroup)
+        var k = 0
+        for (i in 0 until bars.childCount) {
+            val b = bars.getChildAt(i)
+            if (b.visibility != View.VISIBLE) continue
+            b.alpha = 0f
+            b.translationX = 40 * d
+            b.animate().alpha(1f).translationX(0f).setStartDelay(120L + k * 45L).setDuration(320)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(2f)).start()
+            k++
+        }
+        val top = findViewById<View>(R.id.top_bar)
+        top.alpha = 0f
+        top.translationY = -20 * d
+        top.animate().alpha(1f).translationY(0f).setStartDelay(60).setDuration(300).start()
+        val fab = findViewById<View>(R.id.tool_tools_circle)
+        fab.scaleX = 0f
+        fab.scaleY = 0f
+        fab.animate().scaleX(1f).scaleY(1f).setStartDelay(260).setDuration(380)
+            .setInterpolator(android.view.animation.OvershootInterpolator(2.2f)).start()
     }
 
     private fun showRotateSpeedDialog() {
@@ -653,11 +709,12 @@ class MainActivity : AppCompatActivity() {
         updateDisplayLabel()
         modelView.setDisplayMode(displayMode)
         Session.displayMode = displayMode
-        Toast.makeText(this, toolDisplayLabel.text, Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, displayModeName(), Toast.LENGTH_SHORT).show()
     }
 
-    private fun updateDisplayLabel() {
-        toolDisplayLabel.setText(
+    private fun updateDisplayLabel() {}
+
+    private fun displayModeName(): String = getString(
             when (displayMode) {
                 ModelRenderer.DisplayMode.SHADED_EDGES -> R.string.display_shaded_edges
                 ModelRenderer.DisplayMode.SHADED -> R.string.display_shaded
@@ -666,7 +723,6 @@ class MainActivity : AppCompatActivity() {
                 ModelRenderer.DisplayMode.HIDDEN_LINE -> R.string.display_hidden_line
             }
         )
-    }
 
     // -----------------------------------------------------------------------
     // Kayıtlı görünümler
@@ -1130,8 +1186,10 @@ class MainActivity : AppCompatActivity() {
         subtitleText.text = Session.subtitle
         subtitleText.visibility = View.VISIBLE
         emptyState.visibility = View.GONE
+        val firstShow = toolbarCard.visibility != View.VISIBLE
         toolbarCard.visibility = View.VISIBLE
         sideButtons.visibility = View.VISIBLE
+        if (firstShow) animateViewerChrome()
 
         Session.mesh = mesh
         Session.name = name
@@ -1230,7 +1288,7 @@ class MainActivity : AppCompatActivity() {
             stopSheetPick()
         }
         measureMode = enabled
-        toolMeasure.isActivated = enabled
+        setToolActive(toolMeasure, enabled)
         measureCard.visibility = if (enabled && currentMesh != null) View.VISIBLE else View.GONE
         modelView.precisionCursor = enabled && Prefs.loupe
         if (!enabled) hideCursor()
@@ -1398,7 +1456,7 @@ class MainActivity : AppCompatActivity() {
         if (on && measureMode) setMeasureMode(false)
         if (on) stopDxfPick()
         selectMode = on
-        toolSelect.isActivated = on
+        setToolActive(toolSelect, on)
         if (!on) setSelection(-1, -1) else updateSelectCard()
     }
 
@@ -1575,7 +1633,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setSection(enabled: Boolean) {
         sectionOn = enabled && currentMesh != null
-        toolSection.isActivated = sectionOn
+        setToolActive(toolSection, sectionOn)
         sectionCard.visibility = if (sectionOn) View.VISIBLE else View.GONE
         updateSection()
     }
