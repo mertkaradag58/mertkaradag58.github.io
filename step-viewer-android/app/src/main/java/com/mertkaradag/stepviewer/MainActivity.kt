@@ -264,6 +264,8 @@ class MainActivity : AppCompatActivity() {
         modelView.onTap = { x, y -> onModelTap(x, y) }
         modelView.onDoubleTap = { x, y -> onModelDoubleTap(x, y) }
         modelView.onLongPress = { x, y -> onModelLongPress(x, y) }
+        modelView.setFreeOrbit(freeOrbit)
+        modelView.camera.rotateSpeed = ROTATE_SPEEDS[rotateSpeedLevel]
     }
 
     /** Uygulama kenardan kenara çizilir; çubuklar sistem çubuklarının altında kalmasın. */
@@ -403,8 +405,23 @@ class MainActivity : AppCompatActivity() {
             isCheckable = true
             isChecked = yUp
         }
+        popup.menu.add(1, MENU_FREE_ORBIT, 102, R.string.view_free_orbit).apply {
+            isCheckable = true
+            isChecked = freeOrbit
+        }
+        popup.menu.add(1, MENU_ROTATE_SPEED, 103, R.string.rotate_speed)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
+                MENU_FREE_ORBIT -> {
+                    freeOrbit = !freeOrbit
+                    modelView.setFreeOrbit(freeOrbit)
+                    Toast.makeText(
+                        this,
+                        if (freeOrbit) R.string.free_orbit_on else R.string.free_orbit_off,
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
+                MENU_ROTATE_SPEED -> showRotateSpeedDialog()
                 MENU_ORTHO -> {
                     orthographic = !orthographic
                     modelView.setOrthographic(orthographic)
@@ -418,6 +435,22 @@ class MainActivity : AppCompatActivity() {
             true
         }
         popup.show()
+    }
+
+    private fun showRotateSpeedDialog() {
+        val labels = arrayOf(
+            getString(R.string.rotate_speed_slow),
+            getString(R.string.rotate_speed_normal),
+            getString(R.string.rotate_speed_fast),
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.rotate_speed)
+            .setSingleChoiceItems(labels, rotateSpeedLevel) { d, which ->
+                rotateSpeedLevel = which
+                modelView.camera.rotateSpeed = ROTATE_SPEEDS[which]
+                d.dismiss()
+            }
+            .show()
     }
 
     private fun cycleDisplayMode() {
@@ -496,6 +529,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val settings by lazy { getSharedPreferences("settings", MODE_PRIVATE) }
+
+    /** Serbest döndürme (iz topu) açık mı; kapalıyken döner tabla. */
+    private var freeOrbit: Boolean
+        get() = settings.getBoolean("free_orbit", false)
+        set(v) = settings.edit().putBoolean("free_orbit", v).apply()
+
+    /** 0 = yavaş, 1 = normal, 2 = hızlı. */
+    private var rotateSpeedLevel: Int
+        get() = settings.getInt("rotate_speed", 1).coerceIn(0, 2)
+        set(v) = settings.edit().putInt("rotate_speed", v).apply()
 
     /** 0 = hızlı, 1 = normal, 2 = hassas. */
     private var meshQuality: Int
@@ -1910,5 +1953,8 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_DRAWING = 13
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
+        private const val MENU_FREE_ORBIT = 52
+        private const val MENU_ROTATE_SPEED = 53
+        private val ROTATE_SPEEDS = floatArrayOf(0.55f, 1f, 1.7f)
     }
 }

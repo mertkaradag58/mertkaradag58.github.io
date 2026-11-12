@@ -40,6 +40,13 @@
     <string name="view_right">Справа</string>
     <string name="view_ortho">Ортогональная проекция</string>
     <string name="view_y_up">Ось Y вверх</string>
+    <string name="view_free_orbit">Свободное вращение (трекбол)</string>
+    <string name="rotate_speed">Скорость вращения</string>
+    <string name="rotate_speed_slow">Медленно</string>
+    <string name="rotate_speed_normal">Обычно</string>
+    <string name="rotate_speed_fast">Быстро</string>
+    <string name="free_orbit_on">Свободное вращение: модель следует за пальцем в любом направлении. Поворот двумя пальцами — крен.</string>
+    <string name="free_orbit_off">Поворотный стол: модель остаётся вертикальной.</string>
     <string name="menu_model_info">Сведения о модели</string>
     <string name="menu_share">Поделиться изображением</string>
     <string name="menu_about">О приложении и лицензии</string>
