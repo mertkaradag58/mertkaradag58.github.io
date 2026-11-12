@@ -159,6 +159,28 @@ std::vector<double> CleanPolygon(const std::vector<double>& in, bool ccw) {
   return p;
 }
 
+// Bitişik olmayan kenarlar kesişiyor mu (kendini kesen kontur)?
+bool SelfIntersects(const std::vector<double>& p) {
+  const size_t n = p.size() / 2;
+  auto cross = [](double ax, double ay, double bx, double by, double cx, double cy) {
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+  };
+  for (size_t i = 0; i < n; ++i) {
+    const size_t i2 = (i + 1) % n;
+    for (size_t j = i + 1; j < n; ++j) {
+      const size_t j2 = (j + 1) % n;
+      if (j == i2 || j2 == i) continue;
+      const double d1 = cross(p[2 * i], p[2 * i + 1], p[2 * i2], p[2 * i2 + 1], p[2 * j], p[2 * j + 1]);
+      const double d2 = cross(p[2 * i], p[2 * i + 1], p[2 * i2], p[2 * i2 + 1], p[2 * j2], p[2 * j2 + 1]);
+      const double d3 = cross(p[2 * j], p[2 * j + 1], p[2 * j2], p[2 * j2 + 1], p[2 * i], p[2 * i + 1]);
+      const double d4 = cross(p[2 * j], p[2 * j + 1], p[2 * j2], p[2 * j2 + 1], p[2 * i2], p[2 * i2 + 1]);
+      if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)))
+        return true;
+    }
+  }
+  return false;
+}
+
 bool MakeLoopWire(const SketchLoop& l, const Placement& pl, bool outer, TopoDS_Wire& wire) {
   if (l.circle) {
     if (l.r <= 1e-3) return false;
@@ -172,7 +194,7 @@ bool MakeLoopWire(const SketchLoop& l, const Placement& pl, bool outer, TopoDS_W
     return true;
   }
   const std::vector<double> p = CleanPolygon(l.pts, outer);
-  if (p.empty()) return false;
+  if (p.empty() || SelfIntersects(p)) return false;
   BRepBuilderAPI_MakePolygon poly;
   for (size_t i = 0; i + 1 < p.size(); i += 2) poly.Add(pl.Map(p[i], p[i + 1]));
   poly.Close();
@@ -186,7 +208,7 @@ bool MakeSketchFace(const Sketch& s, const Placement& pl, bool withHoles, TopoDS
                     std::string& error) {
   TopoDS_Wire outer;
   if (s.empty() || !MakeLoopWire(s.front(), pl, true, outer)) {
-    error = "open_profile";
+    error = (!s.empty() && !s.front().circle && s.front().pts.size() >= 6) ? "bad_profile" : "open_profile";
     return false;
   }
   BRepBuilderAPI_MakeFace mf(gp_Pln(pl.Axes()), outer);

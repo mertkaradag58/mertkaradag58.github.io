@@ -14,9 +14,8 @@ target_include_directories(step_host_test PRIVATE "${OCCT_PREFIX}/include/openca
 target_link_libraries(step_host_test PRIVATE
   -Wl,--start-group ${OCCT_LIBS} -Wl,--end-group Threads::Threads ${CMAKE_DL_LIBS})
 # Fotoğraftan model testi: photo_cad_test cikti_klasoru
-add_executable(photo_cad_test photo_cad_test.cpp ../photo_cad.cpp ../step_mesher.cpp ../mesh_model.cpp ../mesh_import.cpp ../pmi_extract.cpp)
+add_executable(photo_cad_test photo_cad_test.cpp ../photo_cad.cpp)
 target_include_directories(photo_cad_test PRIVATE "${OCCT_PREFIX}/include/opencascade")
-target_compile_definitions(photo_cad_test PRIVATE STEPVIEWER_NO_ASSIMP)
 target_link_libraries(photo_cad_test PRIVATE
   -Wl,--start-group ${OCCT_LIBS} -Wl,--end-group Threads::Threads ${CMAKE_DL_LIBS})
 # Assimp isteğe bağlı: -DASSIMP_PREFIX=/yol (scripts/build_assimp_android.sh, HOST=1).

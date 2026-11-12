@@ -1,7 +1,9 @@
 // Fotoğraftan model çekirdeğinin masaüstü testi: üç yöntemle STEP yazar ve geri okur.
 // Kullanım: photo_cad_test cikti_klasoru
 #include "../photo_cad.h"
-#include "../step_mesher.h"
+#include <BRepCheck_Analyzer.hxx>
+#include <STEPControl_Reader.hxx>
+#include <TopExp_Explorer.hxx>
 
 #include <cmath>
 #include <cstdio>
@@ -17,14 +19,21 @@ static bool Check(const char* label, PhotoCadMode mode, const std::vector<double
   if (!b.empty() && !DecodeSketch(b.data(), b.size(), sb)) { std::printf("%s: decode b failed\n", label); return false; }
   PhotoCadResult r = BuildPhotoSolid(mode, sa, sb, param, axis, out, label);
   if (!r.ok) { std::printf("%s: HATA %s\n", label, r.error.c_str()); return false; }
-  MeshData mesh;
-  std::string err;
-  if (!LoadModelFile(out, MeshOptions(), mesh, err)) { std::printf("%s: geri okunamadi %s\n", label, err.c_str()); return false; }
+  STEPControl_Reader reader;
+  if (reader.ReadFile(out.c_str()) != IFSelect_RetDone || reader.TransferRoots() == 0) {
+    std::printf("%s: geri okunamadi\n", label);
+    return false;
+  }
+  const TopoDS_Shape back = reader.OneShape();
+  int solids = 0, faces = 0;
+  for (TopExp_Explorer e(back, TopAbs_SOLID); e.More(); e.Next()) ++solids;
+  for (TopExp_Explorer e(back, TopAbs_FACE); e.More(); e.Next()) ++faces;
+  const bool valid = BRepCheck_Analyzer(back).IsValid();
   const double rel = expectVolume > 0 ? std::fabs(r.volume - expectVolume) / expectVolume : 0;
-  std::printf("%s: hacim=%.1f (beklenen %.1f, fark %.2f%%) boyut=%.2f x %.2f x %.2f parca=%d yuz=%zu\n",
+  std::printf("%s: hacim=%.1f (beklenen %.1f, fark %.2f%%) boyut=%.2f x %.2f x %.2f katı=%d yuz=%d gecerli=%d\n",
               label, r.volume, expectVolume, rel * 100, r.size[0], r.size[1], r.size[2],
-              mesh.partCount(), mesh.faceShapes.size());
-  return rel < 0.02;
+              solids, faces, valid ? 1 : 0);
+  return rel < 0.02 && valid && solids >= 1;
 }
 
 int main(int argc, char** argv) {
