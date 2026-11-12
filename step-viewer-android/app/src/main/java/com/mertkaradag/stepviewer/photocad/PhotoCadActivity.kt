@@ -63,6 +63,12 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
     private var detail = 0.5f
     private val undo = Array(3) { ArrayDeque<List<Sketch.Loop>>() }
     private var busy = false
+    /** Teknik resim yüklenince otomatik tarama + katı üretimi yapılacak. */
+    private var autoPending = false
+    /** PDF sayfasından: kağıt üzerindeki mm / piksel (ölçü okunamazsa kullanılır). */
+    private var paperMmPerPx = 0.0
+    /** Otomatik taramanın sonuç ekranına eklenecek açıklaması. */
+    private var autoNote: String? = null
 
     private lateinit var sketchView: SketchView
     private lateinit var hint: TextView
@@ -329,7 +335,10 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
         actions.addView(chip(R.string.pc_camera) { withCamera { takePicture.launch(shareUri(captureFile)) } })
         actions.addView(chip(R.string.pc_gallery) { pickImage.launch("image/*") })
         actions.addView(chip(R.string.pc_video) { showVideoSource() })
-        actions.addView(chip(R.string.pc_drawing) { showDrawingSource() })
+        actions.addView(chip(R.string.pc_drawing) { autoPending = false; showDrawingSource() })
+        if (sketch.lineArt) bitmaps[current]?.let { b ->
+            actions.addView(chip(R.string.pc_auto_scan) { runAuto(b) })
+        }
         sharedImageSource()?.let { src ->
             actions.addView(chip(R.string.pc_same_image) { useSameImage(src) })
         }
@@ -400,19 +409,32 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
 
     private fun showStartDialog() {
         val projects = PhotoCadProject.list(this)
-        val items = methodLabels().toMutableList()
+        val items = mutableListOf(getString(R.string.pc_method_auto))
+        items.addAll(methodLabels())
         if (projects.isNotEmpty()) items.add(getString(R.string.pc_open_saved, projects.size))
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.pc_start_title)
             .setItems(items.toTypedArray()) { _, which ->
-                if (which < 3) {
-                    project.mode = which
-                    openProject(project, 0)
-                    if (which == PhotoCadNative.MODE_REVOLVE) toast(R.string.pc_revolve_tip, long = true)
-                } else showProjectsDialog(true)
+                when {
+                    which == 0 -> startAuto()
+                    which <= 3 -> {
+                        project.mode = which - 1
+                        openProject(project, 0)
+                        if (project.mode == PhotoCadNative.MODE_REVOLVE) toast(R.string.pc_revolve_tip, long = true)
+                    }
+                    else -> showProjectsDialog(true)
+                }
             }
             .setOnCancelListener { finish() }
             .show()
+    }
+
+    /** Teknik resimden tam otomatik: kaynak seç, tara, katıyı üret. */
+    private fun startAuto() {
+        project.mode = PhotoCadNative.MODE_TWO_VIEW
+        openProject(project, 0)
+        autoPending = true
+        showDrawingSource()
     }
 
     private fun showMethodDialog(finishOnCancel: Boolean) {
@@ -508,6 +530,7 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
     }
 
     private fun loadImage(uri: Uri, lineArt: Boolean = false) {
+        paperMmPerPx = 0.0
         val target = current
         showProgress(getString(R.string.pc_loading_image))
         executor.execute {
@@ -547,6 +570,8 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
                 val bmp = try {
                     renderer.openPage(page).use { p ->
                         val f = DRAWING_PX.toFloat() / max(p.width, p.height)
+                        // PDF birimi 1/72 inç
+                        paperMmPerPx = 25.4 / 72.0 / f
                         val b = Bitmap.createBitmap((p.width * f).roundToInt().coerceAtLeast(1),
                             (p.height * f).roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
                         b.eraseColor(android.graphics.Color.WHITE)
@@ -624,6 +649,120 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
             refreshActions()
         }
         saveProject()
+        if (autoPending && lineArt) {
+            autoPending = false
+            runAuto(bmp)
+        }
+    }
+
+    // -- Teknik resimden otomatik -------------------------------------------------------
+
+    private fun runAuto(bmp: Bitmap) {
+        showProgress(getString(R.string.pc_scanning))
+        val paper = paperMmPerPx
+        executor.execute {
+            val res = try { ContourExtractor.analyzeDrawing(bmp) } catch (_: Exception) { null } catch (_: OutOfMemoryError) { null }
+            val value = if (res != null) readLargestDimension(bmp, res) else 0.0
+            runOnUiThread {
+                hideProgress()
+                if (res == null) {
+                    MaterialAlertDialogBuilder(this)
+                        .setTitle(R.string.pc_auto_failed_title)
+                        .setMessage(R.string.pc_auto_failed)
+                        .setPositiveButton(android.R.string.ok, null)
+                        .show()
+                    return@runOnUiThread
+                }
+                applyAuto(bmp, res, value, paper)
+            }
+        }
+    }
+
+    /** Görünüşlerin çevresindeki ölçü yazılarından en büyük sayıyı okur (cihaz içi OCR); yoksa 0. */
+    private fun readLargestDimension(bmp: Bitmap, r: ContourExtractor.DrawingResult): Double {
+        return try {
+            val views = listOfNotNull(r.front, r.top, r.side)
+            var x0 = views.minOf { it.x0 }; var y0 = views.minOf { it.y0 }
+            var x1 = views.maxOf { it.x1 }; var y1 = views.maxOf { it.y1 }
+            val mx = ((x1 - x0) * 0.12f).roundToInt() + 20; val my = ((y1 - y0) * 0.12f).roundToInt() + 20
+            x0 = (x0 - mx).coerceAtLeast(0); y0 = (y0 - my).coerceAtLeast(0)
+            x1 = (x1 + mx).coerceAtMost(bmp.width); y1 = (y1 + my).coerceAtMost(bmp.height)
+            var crop = Bitmap.createBitmap(bmp, x0, y0, x1 - x0, y1 - y0)
+            val longSide = max(crop.width, crop.height)
+            if (longSide < 2200) {
+                val f = minOf(2f, 3200f / longSide)
+                crop = Bitmap.createScaledBitmap(crop, (crop.width * f).roundToInt(), (crop.height * f).roundToInt(), true)
+            }
+            val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
+                com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
+            val text = com.google.android.gms.tasks.Tasks.await(
+                recognizer.process(com.google.mlkit.vision.common.InputImage.fromBitmap(crop, 0)),
+                40, java.util.concurrent.TimeUnit.SECONDS)
+            recognizer.close()
+            val number = Regex("^\\d{1,5}(\\.\\d{1,3})?$")
+            var best = 0.0
+            for (block in text.textBlocks) for (line in block.lines) for (e in line.elements) {
+                val raw = e.text.trim()
+                if (raw.contains('°') || raw.contains('º')) continue
+                val t = raw.replace(',', '.').trimStart('Ø', 'ø', '⌀', 'Φ', 'R', '(').trimEnd(')')
+                if (!number.matches(t)) continue
+                val v = t.toDoubleOrNull() ?: continue
+                if (v > best && v <= 20000) best = v
+            }
+            best
+        } catch (_: Throwable) {
+            0.0
+        }
+    }
+
+    private fun applyAuto(bmp: Bitmap, r: ContourExtractor.DrawingResult, value: Double, paper: Double) {
+        val views = listOfNotNull(r.front, r.top, r.side)
+        val extent = views.maxOf { max(it.width, it.height) }.toDouble()
+        val scale: Double
+        val scaleNote: String
+        when {
+            value > 0 -> { scale = value / extent; scaleNote = getString(R.string.pc_auto_scale_read, fmt(value)) }
+            paper > 0 -> { scale = paper; scaleNote = getString(R.string.pc_auto_scale_paper) }
+            else -> { scale = 100.0 / extent; scaleNote = getString(R.string.pc_auto_scale_unknown) }
+        }
+        fun fill(i: Int, v: ContourExtractor.DrawingView?) {
+            val s = project.sketches[i]
+            s.loops.clear()
+            if (v != null) s.loops.addAll(v.loops.map { it.copy() })
+            s.sx = scale; s.sy = scale; s.scaled = v != null
+        }
+        val viewNote: String
+        if (r.top != null) {
+            project.mode = PhotoCadNative.MODE_TWO_VIEW
+            fill(0, r.top); fill(1, r.front); fill(2, r.side)
+            project.flipTop = false
+            project.sideRight = r.sideRight
+            viewNote = getString(R.string.pc_auto_views, if (r.side != null) 3 else 2)
+        } else if (r.sideBySide && r.side != null) {
+            // Yan yana iki görünüş: 90° çevirip alt alta çift gibi kullan (çizim resimle örtüşmez)
+            project.mode = PhotoCadNative.MODE_TWO_VIEW
+            fill(0, r.front); fill(1, r.side); fill(2, null)
+            for (i in 0..1) {
+                val s = project.sketches[i]
+                for (l in s.loops) {
+                    if (l.circle) { val x = l.cx; l.cx = l.cy; l.cy = bmp.width - x }
+                    else for (k in 0 until l.size) { val x = l.xs[k]; l.xs[k] = l.ys[k]; l.ys[k] = bmp.width - x }
+                }
+                s.image = null; s.lineArt = false
+                s.imageW = bmp.height; s.imageH = bmp.width
+            }
+            project.flipTop = false; project.sideRight = false
+            viewNote = getString(R.string.pc_auto_views, 2)
+        } else {
+            project.mode = PhotoCadNative.MODE_EXTRUDE
+            fill(0, r.front); fill(1, null); fill(2, null)
+            project.thickness = 10.0
+            viewNote = getString(R.string.pc_auto_single)
+        }
+        autoNote = viewNote + " " + scaleNote
+        saveProject()
+        openProject(project, 0)
+        runBuild()
     }
 
     private fun setBitmap(i: Int, bmp: Bitmap, lineArt: Boolean = project.sketches[i].lineArt) {
@@ -1037,7 +1176,7 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
             runOnUiThread {
                 hideProgress()
                 r.onSuccess { showResult(out, it) }
-                    .onFailure { showBuildError(it.message) }
+                    .onFailure { autoNote = null; showBuildError(it.message) }
             }
         }
     }
@@ -1059,8 +1198,10 @@ class PhotoCadActivity : AppCompatActivity(), SketchView.Listener {
     }
 
     private fun showResult(file: File, info: DoubleArray) {
-        val msg = getString(R.string.pc_result, fmt(info[1]), fmt(info[2]), fmt(info[3]),
+        var msg = getString(R.string.pc_result, fmt(info[1]), fmt(info[2]), fmt(info[3]),
             String.format(Locale.getDefault(), "%,.0f", info[0]), file.name)
+        autoNote?.let { msg = it + "\n\n" + msg }
+        autoNote = null
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.pc_result_title)
             .setMessage(msg)

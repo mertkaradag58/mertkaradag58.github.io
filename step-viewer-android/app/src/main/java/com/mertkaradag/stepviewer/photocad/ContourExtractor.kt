@@ -342,6 +342,263 @@ object ContourExtractor {
         }
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Teknik resmin tam otomatik çözümlenmesi
+    // ---------------------------------------------------------------------------------------
+
+    /** Bulunan bir görünüş: sınır kutusu (resim pikseli) ve konturları. */
+    class DrawingView(val x0: Int, val y0: Int, val x1: Int, val y1: Int, val loops: List<Sketch.Loop>) {
+        val width: Int get() = x1 - x0
+        val height: Int get() = y1 - y0
+    }
+
+    /**
+     * @param front,top,side eşleşen görünüşler (yalnızca tek görünüş bulunduysa top ve side null)
+     * @param sideRight yan görünüş sağdan bakış mı
+     * @param sideBySide yalnızca yan yana iki görünüş bulundu (front = soldaki, side = sağdaki)
+     */
+    class DrawingResult(
+        val front: DrawingView, val top: DrawingView?, val side: DrawingView?,
+        val sideRight: Boolean, val sideBySide: Boolean,
+    )
+
+    private class Cand(val x0: Int, val y0: Int, val x1: Int, val y1: Int, val mask: BooleanArray, val area: Int) {
+        val bw: Int get() = x1 - x0
+        val bh: Int get() = y1 - y0
+    }
+
+    /**
+     * Teknik resim sayfasını tarar: kalın (görünen kenar) çizgileri ince çizgilerden (ölçü, eksen,
+     * gizli kenar, yazı) ayırır, kapalı kontur oluşturan görünüşleri bulur, hizalı olanları
+     * ön / üst / yan olarak eşleştirir (ISO E yerleşimi varsayılır). Görünüş yoksa null.
+     */
+    fun analyzeDrawing(bmp: Bitmap): DrawingResult? {
+        val w = bmp.width
+        val h = bmp.height
+        val px = IntArray(w * h)
+        bmp.getPixels(px, 0, w, 0, 0, w, h)
+        val lum = FloatArray(w * h)
+        for (i in px.indices) {
+            val c = px[i]
+            lum[i] = 0.299f * (c shr 16 and 255) + 0.587f * (c shr 8 and 255) + 0.114f * (c and 255)
+        }
+        val sample = ArrayList<Float>()
+        var k = 0
+        while (k < lum.size) { sample.add(lum[k]); k += 7 }
+        val paper = median(sample)
+        val dark = FloatArray(w * h) { max(0f, paper - lum[it]) }
+        var maxD = 1f
+        for (d in dark) if (d > maxD) maxD = d
+        val t = max(otsu(dark, maxD) * 0.8f, 12f)
+        val ink = BooleanArray(w * h) { dark[it] > t }
+
+        // Çizgi kalınlığı = min(yatay koşu, dikey koşu)
+        val th = ByteArray(w * h)
+        for (y in 0 until h) {
+            var x = 0
+            while (x < w) {
+                if (!ink[y * w + x]) { x++; continue }
+                var e = x
+                while (e < w && ink[y * w + e]) e++
+                val len = min(e - x, 120).toByte()
+                for (q in x until e) th[y * w + q] = len
+                x = e
+            }
+        }
+        for (x in 0 until w) {
+            var y = 0
+            while (y < h) {
+                if (!ink[y * w + x]) { y++; continue }
+                var e = y
+                while (e < h && ink[e * w + x]) e++
+                val len = min(e - y, 120)
+                for (q in y until e) if (len < th[q * w + x]) th[q * w + x] = len.toByte()
+                y = e
+            }
+        }
+        // Kalınlık dağılımı iki tepeli ise (ince + kalın çizgi) ince olanları at
+        val hist = DoubleArray(17)
+        for (i in ink.indices) if (ink[i] && th[i] in 1..15) hist[th[i].toInt()] += 1.0
+        val total = hist.sum()
+        var sumAll = 0.0
+        for (i in 0..16) sumAll += i * hist[i]
+        var wB = 0.0; var sB = 0.0; var best = 0.0; var thr = 0; var mLow = 0.0; var mHigh = 0.0
+        for (i in 0..16) {
+            wB += hist[i]
+            if (wB == 0.0) continue
+            val wF = total - wB
+            if (wF <= 0.0) break
+            sB += i * hist[i]
+            val mB = sB / wB; val mF = (sumAll - sB) / wF
+            val v = wB * wF * (mB - mF) * (mB - mF)
+            if (v > best) { best = v; thr = i; mLow = mB; mHigh = mF }
+        }
+        var lowShare = 0.0
+        for (i in 0..thr) lowShare += hist[i]
+        lowShare = if (total > 0) lowShare / total else 0.0
+        val split = total > 0 && mHigh / max(mLow, 0.1) >= 1.5 && lowShare in 0.08..0.92
+        val thick = if (split) BooleanArray(w * h) { ink[it] && th[it] > thr } else ink.copyOf()
+        close(thick, w, h, 1)
+
+        // Bileşenler ve sınır kutuları
+        val labels = IntArray(w * h) { -1 }
+        val stack = IntArray(w * h)
+        val bx0 = ArrayList<Int>(); val by0 = ArrayList<Int>(); val bx1 = ArrayList<Int>(); val by1 = ArrayList<Int>()
+        for (i in thick.indices) {
+            if (!thick[i] || labels[i] >= 0) continue
+            var x0 = w; var y0 = h; var x1 = -1; var y1 = -1
+            floodBox(thick, labels, bx0.size, i, w, h, stack) { x, y ->
+                if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y
+            }
+            bx0.add(x0); by0.add(y0); bx1.add(x1 + 1); by1.add(y1 + 1)
+        }
+        val minSize = 0.03f * min(w, h)
+        val order = bx0.indices.filter { l ->
+            val bw = bx1[l] - bx0[l]; val bh = by1[l] - by0[l]
+            max(bw, bh) >= minSize && min(bw, bh) >= 4 && bw <= 0.85f * w && bh <= 0.85f * h
+        }.sortedByDescending { (bx1[it] - bx0[it]).toLong() * (by1[it] - by0[it]) }.take(14)
+
+        // Her adayın içi doldurulmuş maskesi (1 piksel kenar payıyla pencere)
+        val cands = ArrayList<Cand>()
+        for (l in order) {
+            val ww = bx1[l] - bx0[l] + 2; val wh = by1[l] - by0[l] + 2
+            val free = BooleanArray(ww * wh) { true }
+            for (y in by0[l] until by1[l]) for (x in bx0[l] until bx1[l]) {
+                if (labels[y * w + x] == l) free[(y - by0[l] + 1) * ww + (x - bx0[l] + 1)] = false
+            }
+            val reach = IntArray(ww * wh) { -1 }
+            flood(free, true, reach, 0, 0, ww, wh, stack)
+            val mask = BooleanArray(ww * wh) { reach[it] < 0 }
+            // Kalan ince çıkıntıları at
+            open(mask, ww, wh, 2)
+            var area = 0
+            for (v in mask) if (v) area++
+            // Kapalı alan oluşturmayan şekiller (tek çizgi, yazı) görünüş değildir
+            if (area < 0.15f * (ww - 2) * (wh - 2) && area < 4 * minSize * minSize) continue
+            if (area < minSize * minSize / 4) continue
+            cands.add(Cand(bx0[l], by0[l], bx1[l], by1[l], mask, area))
+        }
+        // Başka bir adayın kutusunun içinde kalanlar görünüş değil (iç ayrıntı)
+        val views = cands.filter { c ->
+            cands.none { p -> p !== c && p.x0 <= c.x0 && p.y0 <= c.y0 && p.x1 >= c.x1 && p.y1 >= c.y1 }
+        }
+        if (views.isEmpty()) return null
+
+        fun alignedX(a: Cand, b: Cand): Boolean {
+            val tol = 0.025f * max(a.bw, b.bw) + 4
+            return abs(a.x0 - b.x0) < tol && abs(a.x1 - b.x1) < tol && (a.y1 <= b.y0 || b.y1 <= a.y0)
+        }
+        fun alignedY(a: Cand, b: Cand): Boolean {
+            val tol = 0.025f * max(a.bh, b.bh) + 4
+            return abs(a.y0 - b.y0) < tol && abs(a.y1 - b.y1) < tol && (a.x1 <= b.x0 || b.x1 <= a.x0)
+        }
+
+        fun build(c: Cand): DrawingView? {
+            val loops = viewLoops(c, thick, w, h, stack) ?: return null
+            return DrawingView(c.x0, c.y0, c.x1, c.y1, loops)
+        }
+
+        // 1) Alt alta hizalı çift (ön + üst), varsa yanında hizalı üçüncü görünüş
+        var bestPair: Pair<Cand, Cand>? = null
+        var bestArea = -1L
+        for (i in views.indices) for (j in i + 1 until views.size) {
+            if (!alignedX(views[i], views[j])) continue
+            val a = views[i].area.toLong() + views[j].area
+            if (a > bestArea) { bestArea = a; bestPair = views[i] to views[j] }
+        }
+        if (bestPair != null) {
+            val upper = if (bestPair.first.y0 < bestPair.second.y0) bestPair.first else bestPair.second
+            val lower = if (upper === bestPair.first) bestPair.second else bestPair.first
+            // ISO E: ön üstte, üst görünüş altta. Yan görünüş alttakiyle hizalıysa ISO A (ön altta).
+            var front = upper; var top = lower
+            var side = views.filter { it !== upper && it !== lower && alignedY(it, upper) }.maxByOrNull { it.area }
+            var thirdAngle = false
+            if (side == null) {
+                side = views.filter { it !== upper && it !== lower && alignedY(it, lower) }.maxByOrNull { it.area }
+                if (side != null) { front = lower; top = upper; thirdAngle = true }
+            }
+            val fv = build(front); val tv = build(top)
+            if (fv != null && tv != null) {
+                val sv = side?.let { build(it) }
+                // ISO E: ön görünüşün sağındaki görünüş soldan bakıştır; ISO A'da tersi
+                val onRight = side != null && side.x0 >= front.x1
+                val sideRight = if (thirdAngle) onRight else !onRight
+                return DrawingResult(fv, tv, sv, sv != null && sideRight, false)
+            }
+        }
+        // 2) Yan yana hizalı çift (ön + yan)
+        var bestSide: Pair<Cand, Cand>? = null
+        bestArea = -1L
+        for (i in views.indices) for (j in i + 1 until views.size) {
+            if (!alignedY(views[i], views[j])) continue
+            val a = views[i].area.toLong() + views[j].area
+            if (a > bestArea) { bestArea = a; bestSide = views[i] to views[j] }
+        }
+        if (bestSide != null) {
+            val left = if (bestSide.first.x0 < bestSide.second.x0) bestSide.first else bestSide.second
+            val right = if (left === bestSide.first) bestSide.second else bestSide.first
+            val lv = build(left); val rv = build(right)
+            if (lv != null && rv != null) return DrawingResult(lv, null, rv, false, true)
+        }
+        // 3) Tek görünüş: en büyük kapalı şekil
+        val single = views.maxByOrNull { it.area } ?: return null
+        val sv = build(single) ?: return null
+        return DrawingResult(sv, null, null, false, false)
+    }
+
+    /** Adayın dış konturu + içindeki daire delikler (resim pikseli). */
+    private fun viewLoops(c: Cand, thick: BooleanArray, w: Int, h: Int, stack: IntArray): List<Sketch.Loop>? {
+        val ww = c.bw + 2; val wh = c.bh + 2
+        // En büyük bileşen
+        val lab = IntArray(ww * wh) { -1 }
+        var bestLabel = -1; var bestSize = 0; var n = 0; var bestStart = -1
+        for (i in c.mask.indices) {
+            if (!c.mask[i] || lab[i] >= 0) continue
+            val size = flood(c.mask, true, lab, n, i, ww, wh, stack)
+            if (size > bestSize) { bestSize = size; bestLabel = n; bestStart = i }
+            n++
+        }
+        if (bestLabel < 0) return null
+        val part = BooleanArray(ww * wh) { lab[it] == bestLabel }
+        val pts = trace(part, ww, wh, bestStart) ?: return null
+        val ox = c.x0 - 1f; val oy = c.y0 - 1f
+        for (i in 0 until pts.size / 2) { pts[2 * i] += ox; pts[2 * i + 1] += oy }
+        val eps = max(1.2f, min(c.bw, c.bh) * 0.004f)
+        val loops = ArrayList<Sketch.Loop>()
+        loops.add(toLoop(pts, eps, 1f, allowCircle = true) ?: return null)
+
+        // Delikler: görünüşün içinde, kalın çizgilerle çevrili daire biçimli boş bölgeler
+        val inner = BooleanArray(ww * wh) {
+            if (!part[it]) false else {
+                val x = it % ww + c.x0 - 1; val y = it / ww + c.y0 - 1
+                x in 0 until w && y in 0 until h && !thick[y * w + x]
+            }
+        }
+        val il = IntArray(ww * wh) { -1 }
+        val circles = ArrayList<FloatArray>()
+        val minD = max(6, min(c.bw, c.bh) / 60)
+        var m = 0
+        for (i in inner.indices) {
+            if (!inner[i] || il[i] >= 0) continue
+            var x0 = ww; var y0 = wh; var x1 = -1; var y1 = -1
+            val area = floodBox(inner, il, m++, i, ww, wh, stack) { x, y ->
+                if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y
+            }
+            val bw = (x1 - x0 + 1).toFloat(); val bh = (y1 - y0 + 1).toFloat()
+            if (min(bw, bh) < minD) continue
+            if (bw > 0.9f * c.bw && bh > 0.9f * c.bh) continue
+            if (abs(bw - bh) / max(bw, bh) > 0.12f) continue
+            val fill = area / (Math.PI.toFloat() * bw * bh / 4f)
+            if (fill < 0.72f || fill > 1.08f) continue
+            circles.add(floatArrayOf((x0 + x1 + 1) / 2f + ox, (y0 + y1 + 1) / 2f + oy, (bw + bh) / 4f + 1.5f))
+        }
+        val keep = circles.filter { ci ->
+            circles.none { o -> o !== ci && o[2] < ci[2] && hypot(o[0] - ci[0], o[1] - ci[1]) < ci[2] }
+        }
+        for (ci in keep) loops.add(Sketch.Loop(circle = true, cx = ci[0], cy = ci[1], r = ci[2]))
+        return loops
+    }
+
     /** 4-komşu dolgu, her piksel için [visit] çağrılır; piksel sayısını döndürür. */
     private inline fun floodBox(
         m: BooleanArray, labels: IntArray, label: Int, start: Int, w: Int, h: Int, stack: IntArray,

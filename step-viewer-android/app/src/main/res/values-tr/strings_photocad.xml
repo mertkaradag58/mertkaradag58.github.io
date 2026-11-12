@@ -8,6 +8,16 @@
     <string name="pc_menu_help">Nasıl kullanılır</string>
     <string name="pc_menu_delete">Bu çizimi sil</string>
     <string name="pc_start_title">Katı model nasıl oluşturulsun?</string>
+    <string name="pc_method_auto">Teknik resimden otomatik (PDF / resim) · hiçbir şey girmeden</string>
+    <string name="pc_auto_scan">Otomatik tara</string>
+    <string name="pc_scanning">Teknik resim taranıyor: görünüşler ve ölçüler bulunuyor…</string>
+    <string name="pc_auto_failed_title">Görünüş bulunamadı</string>
+    <string name="pc_auto_failed">Bu resimde kapalı bir kontur bulunamadı. Daha net bir PDF ya da resim genellikle işe yarar. İsterseniz bu ekranda görünüşlerin içine kendiniz dokunabilirsiniz.</string>
+    <string name="pc_auto_views">%1$d eşleşen görünüş bulundu ve birleştirildi.</string>
+    <string name="pc_auto_single">Yalnızca bir görünüş bulundu; 10 mm varsayılan kalınlıkla çekildi.</string>
+    <string name="pc_auto_scale_read">Ölçek, resimde okunan en büyük ölçüden (%1$s) alındı.</string>
+    <string name="pc_auto_scale_paper">Ölçü yazısı okunamadı; kağıt üzerindeki boyut (1:1) kullanıldı.</string>
+    <string name="pc_auto_scale_unknown">Ölçü yazısı okunamadı; genişlik 100 mm varsayıldı.</string>
     <string name="pc_method_extrude">Kalınlık ver (plaka, sac) · üstten 1 fotoğraf</string>
     <string name="pc_method_two_view">Çok görünüş (blok parça, teknik resim) · üst + ön (+ yan)</string>
     <string name="pc_method_revolve">Döndür (mil, flanş, burç) · yandan 1 fotoğraf</string>

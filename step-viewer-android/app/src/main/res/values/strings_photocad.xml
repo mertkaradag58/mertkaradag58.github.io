@@ -8,6 +8,16 @@
     <string name="pc_menu_help">How to use</string>
     <string name="pc_menu_delete">Delete this sketch</string>
     <string name="pc_start_title">How should the solid be made?</string>
+    <string name="pc_method_auto">Technical drawing, automatic (PDF / image) · no input needed</string>
+    <string name="pc_auto_scan">Scan automatically</string>
+    <string name="pc_scanning">Scanning the drawing: finding views and dimensions…</string>
+    <string name="pc_auto_failed_title">No view found</string>
+    <string name="pc_auto_failed">No closed outline could be found in this drawing. A sharper PDF or image usually helps. You can still tap inside the views yourself on this screen.</string>
+    <string name="pc_auto_views">%1$d matching views were found and combined.</string>
+    <string name="pc_auto_single">Only one view was found; it was extruded with an assumed thickness of 10 mm.</string>
+    <string name="pc_auto_scale_read">Scale was taken from the largest dimension read on the drawing (%1$s).</string>
+    <string name="pc_auto_scale_paper">No dimension text could be read; the size on paper (1:1) was used.</string>
+    <string name="pc_auto_scale_unknown">No dimension text could be read; the width was assumed to be 100 mm.</string>
     <string name="pc_method_extrude">Give thickness (plate, sheet metal) · 1 photo from the top</string>
     <string name="pc_method_two_view">Multi-view (block parts, technical drawings) · top + front (+ side)</string>
     <string name="pc_method_revolve">Revolve (shaft, flange, bushing) · 1 side photo</string>
