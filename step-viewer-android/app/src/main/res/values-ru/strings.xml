@@ -40,6 +40,13 @@
     <string name="view_right">Справа</string>
     <string name="view_ortho">Ортогональная проекция</string>
     <string name="view_y_up">Ось Y вверх</string>
+    <string name="view_free_orbit">Свободное вращение (трекбол)</string>
+    <string name="rotate_speed">Скорость вращения</string>
+    <string name="rotate_speed_slow">Медленно</string>
+    <string name="rotate_speed_normal">Обычно</string>
+    <string name="rotate_speed_fast">Быстро</string>
+    <string name="free_orbit_on">Свободное вращение: модель следует за пальцем в любом направлении. Поворот двумя пальцами — крен.</string>
+    <string name="free_orbit_off">Поворотный стол: модель остаётся вертикальной.</string>
     <string name="menu_model_info">Сведения о модели</string>
     <string name="menu_share">Поделиться изображением</string>
     <string name="menu_about">О приложении и лицензии</string>
@@ -236,4 +243,11 @@
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Формат бумаги</string>
     <string name="drawing_info">Чертёж · %1$s</string>
+    <string name="menu_cost">Расчёт стоимости</string>
+    <string name="cost_title">Расчёт стоимости</string>
+    <string name="menu_sheet">Развёртка листовой детали (DXF)</string>
+    <string name="menu_qc">Протокол контроля (PDF)</string>
+    <string name="menu_fit">Калькулятор посадок ISO</string>
+    <string name="fit_button">Допуск</string>
+    <string name="qc_add_from_measure">В протокол</string>
 </resources>

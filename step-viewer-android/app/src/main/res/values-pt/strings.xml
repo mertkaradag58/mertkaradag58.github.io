@@ -40,6 +40,13 @@
     <string name="view_right">Direita</string>
     <string name="view_ortho">Projeção ortográfica</string>
     <string name="view_y_up">Eixo Y para cima</string>
+    <string name="view_free_orbit">Rotação livre (trackball)</string>
+    <string name="rotate_speed">Velocidade de rotação</string>
+    <string name="rotate_speed_slow">Lenta</string>
+    <string name="rotate_speed_normal">Normal</string>
+    <string name="rotate_speed_fast">Rápida</string>
+    <string name="free_orbit_on">Rotação livre: o modelo segue o dedo em todas as direções. Gire com dois dedos para rolar.</string>
+    <string name="free_orbit_off">Prato giratório: o modelo fica sempre em pé.</string>
     <string name="menu_model_info">Informações do modelo</string>
     <string name="menu_share">Compartilhar imagem</string>
     <string name="menu_about">Sobre e licenças</string>
@@ -230,4 +237,11 @@ Escala 1:1 em mm, vista de fora, canto inferior esquerdo em 0,0. Contorno extern
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Tamanho do papel</string>
     <string name="drawing_info">Desenho técnico · %1$s</string>
+    <string name="menu_cost">Cálculo de custo</string>
+    <string name="cost_title">Cálculo de custo</string>
+    <string name="menu_sheet">Planificação de chapa (DXF)</string>
+    <string name="menu_qc">Relatório de inspeção (PDF)</string>
+    <string name="menu_fit">Calculadora de ajustes ISO</string>
+    <string name="fit_button">Tolerância</string>
+    <string name="qc_add_from_measure">Ao relatório</string>
 </resources>

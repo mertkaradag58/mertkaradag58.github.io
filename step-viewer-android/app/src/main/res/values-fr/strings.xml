@@ -40,6 +40,13 @@
     <string name="view_right">Droite</string>
     <string name="view_ortho">Projection orthographique</string>
     <string name="view_y_up">Axe Y vers le haut</string>
+    <string name="view_free_orbit">Rotation libre (trackball)</string>
+    <string name="rotate_speed">Vitesse de rotation</string>
+    <string name="rotate_speed_slow">Lente</string>
+    <string name="rotate_speed_normal">Normale</string>
+    <string name="rotate_speed_fast">Rapide</string>
+    <string name="free_orbit_on">Rotation libre : le modèle suit le doigt dans toutes les directions. Tournez à deux doigts pour pivoter.</string>
+    <string name="free_orbit_off">Plateau tournant : le modèle reste droit.</string>
     <string name="menu_model_info">Infos du modèle</string>
     <string name="menu_share">Partager l’image</string>
     <string name="menu_about">À propos et licences</string>
@@ -230,4 +237,11 @@ Découpes intérieures : %3$d
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Format du papier</string>
     <string name="drawing_info">Dessin technique · %1$s</string>
+    <string name="menu_cost">Calcul du coût</string>
+    <string name="cost_title">Calcul du coût</string>
+    <string name="menu_sheet">Développé de tôlerie (DXF)</string>
+    <string name="menu_qc">Rapport de contrôle (PDF)</string>
+    <string name="menu_fit">Calcul des ajustements ISO</string>
+    <string name="fit_button">Tolérance</string>
+    <string name="qc_add_from_measure">Au rapport</string>
 </resources>

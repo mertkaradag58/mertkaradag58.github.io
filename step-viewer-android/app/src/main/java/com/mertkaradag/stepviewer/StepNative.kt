@@ -61,6 +61,12 @@ object StepNative {
      * DoubleArray sınır kutusu]. Bkz. [TechDrawing.load]. Arka planda çağrılmalı.
      */
     external fun drawingViews(partIds: IntArray?, zUp: Boolean, hidden: Boolean): Array<Any>?
+
+    /**
+     * Sac açınımı (yalnızca CAD). faceId < 0: parçanın en büyük düz yüzü taban olur.
+     * Bkz. [SheetMetal.unfold]. Arka planda çağrılmalı.
+     */
+    external fun unfoldSheet(partId: Int, faceId: Int, kFactor: Double): Array<Any>?
 }
 
 /** C++ GeomKind ile aynı değerler. */

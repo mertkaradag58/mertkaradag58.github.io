@@ -9,9 +9,14 @@ if(NOT OCCT_PREFIX)
 endif()
 file(GLOB OCCT_LIBS "${OCCT_PREFIX}/lib/libTK*.a")
 find_package(Threads REQUIRED)
-add_executable(step_host_test main.cpp ../step_mesher.cpp ../mesh_model.cpp ../mesh_import.cpp ../pmi_extract.cpp ../hole_finder.cpp ../dxf_export.cpp ../drawing_views.cpp)
+add_executable(step_host_test main.cpp ../step_mesher.cpp ../mesh_model.cpp ../mesh_import.cpp ../pmi_extract.cpp ../hole_finder.cpp ../dxf_export.cpp ../drawing_views.cpp ../sheet_unfold.cpp)
 target_include_directories(step_host_test PRIVATE "${OCCT_PREFIX}/include/opencascade")
 target_link_libraries(step_host_test PRIVATE
+  -Wl,--start-group ${OCCT_LIBS} -Wl,--end-group Threads::Threads ${CMAKE_DL_LIBS})
+# Fotoğraftan model testi: photo_cad_test cikti_klasoru
+add_executable(photo_cad_test photo_cad_test.cpp ../photo_cad.cpp)
+target_include_directories(photo_cad_test PRIVATE "${OCCT_PREFIX}/include/opencascade")
+target_link_libraries(photo_cad_test PRIVATE
   -Wl,--start-group ${OCCT_LIBS} -Wl,--end-group Threads::Threads ${CMAKE_DL_LIBS})
 # Assimp isteğe bağlı: -DASSIMP_PREFIX=/yol (scripts/build_assimp_android.sh, HOST=1).
 # Verilmezse mesh dosyaları okunamaz ama --as-mesh testi yine çalışır.
