@@ -51,10 +51,11 @@ class ModelInfoDialog(
         val b = mesh.bbox
         // OBJ, STL, 3DS ve PLY dosyalarında birim yoktur (glTF/DAE/FBX'te birim mm'ye çevrilir).
         val unitless = mesh.format == StepMesh.FORMAT_OBJ || mesh.format == StepMesh.FORMAT_STL ||
-            mesh.format == StepMesh.FORMAT_3DS || mesh.format == StepMesh.FORMAT_PLY
+            mesh.format == StepMesh.FORMAT_3DS || mesh.format == StepMesh.FORMAT_PLY ||
+            mesh.format == StepMesh.FORMAT_OFF
         general.text = listOfNotNull(
             context.getString(R.string.info_format, mesh.formatName),
-            context.getString(R.string.info_size, fmt(b[3] - b[0], 2), fmt(b[4] - b[1], 2), fmt(b[5] - b[2], 2)),
+            Units.localize(context.getString(R.string.info_size, Units.fl(b[3] - b[0]), Units.fl(b[4] - b[1]), Units.fl(b[5] - b[2]))),
             context.getString(R.string.info_counts, mesh.partCount, mesh.faceCount, mesh.triangleCount),
             if (unitless) context.getString(R.string.info_mesh_units) else null,
         ).joinToString("\n")
@@ -63,7 +64,7 @@ class ModelInfoDialog(
             val faces = mesh.partFaceOffsets[part + 1] - mesh.partFaceOffsets[part]
             val tris = mesh.partTriangleRange(part).let { it.last - it.first + 1 }
             general.text = listOf(
-                context.getString(R.string.info_size, fmt(pb[3] - pb[0], 2), fmt(pb[4] - pb[1], 2), fmt(pb[5] - pb[2], 2)),
+                Units.localize(context.getString(R.string.info_size, Units.fl(pb[3] - pb[0]), Units.fl(pb[4] - pb[1]), Units.fl(pb[5] - pb[2]))),
                 context.getString(R.string.info_part_counts, faces, tris),
             ).joinToString("\n")
         }
@@ -121,7 +122,7 @@ class ModelInfoDialog(
                     val lines = mutableListOf<String>()
                     if (hasSolids) lines += context.getString(R.string.info_volume, fmt(p[0] / 1000.0, 3))
                     lines += context.getString(R.string.info_area, fmt(p[1] / 100.0, 3))
-                    lines += context.getString(R.string.info_center, fmt(p[2], 2), fmt(p[3], 2), fmt(p[4], 2))
+                    lines += Units.localize(context.getString(R.string.info_center, Units.fl(p[2]), Units.fl(p[3]), Units.fl(p[4])))
                     props.text = lines.joinToString("\n")
                 }
                 updateMass()

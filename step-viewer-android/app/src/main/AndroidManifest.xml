@@ -14,7 +14,9 @@
     <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
 
     <application
+        android:name=".CepteApp"
         android:allowBackup="true"
+        android:localeConfig="@xml/locales_config"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:largeHeap="true"
@@ -81,6 +83,11 @@
                 <data android:mimeType="application/x-fbx" />
                 <data android:mimeType="model/x-fbx" />
                 <data android:mimeType="application/x-ply" />
+                <data android:mimeType="model/3mf" />
+                <data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
+                <data android:mimeType="application/x-amf" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
             </intent-filter>
 
             <!-- Çoğu dosya yöneticisi .step dosyalarını genel tür olarak bildirir -->
@@ -130,8 +137,31 @@
                 <data android:pathPattern=".*\\.FBX" />
                 <data android:pathPattern=".*\\.ply" />
                 <data android:pathPattern=".*\\.PLY" />
+                <data android:pathPattern=".*\\.3mf" />
+                <data android:pathPattern=".*\\.3MF" />
+                <data android:pathPattern=".*\\.amf" />
+                <data android:pathPattern=".*\\.AMF" />
+                <data android:pathPattern=".*\\.off" />
+                <data android:pathPattern=".*\\.OFF" />
+                <data android:pathPattern=".*\\.zip" />
+                <data android:pathPattern=".*\\.ZIP" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="@string/settings" />
+
+        <!-- Uygulama içi dil seçimi Android 12 ve altında da kalıcı olsun -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
 
         <!-- AdMob uygulama kimliği (build.gradle.kts içinden) -->
         <meta-data

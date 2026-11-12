@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Koyu tema (Yumuşak Gece): eski temadan daha açık lacivert-gri, turuncu vurgu -->
+<resources>
+    <color name="background">#FF232A3A</color>
+    <color name="surface">#E62E3647</color>
+    <color name="surface_variant">#FF384156</color>
+    <color name="surface_solid">#FF2E3647</color>
+    <color name="text">#FFEEF1F6</color>
+    <color name="text_secondary">#FFB3BCCB</color>
+    <color name="accent">#FFFF8A3D</color>
+    <color name="on_accent">#FF2A1405</color>
+    <color name="accent_container">#FF5A2A0C</color>
+    <color name="on_accent_container">#FFFFDBC8</color>
+    <color name="accent_dark">#FFFFB27D</color>
+    <color name="measure">#FFFF9A4D</color>
+    <color name="select">#FF7DB8FF</color>
+    <color name="outline">#29FFFFFF</color>
+    <color name="tool_active">#FFFF8A3D</color>
+    <color name="tool_active_text">#FF2A1405</color>
+    <color name="scrim_top">#CC232A3A</color>
+    <color name="icon_bg">#FFE8650E</color>
+    <color name="card_shadow">#33000000</color>
+</resources>

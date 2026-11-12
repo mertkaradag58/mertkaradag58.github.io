@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Alt araç çubuğundaki düğmelerin seçili / basılı durumları -->
-<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#335AB0FF">
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#33E8650E">
     <item>
         <selector>
             <item android:state_activated="true">
                 <shape android:shape="rectangle">
-                    <solid android:color="#335AB0FF" />
-                    <corners android:radius="16dp" />
+                    <solid android:color="@color/tool_active" />
+                    <corners android:radius="18dp" />
                 </shape>
             </item>
             <item>
                 <shape android:shape="rectangle">
                     <solid android:color="@android:color/transparent" />
-                    <corners android:radius="16dp" />
+                    <corners android:radius="18dp" />
                 </shape>
             </item>
         </selector>

@@ -3,4 +3,5 @@
     <cache-path name="shared" path="shared/" />
     <!-- Fotoğraftan model: üretilen STEP dosyaları -->
     <files-path name="photocad" path="photocad/" />
+    <files-path name="notes" path="notes/" />
 </paths>

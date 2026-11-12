@@ -18,12 +18,16 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import androidx.print.PrintHelper
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.TooltipCompat
 import androidx.core.content.FileProvider
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -31,6 +35,9 @@ import androidx.core.view.updatePadding
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.chip.ChipGroup
+import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
+import android.view.HapticFeedbackConstants
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.slider.Slider
 import com.google.android.material.snackbar.BaseTransientBottomBar
@@ -50,8 +57,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var titleText: TextView
     private lateinit var subtitleText: TextView
     private lateinit var emptyState: View
-    private lateinit var recentTitle: TextView
-    private lateinit var recentList: LinearLayout
     private lateinit var sideButtons: View
     private lateinit var toolbarCard: View
     private lateinit var measureCard: MaterialCardView
@@ -75,6 +80,24 @@ class MainActivity : AppCompatActivity() {
     private lateinit var hiddenText: TextView
 
     private val executor = Executors.newSingleThreadExecutor()
+    /** Klasör tarama gibi model dışı dosya işleri (model yüklemesini bekletmesin). */
+    private val ioExecutor = Executors.newSingleThreadExecutor()
+    private lateinit var loupeView: LoupeView
+    private lateinit var home: HomeScreen
+    private lateinit var savedViews: SavedViews
+    private val notes = NotesController(this) { pushOverlay() }
+    private var sectionFace: FloatArray? = null   // [nx, ny, nz, px, py, pz]: yüzeyden kesit
+    private var pickTarget = PICK_NONE
+    private var pickSnackbar: Snackbar? = null
+    private lateinit var measureModeGroup: ChipGroup
+    private lateinit var measureUndo: View
+    /** Parça rengi (0 = dosyadaki renk) ve şeffaflığı. */
+    private var partColor = IntArray(0)
+    private var partTransparent = BooleanArray(0)
+    /** Hassas imleç: önizleme yakalaması sürüyor mu. */
+    private var cursorPreviewBusy = false
+    private var cursorX = -1f
+    private var cursorY = -1f
     private lateinit var recentFiles: RecentFiles
     private lateinit var measure: MeasureController
 
@@ -117,7 +140,8 @@ class MainActivity : AppCompatActivity() {
     private var pendingExport: Exporter.Format? = null
     private var pendingBomDensity = 0.0
 
-    private var displayMode = ModelRenderer.DisplayMode.SHADED_EDGES
+    private var displayMode =
+        if (Prefs.showEdges) ModelRenderer.DisplayMode.SHADED_EDGES else ModelRenderer.DisplayMode.SHADED
     private var orthographic = false
     private var yUp = false
 
@@ -187,11 +211,46 @@ class MainActivity : AppCompatActivity() {
             if (uri != null) loadModel(uri, persist = true)
         }
 
+    private val openFolder =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (uri != null) {
+                CadFiles.addFolder(this, uri)
+                home.refresh()
+            }
+        }
+
+    private val settingsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val data = result.data ?: return@registerForActivityResult
+            when (data.getStringExtra(SettingsActivity.EXTRA_ACTION)) {
+                SettingsActivity.ACTION_BUY -> billing.buyAdFree(this)
+                SettingsActivity.ACTION_RESTORE -> billing.restore()
+                SettingsActivity.ACTION_PRIVACY -> ads.showPrivacyOptions()
+                SettingsActivity.ACTION_TUTORIAL -> Onboarding(this) {}.show()
+                SettingsActivity.ACTION_ABOUT -> showAbout()
+            }
+            if (data.getBooleanExtra(SettingsActivity.EXTRA_QUALITY_CHANGED, false)) {
+                val uri = currentUri
+                if (uri != null && currentMesh != null) {
+                    Toast.makeText(this, R.string.quality_reload, Toast.LENGTH_SHORT).show()
+                    loadModel(uri, persist = false)
+                }
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         CrashLog.install(this)
+        Prefs.init(this)
+        Units.load()
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            val light = !Prefs.isNight(this@MainActivity)
+            isAppearanceLightStatusBars = light
+            isAppearanceLightNavigationBars = light
+        }
         setContentView(R.layout.activity_main)
+        savedViews = SavedViews(this)
 
         recentFiles = RecentFiles(this)
         measure = MeasureController(
@@ -212,10 +271,35 @@ class MainActivity : AppCompatActivity() {
         bindViews()
         applyInsets()
         setupToolbar()
+        setupMeasureModes()
         setupSection()
         setupSideButtons()
         setupBackHandling()
-        showRecentFiles()
+        modelView.setPalette(Palette.current(this))
+        home = HomeScreen(
+            context = this,
+            container = findViewById(R.id.empty_content),
+            recent = recentFiles,
+            runInBackground = { task -> ioExecutor.execute(task) },
+            runOnUi = { task -> runOnUiThread { if (!isDestroyed) task() } },
+            onOpenFile = { pickFile() },
+            onPhotoCad = { openPhotoCad() },
+            onAddFolder = { addFolder() },
+            onOpenUri = { uri, _ -> loadModel(uri, persist = true) },
+            onRemoveFolder = { f ->
+                MaterialAlertDialogBuilder(this)
+                    .setTitle(f.name)
+                    .setMessage(R.string.home_folder_remove_confirm)
+                    .setPositiveButton(R.string.home_folder_remove) { _, _ ->
+                        CadFiles.removeFolder(this, f.uri)
+                        home.refresh()
+                    }
+                    .setNegativeButton(R.string.cancel, null)
+                    .show()
+            },
+        )
+        home.build()
+        updateDisplayLabel()
 
         ads = Ads(this, findViewById(R.id.ad_container))
         billing = Billing(
@@ -228,8 +312,41 @@ class MainActivity : AppCompatActivity() {
         billing.start()
 
         if (savedInstanceState == null) {
-            handleIntent(intent)
+            Session.clear()
+            val opened = handleIntent(intent)
             CrashLog.showPendingReport(this)
+            if (!opened && !Prefs.onboardingSeen) {
+                Onboarding(this) { Prefs.onboardingSeen = true }.show()
+            }
+        } else {
+            restoreSession()
+        }
+    }
+
+    /** Tema / dil değişince ekran yeniden oluşturulur: açık model geri yüklenir. */
+    private fun restoreSession() {
+        val mesh = Session.mesh ?: return
+        val uri = Session.uri
+        displayMode = Session.displayMode ?: displayMode
+        yUp = Session.yUp
+        if (yUp) modelView.camera.upAxis = Camera.UpAxis.Y
+        currentUri = uri
+        onModelLoaded(mesh, Session.name, -1.0, restoring = true)
+        Session.partVisible?.takeIf { it.size == mesh.partCount }?.copyInto(partVisible)
+        Session.partColor?.takeIf { it.size == mesh.partCount }?.copyInto(partColor)
+        Session.partTransparent?.takeIf { it.size == mesh.partCount }?.copyInto(partTransparent)
+        lastVisible = partVisible.copyOf()
+        applyVisibility(recordUndo = false)
+        Session.camera?.let { st -> modelView.post { modelView.animateToState(st) } }
+        updateDisplayLabel()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        if (currentMesh != null) {
+            Session.camera = modelView.saveCameraState()
+            Session.displayMode = displayMode
+            Session.yUp = yUp
         }
     }
 
@@ -238,8 +355,6 @@ class MainActivity : AppCompatActivity() {
         titleText = findViewById(R.id.title_text)
         subtitleText = findViewById(R.id.subtitle_text)
         emptyState = findViewById(R.id.empty_state)
-        recentTitle = findViewById(R.id.recent_title)
-        recentList = findViewById(R.id.recent_list)
         sideButtons = findViewById(R.id.side_buttons)
         toolbarCard = findViewById(R.id.toolbar_card)
         measureCard = findViewById(R.id.measure_card)
@@ -270,6 +385,11 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.measure_to_report).setOnClickListener { addMeasureToReport() }
         findViewById<View>(R.id.measure_to_fit).setOnClickListener { openFitFromMeasure() }
 
+        loupeView = findViewById(R.id.loupe_view)
+        measureModeGroup = findViewById(R.id.measure_mode_group)
+        measureUndo = findViewById(R.id.measure_undo)
+        modelView.onCursorMove = { x, y -> onCursorMove(x, y) }
+        modelView.onCursorUp = { x, y -> onCursorUp(x, y) }
         modelView.onTap = { x, y -> onModelTap(x, y) }
         modelView.onDoubleTap = { x, y -> onModelDoubleTap(x, y) }
         modelView.onLongPress = { x, y -> onModelLongPress(x, y) }
@@ -299,8 +419,6 @@ class MainActivity : AppCompatActivity() {
     // -----------------------------------------------------------------------
 
     private fun setupToolbar() {
-        findViewById<View>(R.id.empty_open_button).setOnClickListener { pickFile() }
-        findViewById<View>(R.id.empty_photo_button).setOnClickListener { openPhotoCad() }
         findViewById<View>(R.id.tool_open).setOnClickListener { pickFile() }
         toolMeasure.setOnClickListener { setMeasureMode(!measureMode) }
         toolSelect.setOnClickListener { setSelectMode(!selectMode) }
@@ -318,6 +436,43 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.tool_display).setOnClickListener { cycleDisplayMode() }
         findViewById<View>(R.id.measure_close).setOnClickListener { setMeasureMode(false) }
         findViewById<MaterialButton>(R.id.more_button).setOnClickListener { showMoreMenu(it) }
+        findViewById<View>(R.id.settings_button).setOnClickListener { openSettings() }
+        findViewById<View>(R.id.select_color).setOnClickListener { showColorDialog() }
+        findViewById<View>(R.id.select_transparent).setOnClickListener { toggleTransparency() }
+    }
+
+    private fun openSettings() {
+        val i = Intent(this, SettingsActivity::class.java)
+            .putExtra(SettingsActivity.EXTRA_AD_FREE, billing.adFree)
+            .putExtra(SettingsActivity.EXTRA_PRICE, billing.formattedPrice)
+            .putExtra(SettingsActivity.EXTRA_PRIVACY, ads.privacyOptionsRequired)
+        if (currentMesh != null) Session.camera = modelView.saveCameraState()
+        settingsLauncher.launch(i)
+    }
+
+    private fun addFolder() {
+        try {
+            openFolder.launch(null)
+        } catch (_: Exception) {
+            Toast.makeText(this, R.string.error_unknown, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun setupMeasureModes() {
+        measureModeGroup.setOnCheckedStateChangeListener { _, ids ->
+            val mode = when (ids.firstOrNull()) {
+                R.id.mode_point -> MeasureController.Mode.POINT
+                R.id.mode_chain -> MeasureController.Mode.CHAIN
+                else -> MeasureController.Mode.SMART
+            }
+            measure.setMode(mode)
+            measureUndo.visibility = if (mode == MeasureController.Mode.CHAIN) View.VISIBLE else View.GONE
+        }
+        measureUndo.setOnClickListener { measure.undoLast() }
+    }
+
+    private fun haptic() {
+        if (Prefs.haptics) modelView.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
     }
 
     private fun setupSideButtons() {
@@ -371,14 +526,16 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(Menu.NONE, MENU_FIT, 1, R.string.menu_fit)
         popup.menu.add(Menu.NONE, MENU_QUALITY, 2, R.string.menu_quality)
         popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
+        popup.menu.add(Menu.NONE, MENU_NOTE_ADD, 2, R.string.menu_note_add).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_NOTES, 2, getString(R.string.menu_notes, notes.notes.size)).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_PRINT, 2, R.string.menu_print).isEnabled = hasModel
         if (!billing.adFree) {
             val price = billing.formattedPrice
             val title = if (price != null) getString(R.string.menu_remove_ads_price, price)
             else getString(R.string.menu_remove_ads)
             popup.menu.add(Menu.NONE, MENU_REMOVE_ADS, 3, title)
-            popup.menu.add(Menu.NONE, MENU_RESTORE, 4, R.string.menu_restore_purchase)
-            if (ads.privacyOptionsRequired) popup.menu.add(Menu.NONE, MENU_PRIVACY, 5, R.string.menu_privacy)
         }
+        popup.menu.add(Menu.NONE, MENU_SETTINGS, 6, R.string.settings)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_INFO -> showModelInfo()
@@ -399,6 +556,10 @@ class MainActivity : AppCompatActivity() {
                 MENU_PRIVACY -> ads.showPrivacyOptions()
                 MENU_REMOVE_ADS -> billing.buyAdFree(this)
                 MENU_RESTORE -> billing.restore()
+                MENU_SETTINGS -> openSettings()
+                MENU_NOTE_ADD -> startPick(PICK_NOTE, R.string.note_pick_hint)
+                MENU_NOTES -> notes.showList()
+                MENU_PRINT -> printScreenshot()
             }
             true
         }
@@ -430,6 +591,10 @@ class MainActivity : AppCompatActivity() {
             isChecked = freeOrbit
         }
         popup.menu.add(1, MENU_ROTATE_SPEED, 103, R.string.rotate_speed)
+        val saved = savedViews.list(currentName)
+        saved.forEachIndexed { i, v -> popup.menu.add(2, MENU_SAVED_BASE + i, 200 + i, "★ " + v.name) }
+        popup.menu.add(3, MENU_SAVE_VIEW, 300, R.string.views_save)
+        if (saved.isNotEmpty()) popup.menu.add(3, MENU_MANAGE_VIEWS, 301, R.string.views_manage)
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 MENU_FREE_ORBIT -> {
@@ -442,6 +607,10 @@ class MainActivity : AppCompatActivity() {
                     ).show()
                 }
                 MENU_ROTATE_SPEED -> showRotateSpeedDialog()
+                MENU_SAVE_VIEW -> saveCurrentView()
+                MENU_MANAGE_VIEWS -> manageViews()
+                in MENU_SAVED_BASE until MENU_SAVED_BASE + saved.size ->
+                    modelView.animateToState(saved[item.itemId - MENU_SAVED_BASE].state)
                 MENU_ORTHO -> {
                     orthographic = !orthographic
                     modelView.setOrthographic(orthographic)
@@ -476,17 +645,71 @@ class MainActivity : AppCompatActivity() {
     private fun cycleDisplayMode() {
         displayMode = when (displayMode) {
             ModelRenderer.DisplayMode.SHADED_EDGES -> ModelRenderer.DisplayMode.SHADED
-            ModelRenderer.DisplayMode.SHADED -> ModelRenderer.DisplayMode.WIREFRAME
-            ModelRenderer.DisplayMode.WIREFRAME -> ModelRenderer.DisplayMode.SHADED_EDGES
+            ModelRenderer.DisplayMode.SHADED -> ModelRenderer.DisplayMode.XRAY
+            ModelRenderer.DisplayMode.XRAY -> ModelRenderer.DisplayMode.WIREFRAME
+            ModelRenderer.DisplayMode.WIREFRAME -> ModelRenderer.DisplayMode.HIDDEN_LINE
+            ModelRenderer.DisplayMode.HIDDEN_LINE -> ModelRenderer.DisplayMode.SHADED_EDGES
         }
+        updateDisplayLabel()
+        modelView.setDisplayMode(displayMode)
+        Session.displayMode = displayMode
+        Toast.makeText(this, toolDisplayLabel.text, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun updateDisplayLabel() {
         toolDisplayLabel.setText(
             when (displayMode) {
                 ModelRenderer.DisplayMode.SHADED_EDGES -> R.string.display_shaded_edges
                 ModelRenderer.DisplayMode.SHADED -> R.string.display_shaded
                 ModelRenderer.DisplayMode.WIREFRAME -> R.string.display_wireframe
+                ModelRenderer.DisplayMode.XRAY -> R.string.display_xray
+                ModelRenderer.DisplayMode.HIDDEN_LINE -> R.string.display_hidden_line
             }
         )
-        modelView.setDisplayMode(displayMode)
+    }
+
+    // -----------------------------------------------------------------------
+    // Kayıtlı görünümler
+    // -----------------------------------------------------------------------
+
+    private fun saveCurrentView() {
+        if (currentMesh == null) return
+        val state = modelView.saveCameraState()
+        val input = android.widget.EditText(this).apply {
+            setText(getString(R.string.views_default_name, savedViews.list(currentName).size + 1))
+            selectAll()
+            setSingleLine()
+        }
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val box = android.widget.FrameLayout(this).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(input)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.views_save)
+            .setView(box)
+            .setPositiveButton(R.string.markup_save) { _, _ ->
+                val name = input.text.toString().trim().ifBlank { getString(R.string.views_default_name, 1) }
+                savedViews.add(currentName, name, state)
+                Toast.makeText(this, getString(R.string.views_saved, name), Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun manageViews() {
+        val views = savedViews.list(currentName)
+        if (views.isEmpty()) return
+        val names = views.map { it.name }.toTypedArray()
+        val checked = BooleanArray(names.size)
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.views_manage)
+            .setMultiChoiceItems(names, checked) { _, which, isChecked -> checked[which] = isChecked }
+            .setPositiveButton(R.string.views_delete_selected) { _, _ ->
+                for (i in names.indices) if (checked[i]) savedViews.remove(currentName, names[i])
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
     }
 
     // -----------------------------------------------------------------------
@@ -505,6 +728,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Ayarlar ekranından dönüldüyse yeni ayarları uygula
+        Units.load()
+        modelView.setPalette(Palette.current(this))
+        if (measureMode) measure.redraw()
+        if (sectionOn) updateSection()
+        if (emptyState.visibility == View.VISIBLE) home.redrawLists()
         modelView.onResume()
         ads.onResume()
         if (adAfterShare) {
@@ -514,6 +743,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        if (currentMesh != null) Session.camera = modelView.saveCameraState()
         ads.onPause()
         modelView.onPause()
         super.onPause()
@@ -521,16 +751,21 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         tickHandler.removeCallbacks(tick)
+        ioExecutor.shutdownNow()
         ads.onDestroy()
         billing.destroy()
         executor.shutdownNow()
         super.onDestroy()
     }
 
-    private fun handleIntent(intent: Intent?) {
+    private fun handleIntent(intent: Intent?): Boolean {
         if (intent?.action == Intent.ACTION_VIEW) {
-            intent.data?.let { loadModel(it, persist = true) }
+            intent.data?.let {
+                loadModel(it, persist = true)
+                return true
+            }
         }
+        return false
     }
 
     private fun pickFile() {
@@ -567,8 +802,10 @@ class MainActivity : AppCompatActivity() {
 
     /** 0 = hızlı, 1 = normal, 2 = hassas. */
     private var meshQuality: Int
-        get() = settings.getInt("mesh_quality", 1)
-        set(v) = settings.edit().putInt("mesh_quality", v).apply()
+        get() = Prefs.meshQuality
+        set(v) {
+            Prefs.meshQuality = v
+        }
 
     private fun deflectionFor(quality: Int): Double = when (quality) {
         0 -> 0.004
@@ -584,15 +821,7 @@ class MainActivity : AppCompatActivity() {
         loading = true
         val token = ++loadToken
         val name = displayName(uri)
-        progressText.text = getString(R.string.loading_file, name)
-        progressOverlay.visibility = View.VISIBLE
-        progressCancel.visibility = View.VISIBLE
-        tickInfo = ""
-        tickStarted = SystemClock.elapsedRealtime()
-        progressElapsed.text = ""
-        progressElapsed.visibility = View.VISIBLE
-        tickHandler.removeCallbacks(tick)
-        tickHandler.postDelayed(tick, 1000)
+        startProgress(getString(R.string.loading_file, name))
 
         if (persist) {
             // Son açılanlar listesinden tekrar açabilmek için kalıcı izin (mümkünse)
@@ -602,55 +831,199 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        val quality = meshQuality
         executor.execute {
-            val started = SystemClock.elapsedRealtime()
-            var fellBack = false
-            val result: Result<StepMesh> = try {
-                val file = copyToCache(uri, name)
-                val mb = file.length() / (1024.0 * 1024.0)
-                runOnUiThread {
-                    if (token != loadToken) return@runOnUiThread
-                    tickInfo = String.format(Locale.getDefault(), "%.1f MB", mb)
-                    progressText.text = getString(R.string.meshing_file, name)
-                }
-                try {
-                    Result.success(StepNative.loadModel(file.absolutePath, deflectionFor(quality)))
-                } catch (e: Throwable) {
-                    val oom = e is OutOfMemoryError || (e is IOException && e.message?.startsWith("out_of_memory") == true)
-                    if (!oom || quality == 0 || token != loadToken) throw e
-                    // Bellek yetmedi: daha kaba ağla bir kez daha dene
-                    System.gc()
-                    runOnUiThread { if (token == loadToken) progressText.text = getString(R.string.oom_retry) }
-                    fellBack = true
-                    Result.success(StepNative.loadModel(file.absolutePath, deflectionFor(0)))
-                }
-            } catch (e: IOException) {
-                Result.failure(e)
-            } catch (e: OutOfMemoryError) {
-                Result.failure(IOException(getString(R.string.error_oom)))
-            } catch (e: SecurityException) {
-                recentFiles.remove(uri)
-                Result.failure(IOException(getString(R.string.error_permission)))
+            val file = try {
+                copyToCache(uri, name)
+            } catch (e: Exception) {
+                if (e is SecurityException) recentFiles.forget(uri)
+                val msg = if (e is SecurityException) getString(R.string.error_permission) else e.message
+                runOnUiThread { failLoad(token, msg) }
+                return@execute
             }
-            val seconds = (SystemClock.elapsedRealtime() - started) / 1000.0
-
-            runOnUiThread {
-                if (isDestroyed || token != loadToken) return@runOnUiThread // iptal edildi
-                loading = false
-                stopProgress()
-                result.onSuccess { mesh ->
-                    currentUri = uri
-                    onModelLoaded(mesh, name, seconds)
-                    if (hasPersistedPermission(uri)) recentFiles.add(uri, name)
-                    if (fellBack) Toast.makeText(this, R.string.oom_retried, Toast.LENGTH_LONG).show()
-                    ads.showInterstitial()
-                }.onFailure { e ->
-                    showRecentFiles()
-                    showError(localizedError(e.message))
+            if (!CadFiles.isZip(name)) {
+                meshFile(token, uri, name, name, file)
+                return@execute
+            }
+            // ZIP: içindeki model dosyalarını listele
+            val entries = try {
+                CadFiles.zipModels(file)
+            } catch (e: Exception) {
+                runOnUiThread { failLoad(token, getString(R.string.zip_failed)) }
+                return@execute
+            }
+            when {
+                entries.isEmpty() -> runOnUiThread { failLoad(token, getString(R.string.zip_empty)) }
+                entries.size == 1 -> extractAndMesh(token, uri, name, file, entries[0].name)
+                else -> runOnUiThread {
+                    if (token != loadToken || isDestroyed) return@runOnUiThread
+                    stopProgress()
+                    val labels = entries.map {
+                        it.name + if (it.size >= 0) "  (" + android.text.format.Formatter.formatShortFileSize(this, it.size) + ")" else ""
+                    }.toTypedArray()
+                    var chosen = false
+                    MaterialAlertDialogBuilder(this)
+                        .setTitle(getString(R.string.zip_choose, name))
+                        .setItems(labels) { _, which ->
+                            chosen = true
+                            startProgress(getString(R.string.loading_file, entries[which].name.substringAfterLast('/')))
+                            executor.execute { extractAndMesh(token, uri, name, file, entries[which].name) }
+                        }
+                        .setNegativeButton(R.string.cancel, null)
+                        .setOnDismissListener {
+                            if (!chosen && token == loadToken) {
+                                loading = false
+                                showRecentFiles()
+                            }
+                        }
+                        .show()
                 }
             }
         }
+    }
+
+    private fun extractAndMesh(token: Int, uri: Uri, zipName: String, zip: File, entry: String) {
+        val inner = try {
+            CadFiles.extract(zip, entry, File(cacheDir, "zip_model"))
+        } catch (e: Exception) {
+            runOnUiThread { failLoad(token, getString(R.string.zip_failed)) }
+            return
+        }
+        val innerName = entry.substringAfterLast('/')
+        meshFile(token, uri, "$innerName ($zipName)", zipName, inner)
+    }
+
+    private fun startProgress(text: String) {
+        progressText.text = text
+        progressOverlay.visibility = View.VISIBLE
+        progressCancel.visibility = View.VISIBLE
+        tickInfo = ""
+        tickStarted = SystemClock.elapsedRealtime()
+        progressElapsed.text = ""
+        progressElapsed.visibility = View.VISIBLE
+        tickHandler.removeCallbacks(tick)
+        tickHandler.postDelayed(tick, 1000)
+    }
+
+    private fun failLoad(token: Int, message: String?) {
+        if (isDestroyed || token != loadToken) return
+        loading = false
+        stopProgress()
+        showRecentFiles()
+        showError(localizedError(message))
+    }
+
+    /**
+     * Önbellekteki dosyayı ağa çevirir (arka plan iş parçacığında çağrılır).
+     * [title] ekranda görünen ad, [recentName] son açılanlar listesindeki ad.
+     */
+    private fun meshFile(token: Int, uri: Uri, title: String, recentName: String, file: File) {
+        val quality = meshQuality
+        val started = SystemClock.elapsedRealtime()
+        var fellBack = false
+        val mb = file.length() / (1024.0 * 1024.0)
+        runOnUiThread {
+            if (token != loadToken) return@runOnUiThread
+            tickInfo = String.format(Locale.getDefault(), "%.1f MB", mb)
+            progressText.text = getString(R.string.meshing_file, title)
+        }
+        val result: Result<StepMesh> = try {
+            try {
+                Result.success(StepNative.loadModel(file.absolutePath, deflectionFor(quality)))
+            } catch (e: Throwable) {
+                val oom = e is OutOfMemoryError || (e is IOException && e.message?.startsWith("out_of_memory") == true)
+                if (!oom || quality == 0 || token != loadToken) throw e
+                // Bellek yetmedi: daha kaba ağla bir kez daha dene
+                System.gc()
+                runOnUiThread { if (token == loadToken) progressText.text = getString(R.string.oom_retry) }
+                fellBack = true
+                Result.success(StepNative.loadModel(file.absolutePath, deflectionFor(0)))
+            }
+        } catch (e: IOException) {
+            Result.failure(e)
+        } catch (e: OutOfMemoryError) {
+            Result.failure(IOException(getString(R.string.error_oom)))
+        }
+        val seconds = (SystemClock.elapsedRealtime() - started) / 1000.0
+
+        runOnUiThread {
+            if (isDestroyed || token != loadToken) return@runOnUiThread // iptal edildi
+            loading = false
+            stopProgress()
+            result.onSuccess { mesh ->
+                currentUri = uri
+                onModelLoaded(mesh, title, seconds)
+                if (hasPersistedPermission(uri)) {
+                    recentFiles.add(uri, recentName)
+                    pendingThumbUri = uri.toString()
+                    pendingShortcut = uri to recentName
+                }
+                if (fellBack) Toast.makeText(this, R.string.oom_retried, Toast.LENGTH_LONG).show()
+                ads.showInterstitial()
+            }.onFailure { e ->
+                showRecentFiles()
+                showError(localizedError(e.message))
+            }
+        }
+    }
+
+    /** Yükleme bitince küçük resim alınacak dosya (kalıcı izni olan). */
+    private var pendingThumbUri: String? = null
+    private var pendingShortcut: Pair<Uri, String>? = null
+
+    /** İlk kare çizildikten sonra küçük resim ve ana ekran kısayolu. */
+    private fun afterFirstFrame(mesh: StepMesh) {
+        modelView.postDelayed({
+            if (currentMesh !== mesh || isDestroyed) return@postDelayed
+            val thumbUri = pendingThumbUri
+            val shortcut = pendingShortcut
+            pendingThumbUri = null
+            pendingShortcut = null
+            if (thumbUri != null) {
+                modelView.captureScreenshot { bmp ->
+                    if (bmp != null) {
+                        ioExecutor.execute {
+                            Thumbs.save(this, thumbUri, bmp)
+                            if (shortcut != null) runOnUiThread { pushShortcut(shortcut.first, shortcut.second) }
+                        }
+                    }
+                    if (Prefs.spinOnLoad && currentMesh === mesh) modelView.spin360()
+                }
+            } else if (Prefs.spinOnLoad) {
+                modelView.spin360()
+            }
+        }, 700)
+    }
+
+    /** Uygulama simgesine uzun basınca son dosyalar. */
+    private fun pushShortcut(uri: Uri, name: String) {
+        try {
+            val thumb = Thumbs.load(this, uri.toString())
+            val icon = if (thumb != null) IconCompat.createWithAdaptiveBitmap(padForAdaptive(thumb))
+            else IconCompat.createWithResource(this, R.mipmap.ic_launcher)
+            val intent = Intent(Intent.ACTION_VIEW, uri, this, MainActivity::class.java)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val label = name.substringBeforeLast('.').ifBlank { name }
+            val info = ShortcutInfoCompat.Builder(this, "file_" + Integer.toHexString(uri.toString().hashCode()))
+                .setShortLabel(label.take(24))
+                .setLongLabel(name.take(40))
+                .setIcon(icon)
+                .setIntent(intent)
+                .build()
+            ShortcutManagerCompat.pushDynamicShortcut(this, info)
+        } catch (_: Throwable) {
+        }
+    }
+
+    /** Uyarlanabilir simge için resmi ortadaki güvenli alana yerleştirir. */
+    private fun padForAdaptive(src: Bitmap): Bitmap {
+        val size = 216
+        val out = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        c.drawColor(Color.WHITE)
+        val inner = 144
+        val off = (size - inner) / 2f
+        c.drawBitmap(src, null, RectF(off, off, off + inner, off + inner), Paint(Paint.FILTER_BITMAP_FLAG))
+        return out
     }
 
     /**
@@ -664,6 +1037,9 @@ class MainActivity : AppCompatActivity() {
         stopProgress()
         currentMesh = null
         currentUri = null
+        Session.clear()
+        notes.clear()
+        stopPick()
         modelView.visibility = View.VISIBLE
         setMeasureMode(false)
         setSelectMode(false)
@@ -708,10 +1084,15 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun onModelLoaded(mesh: StepMesh, name: String, seconds: Double) {
+    private fun onModelLoaded(mesh: StepMesh, name: String, seconds: Double, restoring: Boolean = false) {
         currentMesh = mesh
         currentName = name
+        notes.load(name)
+        sectionFace = null
+        stopPick()
         partVisible = BooleanArray(mesh.partCount) { true }
+        partColor = IntArray(mesh.partCount)
+        partTransparent = BooleanArray(mesh.partCount)
         lastVisible = partVisible.copyOf()
         visibilityUndo.clear()
         partHighlight = IntArray(0)
@@ -725,6 +1106,7 @@ class MainActivity : AppCompatActivity() {
 
         modelView.setMesh(mesh)
         modelView.setDisplayMode(displayMode)
+        pushOverlay()
         explode = null
         explodeFactor = 0f
         explodeSlider.value = 0f
@@ -742,30 +1124,38 @@ class MainActivity : AppCompatActivity() {
         updateHiddenCard()
 
         titleText.text = name
-        subtitleText.text = getString(R.string.model_info_line, mesh.formatName, mesh.partCount, mesh.triangleCount, seconds)
+        if (!restoring) {
+            Session.subtitle = getString(R.string.model_info_line, mesh.formatName, mesh.partCount, mesh.triangleCount, seconds)
+        }
+        subtitleText.text = Session.subtitle
         subtitleText.visibility = View.VISIBLE
         emptyState.visibility = View.GONE
         toolbarCard.visibility = View.VISIBLE
         sideButtons.visibility = View.VISIBLE
+
+        Session.mesh = mesh
+        Session.name = name
+        Session.uri = currentUri
+        Session.partVisible = partVisible
+        Session.partColor = partColor
+        Session.partTransparent = partTransparent
+        Session.displayMode = displayMode
+        Session.yUp = yUp
+        if (!restoring) {
+            Session.camera = null
+            afterFirstFrame(mesh)
+        }
     }
 
-    private fun hasPersistedPermission(uri: Uri): Boolean =
-        contentResolver.persistedUriPermissions.any { it.uri == uri && it.isReadPermission }
+    private fun hasPersistedPermission(uri: Uri): Boolean {
+        val s = uri.toString()
+        return contentResolver.persistedUriPermissions.any {
+            it.isReadPermission && (it.uri == uri || s.startsWith(it.uri.toString() + "/document/"))
+        }
+    }
 
     private fun showRecentFiles() {
-        val items = recentFiles.list()
-        recentList.removeAllViews()
-        recentTitle.visibility = if (items.isEmpty()) View.GONE else View.VISIBLE
-        val inflater = LayoutInflater.from(this)
-        for (item in items) {
-            val row = inflater.inflate(R.layout.item_recent, recentList, false)
-            row.findViewById<TextView>(R.id.recent_name).text = item.name
-            row.findViewById<TextView>(R.id.recent_date).text =
-                DateFormat.getMediumDateFormat(this).format(item.time) + " " +
-                    DateFormat.getTimeFormat(this).format(item.time)
-            row.setOnClickListener { loadModel(item.uri, persist = false) }
-            recentList.addView(row)
-        }
+        if (::home.isInitialized) home.redrawLists()
     }
 
     /** Yerel çekirdeğin hata kodlarını (ör. "read_failed:STEP") cihaz diline çevirir. */
@@ -842,6 +1232,8 @@ class MainActivity : AppCompatActivity() {
         measureMode = enabled
         toolMeasure.isActivated = enabled
         measureCard.visibility = if (enabled && currentMesh != null) View.VISIBLE else View.GONE
+        modelView.precisionCursor = enabled && Prefs.loupe
+        if (!enabled) hideCursor()
         measure.clear()
         if (!enabled) {
             measureOverlay = ModelRenderer.Overlay()
@@ -851,6 +1243,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun onModelTap(x: Float, y: Float) {
         if (loading) return
+        if (pickTarget != PICK_NONE) {
+            handlePick(x, y)
+            return
+        }
         if (dxfPickMode) {
             pickDxfFace(x, y)
             return
@@ -863,18 +1259,134 @@ class MainActivity : AppCompatActivity() {
             pickPartAt(x, y)
             return
         }
-        if (!measureMode) return
+        if (!measureMode) {
+            openNoteAt(x, y)
+            return
+        }
         val mesh = currentMesh ?: return
         val mvp = modelView.currentMvp()
         val w = modelView.width
         val h = modelView.height
-        val threshold = 18f * resources.displayMetrics.density
+        val density = resources.displayMetrics.density
+        val threshold = 18f * density
         val visible = if (partVisible.all { it }) null else partVisible.copyOf()
         val clip = if (sectionOn) clipPlane(mesh) else null
+        val mode = measure.mode
+        val snapOn = Prefs.snap
         executor.execute {
-            val hit = Picker.pick(mesh, mvp, w, h, x, y, threshold, visible, clip)
-            runOnUiThread { if (mesh === currentMesh && measureMode) measure.onPicked(hit) }
+            val sel: MeasureController.Sel? = when (mode) {
+                MeasureController.Mode.POINT ->
+                    Picker.snapPoint(mesh, mvp, w, h, x, y, threshold, visible, clip, snapOn) { circleCenter(it) }
+                        ?.let { MeasureController.Sel.of(it) }
+                MeasureController.Mode.CHAIN ->
+                    Picker.pick(mesh, mvp, w, h, x, y, threshold, visible, clip)?.let { MeasureController.Sel.of(it) }
+                MeasureController.Mode.SMART -> {
+                    // Köşeye çok yakın dokunulduysa köşe (nokta) seçilir; değilse kenar / yüzey
+                    val v = if (snapOn) {
+                        Picker.snapPoint(mesh, mvp, w, h, x, y, 11f * density, visible, clip, true) { null }
+                            ?.takeIf { it.kind == Picker.SnapKind.VERTEX }
+                    } else {
+                        null
+                    }
+                    if (v != null) MeasureController.Sel.of(v)
+                    else Picker.pick(mesh, mvp, w, h, x, y, threshold, visible, clip)?.let { MeasureController.Sel.of(it) }
+                }
+            }
+            runOnUiThread {
+                if (mesh === currentMesh && measureMode) {
+                    if (sel != null) haptic()
+                    measure.onPicked(sel)
+                }
+            }
         }
+    }
+
+    /** Kenar çember veya yay ise merkezi (arka plan iş parçacığında). */
+    private fun circleCenter(edge: Int): FloatArray? {
+        val info = StepNative.shapeInfo(StepNative.KIND_EDGE, edge) ?: return null
+        if (info[0].toInt() != GeomKind.CIRCLE) return null
+        return floatArrayOf(info[6].toFloat(), info[7].toFloat(), info[8].toFloat())
+    }
+
+    // -----------------------------------------------------------------------
+    // Hassas imleç ve büyüteç (ölçümde uzun bas)
+    // -----------------------------------------------------------------------
+
+    private fun onCursorMove(fx: Float, fy: Float) {
+        val mesh = currentMesh ?: return
+        if (!measureMode) return
+        val first = !loupeView.active
+        cursorX = fx.coerceIn(0f, modelView.width - 1f)
+        cursorY = (fy - loupeView.fingerOffset).coerceIn(0f, modelView.height - 1f)
+        if (first) haptic()
+        loupeView.setCursor(cursorX, cursorY)
+        modelView.setLoupe(cursorX, cursorY, loupeView.sampleSize) { bmp -> if (loupeView.active) loupeView.setImage(bmp) }
+        previewSnap(mesh)
+    }
+
+    /** İmlecin altında ne yakalanacağını gösterir (bir önceki hesap bitmeden yenisi başlamaz). */
+    private fun previewSnap(mesh: StepMesh) {
+        if (cursorPreviewBusy) return
+        cursorPreviewBusy = true
+        val x = cursorX
+        val y = cursorY
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val density = resources.displayMetrics.density
+        val visible = if (partVisible.all { it }) null else partVisible.copyOf()
+        val clip = if (sectionOn) clipPlane(mesh) else null
+        val mode = measure.mode
+        val snapOn = Prefs.snap
+        executor.execute {
+            val label: Pair<String, Boolean> = when (mode) {
+                MeasureController.Mode.POINT -> {
+                    val snap = Picker.snapPoint(mesh, mvp, w, h, x, y, 18f * density, visible, clip, snapOn) { circleCenter(it) }
+                    if (snap == null) "" to false
+                    else measure.snapName(snap.kind) to (snap.kind == Picker.SnapKind.VERTEX ||
+                        snap.kind == Picker.SnapKind.MIDPOINT || snap.kind == Picker.SnapKind.CENTER)
+                }
+                else -> {
+                    val v = if (snapOn && mode == MeasureController.Mode.SMART) {
+                        Picker.snapPoint(mesh, mvp, w, h, x, y, 11f * density, visible, clip, true) { null }
+                            ?.takeIf { it.kind == Picker.SnapKind.VERTEX }
+                    } else {
+                        null
+                    }
+                    if (v != null) {
+                        measure.snapName(v.kind) to true
+                    } else {
+                        when (Picker.pick(mesh, mvp, w, h, x, y, 18f * density, visible, clip)?.kind) {
+                            StepNative.KIND_EDGE -> getString(R.string.cursor_edge) to false
+                            StepNative.KIND_FACE -> getString(R.string.cursor_face) to false
+                            else -> "" to false
+                        }
+                    }
+                }
+            }
+            runOnUiThread {
+                cursorPreviewBusy = false
+                if (!loupeView.active || mesh !== currentMesh) return@runOnUiThread
+                loupeView.setSnap(label.first, label.second)
+                // İmleç bu arada hareket ettiyse yeni konum için tekrar hesapla
+                if (cursorX != x || cursorY != y) previewSnap(mesh)
+            }
+        }
+    }
+
+    private fun onCursorUp(fx: Float, fy: Float) {
+        val x = cursorX
+        val y = cursorY
+        hideCursor()
+        if (fx.isNaN() || x < 0f) return
+        onModelTap(x, y)
+    }
+
+    private fun hideCursor() {
+        cursorX = -1f
+        cursorY = -1f
+        loupeView.setCursor(-1f, -1f)
+        modelView.setLoupe(0f, 0f, 0, null)
     }
 
     // -----------------------------------------------------------------------
@@ -1031,6 +1543,7 @@ class MainActivity : AppCompatActivity() {
                 edgeSegments = o.edgeSegments,
                 measureLine = o.measureLine,
                 partRanges = partHighlight,
+                points = mergePoints(o.points, notes.points()),
             )
         )
     }
@@ -1046,6 +1559,7 @@ class MainActivity : AppCompatActivity() {
                 R.id.chip_z -> 2
                 else -> 0
             }
+            sectionFace = null
             updateSection()
         }
         sectionSlider.addOnChangeListener { _, _, _ -> updateSection() }
@@ -1054,6 +1568,9 @@ class MainActivity : AppCompatActivity() {
             updateSection()
         }
         findViewById<View>(R.id.section_close).setOnClickListener { setSection(false) }
+        findViewById<View>(R.id.section_face).setOnClickListener {
+            startPick(PICK_SECTION_FACE, R.string.section_pick_face)
+        }
     }
 
     private fun setSection(enabled: Boolean) {
@@ -1070,9 +1587,23 @@ class MainActivity : AppCompatActivity() {
             return
         }
         val plane = clipPlane(mesh)
-        val axisName = arrayOf("X", "Y", "Z")[sectionAxis]
-        sectionLabel.text = getString(R.string.section_position, axisName, fmt(sectionPosition(mesh), 2))
+        if (sectionFace != null) {
+            sectionLabel.text = Units.localize(getString(R.string.section_face_depth, Units.fl(sectionFaceDepth(mesh).toDouble())))
+        } else {
+            val axisName = arrayOf("X", "Y", "Z")[sectionAxis]
+            sectionLabel.text = Units.localize(getString(R.string.section_position, axisName, Units.fl(sectionPosition(mesh).toDouble())))
+        }
         modelView.setClipPlane(plane)
+    }
+
+    /** Yüzeyden kesitte derinlik (mm): kaydırıcı sağda 0, solda modelin köşegeni kadar. */
+    private fun sectionFaceDepth(mesh: StepMesh): Float {
+        val b = mesh.bbox
+        val dx = b[3] - b[0]
+        val dy = b[4] - b[1]
+        val dz = b[5] - b[2]
+        val diag = kotlin.math.sqrt(dx * dx + dy * dy + dz * dz)
+        return (1f - sectionSlider.value / 1000f) * diag
     }
 
     private fun sectionPosition(mesh: StepMesh): Float {
@@ -1084,6 +1615,19 @@ class MainActivity : AppCompatActivity() {
 
     /** [nx, ny, nz, d]: n·p + d >= 0 olan kısım görünür. */
     private fun clipPlane(mesh: StepMesh): FloatArray {
+        sectionFace?.let { f ->
+            // Yüzey normali dışarı bakar: düzlem yüzeyden [derinlik] kadar içeri kaydırılır ve
+            // yüzey tarafı kesilip atılır (çevirince tersi).
+            val depth = sectionFaceDepth(mesh)
+            val px = f[3] - f[0] * depth
+            val py = f[4] - f[1] * depth
+            val pz = f[5] - f[2] * depth
+            val sign = if (sectionFlip) 1f else -1f
+            return floatArrayOf(
+                sign * f[0], sign * f[1], sign * f[2],
+                -sign * (f[0] * px + f[1] * py + f[2] * pz),
+            )
+        }
         val pos = sectionPosition(mesh)
         val plane = FloatArray(4)
         val sign = if (sectionFlip) 1f else -1f
@@ -1112,7 +1656,10 @@ class MainActivity : AppCompatActivity() {
         ).show()
     }
 
-    /** Görünen parçaların üçgen ve kenar aralıklarını çiziciye verir. */
+    /**
+     * Görünen parçaların üçgen ve kenar aralıklarını çiziciye verir. Renk verilmiş veya şeffaf
+     * parçalar ayrı gruplarda çizilir.
+     */
     private fun applyVisibility(recordUndo: Boolean = true) {
         val mesh = currentMesh ?: return
         if (recordUndo && !lastVisible.contentEquals(partVisible)) {
@@ -1121,11 +1668,14 @@ class MainActivity : AppCompatActivity() {
         }
         lastVisible = partVisible.copyOf()
         updateHiddenCard()
-        if (partVisible.all { it }) {
+        val styled = partColor.any { it != 0 } || partTransparent.any { it }
+        if (partVisible.all { it } && !styled) {
             modelView.setVisibility(null, null)
             return
         }
-        val tri = ArrayList<Int>()
+        // Normal (renksiz, opak) görünen parçalar
+        val normal = BooleanArray(mesh.partCount) { partVisible[it] && partColor[it] == 0 && !partTransparent[it] }
+        val tri = triangleRanges(mesh, normal)
         val seg = ArrayList<Int>()
         var p = 0
         while (p < mesh.partCount) {
@@ -1133,18 +1683,116 @@ class MainActivity : AppCompatActivity() {
                 p++
                 continue
             }
-            // Ardışık görünen parçaları tek çizim çağrısında birleştir
             var q = p
             while (q + 1 < mesh.partCount && partVisible[q + 1]) q++
-            val t0 = mesh.faceOffsets[mesh.partFaceOffsets[p]]
-            val t1 = mesh.faceOffsets[mesh.partFaceOffsets[q + 1]]
-            if (t1 > t0) { tri += t0; tri += t1 - t0 }
             val s0 = mesh.edgeOffsets[mesh.partEdgeOffsets[p]]
             val s1 = mesh.edgeOffsets[mesh.partEdgeOffsets[q + 1]]
             if (s1 > s0) { seg += s0; seg += s1 - s0 }
             p = q + 1
         }
-        modelView.setVisibility(tri.toIntArray(), seg.toIntArray())
+        // Gruplar: (renk, şeffaf) çiftine göre
+        val groups = ArrayList<ModelRenderer.StyleGroup>()
+        if (styled) {
+            val keys = LinkedHashSet<Pair<Int, Boolean>>()
+            for (i in 0 until mesh.partCount) {
+                if (partVisible[i] && (partColor[i] != 0 || partTransparent[i])) keys += partColor[i] to partTransparent[i]
+            }
+            for ((color, transparent) in keys) {
+                val mask = BooleanArray(mesh.partCount) {
+                    partVisible[it] && partColor[it] == color && partTransparent[it] == transparent
+                }
+                val rgb = if (color == 0) null else floatArrayOf(
+                    Color.red(color) / 255f, Color.green(color) / 255f, Color.blue(color) / 255f,
+                )
+                groups += ModelRenderer.StyleGroup(triangleRanges(mesh, mask), rgb, if (transparent) 0.28f else 1f)
+            }
+        }
+        modelView.setVisibility(tri, seg.toIntArray(), groups)
+    }
+
+    /** Maskedeki parçaların üçgen aralıkları (ardışık parçalar birleştirilir). */
+    private fun triangleRanges(mesh: StepMesh, mask: BooleanArray): IntArray {
+        val tri = ArrayList<Int>()
+        var p = 0
+        while (p < mesh.partCount) {
+            if (!mask[p]) {
+                p++
+                continue
+            }
+            var q = p
+            while (q + 1 < mesh.partCount && mask[q + 1]) q++
+            val t0 = mesh.faceOffsets[mesh.partFaceOffsets[p]]
+            val t1 = mesh.faceOffsets[mesh.partFaceOffsets[q + 1]]
+            if (t1 > t0) { tri += t0; tri += t1 - t0 }
+            p = q + 1
+        }
+        return tri.toIntArray()
+    }
+
+    // -----------------------------------------------------------------------
+    // Parça rengi ve şeffaflık
+    // -----------------------------------------------------------------------
+
+    private fun showColorDialog() {
+        if (currentMesh == null || selStart < 0) return
+        val colors = intArrayOf(
+            0, 0xFFE8650E.toInt(), 0xFFD93B3B.toInt(), 0xFFF2B705.toInt(), 0xFF3FA34D.toInt(),
+            0xFF2F7BD8.toInt(), 0xFF6A4FC9.toInt(), 0xFF8C9AAE.toInt(), 0xFF2B2F36.toInt(), 0xFFF5F5F5.toInt(),
+            0xFFB87333.toInt(), 0xFF00A6A6.toInt(),
+        )
+        val d = resources.displayMetrics.density
+        val grid = android.widget.GridLayout(this).apply {
+            columnCount = 6
+            setPadding((20 * d).toInt(), (12 * d).toInt(), (20 * d).toInt(), 0)
+        }
+        var dialog: androidx.appcompat.app.AlertDialog? = null
+        for (c in colors) {
+            val sw = View(this).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    if (c == 0) {
+                        setColor(getColor(R.color.surface_variant))
+                        setStroke((2 * d).toInt(), getColor(R.color.text_secondary))
+                    } else {
+                        setColor(c)
+                        setStroke((1 * d).toInt(), Color.argb(80, 0, 0, 0))
+                    }
+                }
+                contentDescription = if (c == 0) getString(R.string.color_default) else String.format("#%06X", c and 0xFFFFFF)
+                setOnClickListener {
+                    for (p in selStart until selEnd) partColor[p] = c
+                    applyVisibility(recordUndo = false)
+                    dialog?.dismiss()
+                }
+            }
+            val size = (40 * d).toInt()
+            grid.addView(sw, android.widget.GridLayout.LayoutParams().apply {
+                width = size
+                height = size
+                setMargins((5 * d).toInt(), (5 * d).toInt(), (5 * d).toInt(), (5 * d).toInt())
+            })
+        }
+        dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.color_title, selName))
+            .setView(grid)
+            .setNeutralButton(R.string.color_reset_all) { _, _ ->
+                partColor.fill(0)
+                applyVisibility(recordUndo = false)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun toggleTransparency() {
+        if (selStart < 0 || currentMesh == null) return
+        val makeTransparent = !(selStart until selEnd).all { partTransparent[it] }
+        for (p in selStart until selEnd) partTransparent[p] = makeTransparent
+        applyVisibility(recordUndo = false)
+        Toast.makeText(
+            this,
+            if (makeTransparent) R.string.transparent_on else R.string.transparent_off,
+            Toast.LENGTH_SHORT,
+        ).show()
     }
 
     // -----------------------------------------------------------------------
@@ -2268,6 +2916,123 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Dokunarak seçim (not konumu, kesit yüzeyi) ve notlar
+    // -----------------------------------------------------------------------
+
+    private fun startPick(target: Int, hint: Int) {
+        if (currentMesh == null) return
+        if (measureMode) setMeasureMode(false)
+        if (selectMode) setSelectMode(false)
+        stopDxfPick()
+        pickSnackbar?.dismiss()
+        pickTarget = target
+        val bar = Snackbar.make(findViewById(R.id.model_view), hint, Snackbar.LENGTH_INDEFINITE)
+        bar.setAction(R.string.cancel) { }
+        bar.addCallback(object : Snackbar.Callback() {
+            override fun onDismissed(transientBottomBar: Snackbar?, event: Int) {
+                if (pickSnackbar === transientBottomBar) {
+                    pickSnackbar = null
+                    pickTarget = PICK_NONE
+                }
+            }
+        })
+        pickSnackbar = bar
+        bar.show()
+    }
+
+    private fun stopPick() {
+        pickTarget = PICK_NONE
+        val bar = pickSnackbar
+        pickSnackbar = null
+        bar?.dismiss()
+    }
+
+    private fun handlePick(x: Float, y: Float) {
+        val mesh = currentMesh ?: return
+        val mvp = modelView.currentMvp()
+        val w = modelView.width
+        val h = modelView.height
+        val visible = if (partVisible.all { it }) null else partVisible.copyOf()
+        val clip = if (sectionOn) clipPlane(mesh) else null
+        val threshold = 18f * resources.displayMetrics.density
+        val target = pickTarget
+        executor.execute {
+            when (target) {
+                PICK_NOTE -> {
+                    val s = Picker.snapPoint(mesh, mvp, w, h, x, y, threshold, visible, clip, false) { null }
+                    runOnUiThread {
+                        if (mesh !== currentMesh || pickTarget != PICK_NOTE || s == null) return@runOnUiThread
+                        stopPick()
+                        notes.addAt(s.point)
+                    }
+                }
+                PICK_SECTION_FACE -> {
+                    val face = Picker.pickFace(mesh, mvp, w, h, x, y, visible, clip)
+                    val info = if (face >= 0) {
+                        try {
+                            StepNative.shapeInfo(StepNative.KIND_FACE, face)
+                        } catch (_: Throwable) {
+                            null
+                        }
+                    } else {
+                        null
+                    }
+                    runOnUiThread {
+                        if (mesh !== currentMesh || pickTarget != PICK_SECTION_FACE || face < 0) return@runOnUiThread
+                        if (info == null || info.size < 12 || info[0].toInt() != GeomKind.PLANE) {
+                            Toast.makeText(this, R.string.section_face_not_planar, Toast.LENGTH_SHORT).show()
+                            return@runOnUiThread
+                        }
+                        stopPick()
+                        sectionFace = floatArrayOf(
+                            info[9].toFloat(), info[10].toFloat(), info[11].toFloat(),
+                            info[6].toFloat(), info[7].toFloat(), info[8].toFloat(),
+                        )
+                        sectionFlip = false
+                        sectionSlider.value = 950f
+                        if (!sectionOn) setSection(true) else updateSection()
+                        haptic()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun openNoteAt(x: Float, y: Float) {
+        if (notes.notes.isEmpty()) return
+        val note = notes.findNear(
+            modelView.currentMvp(), modelView.width, modelView.height, x, y,
+            24f * resources.displayMetrics.density,
+        ) ?: return
+        notes.open(note)
+    }
+
+    private fun mergePoints(a: FloatArray?, b: FloatArray): FloatArray? = when {
+        a == null || a.isEmpty() -> b.takeIf { it.isNotEmpty() }
+        b.isEmpty() -> a
+        else -> a + b
+    }
+
+    private fun printScreenshot() {
+        val overlayText = if (measureMode) measure.lastText else ""
+        modelView.captureScreenshot { bmp ->
+            if (bmp == null || isDestroyed) {
+                Toast.makeText(this, R.string.print_failed, Toast.LENGTH_SHORT).show()
+                return@captureScreenshot
+            }
+            try {
+                val helper = PrintHelper(this)
+                helper.scaleMode = PrintHelper.SCALE_MODE_FIT
+                helper.orientation = if (bmp.width > bmp.height) PrintHelper.ORIENTATION_LANDSCAPE
+                else PrintHelper.ORIENTATION_PORTRAIT
+                helper.printBitmap(baseFileName(), annotate(bmp, currentName, overlayText))
+            } catch (_: Exception) {
+                Toast.makeText(this, R.string.print_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     companion object {
         private const val MENU_INFO = 1
         private const val MENU_SHARE = 2
@@ -2287,6 +3052,16 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_SHEET = 20
         private const val MENU_QC = 21
         private const val MENU_FIT = 22
+        private const val MENU_SETTINGS = 23
+        private const val MENU_NOTE_ADD = 24
+        private const val MENU_NOTES = 25
+        private const val MENU_PRINT = 26
+        private const val PICK_NONE = 0
+        private const val PICK_NOTE = 1
+        private const val PICK_SECTION_FACE = 2
+        private const val MENU_SAVE_VIEW = 60
+        private const val MENU_MANAGE_VIEWS = 61
+        private const val MENU_SAVED_BASE = 1000
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
         private const val MENU_FREE_ORBIT = 52

@@ -2,7 +2,7 @@
 # Assimp'i (Open Asset Import Library) Android NDK ile statik kütüphane olarak derler.
 #
 # Mimari / 3B tasarım programlarının mesh (üçgen) dosyalarını okumak için kullanılır.
-# Yalnızca şu okuyucular derlenir: OBJ, STL, glTF/GLB, Collada (DAE), 3DS, FBX, PLY.
+# Yalnızca şu okuyucular derlenir: OBJ, STL, glTF/GLB, Collada (DAE), 3DS, FBX, PLY, 3MF, AMF, OFF.
 # Dışa aktarma, araçlar ve testler kapalıdır.
 #
 # Kullanım:
@@ -61,6 +61,9 @@ COMMON_ARGS=(
   -DASSIMP_BUILD_3DS_IMPORTER=ON
   -DASSIMP_BUILD_FBX_IMPORTER=ON
   -DASSIMP_BUILD_PLY_IMPORTER=ON
+  -DASSIMP_BUILD_3MF_IMPORTER=ON
+  -DASSIMP_BUILD_AMF_IMPORTER=ON
+  -DASSIMP_BUILD_OFF_IMPORTER=ON
 )
 
 build_one() {

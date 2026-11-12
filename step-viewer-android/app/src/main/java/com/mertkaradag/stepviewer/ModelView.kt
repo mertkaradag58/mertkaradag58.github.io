@@ -42,6 +42,15 @@ class ModelView @JvmOverloads constructor(
     /** Uzun basma (parça seçimi). */
     var onLongPress: ((x: Float, y: Float) -> Unit)? = null
 
+    /**
+     * Hassas imleç: true iken uzun basma imleci başlatır, parmak sürüklendikçe
+     * [onCursorMove], bırakılınca [onCursorUp] çağrılır (parmağın konumu).
+     */
+    var precisionCursor = false
+    var onCursorMove: ((x: Float, y: Float) -> Unit)? = null
+    var onCursorUp: ((x: Float, y: Float) -> Unit)? = null
+    private var cursorActive = false
+
     private var lastX = 0f
     private var lastY = 0f
     private var activePointers = 0
@@ -91,12 +100,19 @@ class ModelView @JvmOverloads constructor(
             }
 
             override fun onLongPress(e: MotionEvent) {
-                if (!multiTouchHappened) onLongPress?.invoke(e.x, e.y)
+                if (multiTouchHappened) return
+                if (precisionCursor) {
+                    cursorActive = true
+                    camera.stopMotion()
+                    onCursorMove?.invoke(e.x, e.y)
+                } else {
+                    onLongPress?.invoke(e.x, e.y)
+                }
             }
 
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
                 // Yavaş bırakışta model kaymasın; yalnızca bilinçli savurma ataletle döner
-                if (!multiTouchHappened && rotating && hypot(vx, vy) > minFlingVelocity) {
+                if (!multiTouchHappened && !cursorActive && rotating && hypot(vx, vy) > minFlingVelocity) {
                     camera.fling(vx, vy)
                     requestRender()
                 }
@@ -123,8 +139,36 @@ class ModelView @JvmOverloads constructor(
         requestRender()
     }
 
-    fun setVisibility(triRanges: IntArray?, segRanges: IntArray?) {
-        queueEvent { renderer.setVisibility(triRanges, segRanges) }
+    fun setVisibility(
+        triRanges: IntArray?,
+        segRanges: IntArray?,
+        groups: List<ModelRenderer.StyleGroup> = emptyList(),
+    ) {
+        queueEvent { renderer.setVisibility(triRanges, segRanges, groups) }
+        requestRender()
+    }
+
+    fun setPalette(p: Palette) {
+        queueEvent { renderer.setPalette(p) }
+        requestRender()
+    }
+
+    /** Büyüteç görüntüsü: (x, y) çevresindeki [size] piksellik bölge, ana iş parçacığına verilir. */
+    fun setLoupe(x: Float, y: Float, size: Int, callback: ((android.graphics.Bitmap?) -> Unit)?) {
+        queueEvent {
+            if (callback == null || size <= 0) {
+                renderer.setLoupe(-1f, -1f, 0, null)
+            } else {
+                renderer.setLoupe(x, y, size) { bmp -> post { callback(bmp) } }
+            }
+        }
+        requestRender()
+    }
+
+    fun saveCameraState(): FloatArray = camera.saveState()
+
+    fun animateToState(state: FloatArray) {
+        camera.animateToState(state)
         requestRender()
     }
 
@@ -220,6 +264,24 @@ class ModelView @JvmOverloads constructor(
             doubleTapDown = false
             downX = event.x
             downY = event.y
+            cursorActive = false
+        }
+        if (cursorActive) {
+            // Hassas imleç: döndürme yok, yalnızca imleç hareket eder
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE -> onCursorMove?.invoke(event.x, event.y)
+                MotionEvent.ACTION_UP -> {
+                    cursorActive = false
+                    onCursorUp?.invoke(event.x, event.y)
+                }
+                MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN -> {
+                    cursorActive = false
+                    onCursorUp?.invoke(Float.NaN, Float.NaN)
+                }
+            }
+            // Uzun basma sonrası bırakma GestureDetector'a gitsin ki iç durumu sıfırlansın
+            if (event.actionMasked == MotionEvent.ACTION_UP) gestureDetector.onTouchEvent(event)
+            return true
         }
         gestureDetector.onTouchEvent(event)
         scaleDetector.onTouchEvent(event)

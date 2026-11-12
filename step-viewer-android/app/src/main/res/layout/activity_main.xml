@@ -11,6 +11,12 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Hassas imleç ve büyüteç (dokunma almaz) -->
+    <com.mertkaradag.stepviewer.LoupeView
+        android:id="@+id/loupe_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
     <!-- Boş ekran -->
     <ScrollView
         android:id="@+id/empty_state"
@@ -22,79 +28,11 @@
             android:id="@+id/empty_content"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
             android:orientation="vertical"
-            android:paddingLeft="32dp"
+            android:paddingLeft="20dp"
             android:paddingTop="96dp"
-            android:paddingRight="32dp"
-            android:paddingBottom="48dp">
-
-            <ImageView
-                android:layout_width="96dp"
-                android:layout_height="96dp"
-                android:importantForAccessibility="no"
-                android:src="@drawable/ic_cube"
-                app:tint="@color/accent" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="20dp"
-                android:text="@string/empty_title"
-                android:textAppearance="?attr/textAppearanceHeadlineSmall"
-                android:textColor="@color/text" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="center"
-                android:text="@string/empty_subtitle"
-                android:textAppearance="?attr/textAppearanceBodyMedium"
-                android:textColor="@color/text_secondary" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/empty_open_button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:text="@string/empty_open"
-                app:icon="@drawable/ic_folder_open" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/empty_photo_button"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="@string/pc_menu_entry" />
-
-            <TextView
-                android:id="@+id/recent_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="36dp"
-                android:text="@string/recent_files"
-                android:textAppearance="?attr/textAppearanceTitleSmall"
-                android:textColor="@color/text_secondary"
-                android:visibility="gone" />
-
-            <LinearLayout
-                android:id="@+id/recent_list"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="vertical" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="32dp"
-                android:gravity="center"
-                android:text="@string/gesture_hint"
-                android:textAppearance="?attr/textAppearanceBodySmall"
-                android:textColor="@color/text_secondary" />
-        </LinearLayout>
+            android:paddingRight="20dp"
+            android:paddingBottom="48dp" />
     </ScrollView>
 
     <!-- Üst çubuk -->
@@ -136,6 +74,15 @@
                 android:textColor="@color/text_secondary"
                 android:visibility="gone" />
         </LinearLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/settings_button"
+            style="@style/Widget.Material3.Button.IconButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/settings"
+            app:icon="@drawable/ic_settings"
+            app:iconTint="@color/text" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/more_button"
@@ -340,39 +287,58 @@
                         app:iconTint="@color/text_secondary" />
                 </LinearLayout>
 
-                <LinearLayout
+                <HorizontalScrollView
                     android:id="@+id/select_actions"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal">
+                    android:scrollbars="none">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/select_hide"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="0dp"
+                    <LinearLayout
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/select_hide"
-                        app:icon="@drawable/ic_visibility_off" />
+                        android:orientation="horizontal">
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/select_isolate"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/select_isolate"
-                        app:icon="@drawable/ic_isolate" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/select_hide"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/select_hide"
+                            app:icon="@drawable/ic_visibility_off" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/select_info"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/select_info"
-                        app:icon="@drawable/ic_info" />
-                </LinearLayout>
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/select_isolate"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/select_isolate"
+                            app:icon="@drawable/ic_isolate" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/select_color"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/select_color"
+                            app:icon="@drawable/ic_palette" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/select_transparent"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/select_transparent"
+                            app:icon="@drawable/ic_opacity" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/select_info"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/select_info"
+                            app:icon="@drawable/ic_info" />
+                    </LinearLayout>
+                </HorizontalScrollView>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -391,9 +357,74 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+            <!-- Ölçüm kipi: akıllı / nokta / toplam -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="10dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="6dp">
+
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/measure_mode_group"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    app:chipSpacingHorizontal="6dp"
+                    app:selectionRequired="true"
+                    app:singleLine="true"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/mode_smart"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:text="@string/measure_mode_smart" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/mode_point"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/measure_mode_point" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/mode_chain"
+                        style="@style/Widget.Material3.Chip.Filter"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/measure_mode_chain" />
+                </com.google.android.material.chip.ChipGroup>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/measure_undo"
+                    style="@style/Widget.Material3.Button.IconButton"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:contentDescription="@string/undo"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:visibility="gone"
+                    app:icon="@drawable/ic_undo"
+                    app:iconSize="18dp"
+                    app:iconTint="@color/text_secondary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:gravity="top"
                 android:orientation="horizontal"
-                android:padding="14dp">
+                android:paddingStart="14dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="14dp">
 
                 <ImageView
                     android:layout_width="22dp"
@@ -478,6 +509,7 @@
                     app:icon="@drawable/ic_close"
                     app:iconSize="18dp"
                     app:iconTint="@color/text_secondary" />
+            </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -594,6 +626,15 @@
                             android:layout_height="wrap_content"
                             android:text="Z" />
                     </com.google.android.material.chip.ChipGroup>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/section_face"
+                        style="@style/Widget.Material3.Button.IconButton"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:contentDescription="@string/section_from_face"
+                        app:icon="@drawable/ic_face_pick"
+                        app:iconTint="@color/text" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/section_flip"
@@ -745,7 +786,7 @@
         android:id="@+id/progress_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#99000000"
+        android:background="#80000000"
         android:clickable="true"
         android:focusable="true"
         android:visibility="gone">
