@@ -2,7 +2,7 @@
 <!-- Fotoğraftan model (photocad) -->
 <resources>
     <string name="pc_title">Fotoğraftan model</string>
-    <string name="pc_menu_entry">Fotoğraftan model (kaba STEP)</string>
+    <string name="pc_menu_entry">Fotoğraftan model (Beta)</string>
     <string name="pc_menu_method">Yöntemi değiştir</string>
     <string name="pc_menu_projects">Kayıtlı çizimler</string>
     <string name="pc_menu_help">Nasıl kullanılır</string>

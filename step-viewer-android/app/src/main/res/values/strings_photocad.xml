@@ -2,7 +2,7 @@
 <!-- Fotoğraftan model (photocad) -->
 <resources>
     <string name="pc_title">Photo to model</string>
-    <string name="pc_menu_entry">Photo to model (rough STEP)</string>
+    <string name="pc_menu_entry">Photo to model (Beta)</string>
     <string name="pc_menu_method">Change method</string>
     <string name="pc_menu_projects">Saved sketches</string>
     <string name="pc_menu_help">How to use</string>
