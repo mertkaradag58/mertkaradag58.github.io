@@ -94,24 +94,45 @@ object Holes {
         return sb.toString()
     }
 
-    // ISO metrik kaba diş kılavuz matkapları ve ISO 273 geçiş delikleri (ince ve orta)
-    private val TAP = listOf(
-        "M2" to 1.6, "M2,5" to 2.05, "M3" to 2.5, "M4" to 3.3, "M5" to 4.2, "M6" to 5.0, "M8" to 6.8,
-        "M10" to 8.5, "M12" to 10.2, "M14" to 12.0, "M16" to 14.0, "M18" to 15.5, "M20" to 17.5,
-        "M22" to 19.5, "M24" to 21.0, "M27" to 24.0, "M30" to 26.5,
+    // ISO metrik kaba diş: (ad, anma çapı, adım, kılavuz matkabı)
+    private class Thread(val name: String, val d: Double, val pitch: Double, val drill: Double) {
+        /** İç diş diş dibi çapı D1 = d - 1,0825 P (bazı CAD programları deliği bu çapta çizer). */
+        val minor: Double get() = d - 1.0825 * pitch
+    }
+    private val THREADS = listOf(
+        Thread("M1,6", 1.6, 0.35, 1.25), Thread("M2", 2.0, 0.4, 1.6), Thread("M2,5", 2.5, 0.45, 2.05),
+        Thread("M3", 3.0, 0.5, 2.5), Thread("M4", 4.0, 0.7, 3.3), Thread("M5", 5.0, 0.8, 4.2),
+        Thread("M6", 6.0, 1.0, 5.0), Thread("M8", 8.0, 1.25, 6.8), Thread("M10", 10.0, 1.5, 8.5),
+        Thread("M12", 12.0, 1.75, 10.2), Thread("M14", 14.0, 2.0, 12.0), Thread("M16", 16.0, 2.0, 14.0),
+        Thread("M18", 18.0, 2.5, 15.5), Thread("M20", 20.0, 2.5, 17.5), Thread("M22", 22.0, 2.5, 19.5),
+        Thread("M24", 24.0, 3.0, 21.0), Thread("M27", 27.0, 3.0, 24.0), Thread("M30", 30.0, 3.5, 26.5),
+        Thread("M33", 33.0, 3.5, 29.5), Thread("M36", 36.0, 4.0, 32.0),
+    )
+    // ISO metrik ince diş (yaygın olanlar)
+    private val FINE = listOf(
+        Thread("M8×1", 8.0, 1.0, 7.0), Thread("M10×1", 10.0, 1.0, 9.0), Thread("M10×1,25", 10.0, 1.25, 8.8),
+        Thread("M12×1,25", 12.0, 1.25, 10.8), Thread("M12×1,5", 12.0, 1.5, 10.5), Thread("M14×1,5", 14.0, 1.5, 12.5),
+        Thread("M16×1,5", 16.0, 1.5, 14.5), Thread("M18×1,5", 18.0, 1.5, 16.5), Thread("M20×1,5", 20.0, 1.5, 18.5),
+        Thread("M22×1,5", 22.0, 1.5, 20.5), Thread("M24×2", 24.0, 2.0, 22.0),
     )
     private val CLEAR = listOf(
-        "M2" to listOf(2.2, 2.4), "M2,5" to listOf(2.7, 2.9), "M3" to listOf(3.2, 3.4),
+        "M1,6" to listOf(1.7, 1.8), "M2" to listOf(2.2, 2.4), "M2,5" to listOf(2.7, 2.9), "M3" to listOf(3.2, 3.4),
         "M4" to listOf(4.3, 4.5), "M5" to listOf(5.3, 5.5), "M6" to listOf(6.4, 6.6),
         "M8" to listOf(8.4, 9.0), "M10" to listOf(10.5, 11.0), "M12" to listOf(13.0, 13.5),
         "M14" to listOf(15.0, 15.5), "M16" to listOf(17.0, 17.5), "M18" to listOf(19.0, 20.0),
-        "M20" to listOf(21.0, 22.0), "M24" to listOf(25.0, 26.0), "M30" to listOf(31.0, 33.0),
+        "M20" to listOf(21.0, 22.0), "M22" to listOf(23.0, 24.0), "M24" to listOf(25.0, 26.0),
+        "M27" to listOf(28.0, 30.0), "M30" to listOf(31.0, 33.0), "M36" to listOf(37.0, 39.0),
     )
     // DIN 974 imbus (ISO 4762) kaçak çapları
     private val SHCS_CBORE = mapOf(
         "M3" to 6.5, "M4" to 8.0, "M5" to 10.0, "M6" to 11.0, "M8" to 15.0, "M10" to 18.0,
         "M12" to 20.0, "M14" to 24.0, "M16" to 26.0, "M20" to 33.0, "M24" to 40.0,
     )
+
+    /** Kılavuz matkabı veya diş dibi çapına uyan diş (önce kaba, sonra ince). */
+    private fun tapMatch(d: Double): Thread? =
+        THREADS.firstOrNull { abs(it.drill - d) <= 0.06 || abs(it.minor - d) <= 0.04 }
+            ?: FINE.firstOrNull { abs(it.drill - d) <= 0.04 }
 
     private fun locale(m: String, loc: Locale): String =
         if (DecimalFormatSymbols.getInstance(loc).decimalSeparator == ',') m else m.replace(',', '.')
@@ -121,7 +142,7 @@ object Holes {
         val out = ArrayList<String>()
         val d = h.diameter
         val clear = CLEAR.firstOrNull { (_, ds) -> ds.any { abs(it - d) <= 0.06 } }?.first
-        val tap = TAP.firstOrNull { abs(it.second - d) <= 0.06 }?.first
+        val tap = tapMatch(d)
         if (clear != null) {
             val cb = SHCS_CBORE[clear]
             when {
@@ -132,7 +153,11 @@ object Holes {
                 else -> out += context.getString(R.string.holes_clear, locale(clear, loc))
             }
         }
-        if (tap != null && h.cboreDiameter <= 0) out += context.getString(R.string.holes_tap, locale(tap, loc))
+        if (tap != null && h.cboreDiameter <= 0) {
+            out += context.getString(
+                R.string.holes_tap_info, locale(tap.name, loc), Holes.mm(tap.pitch), Holes.mm(tap.drill),
+            )
+        }
         return out
     }
 
