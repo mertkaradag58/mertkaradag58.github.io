@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fotoğraftan model (photocad) -->
+<resources>
+    <string name="pc_title">Photo to model</string>
+    <string name="pc_menu_entry">Photo to model (rough STEP)</string>
+    <string name="pc_menu_method">Change method</string>
+    <string name="pc_menu_projects">Saved sketches</string>
+    <string name="pc_menu_help">How to use</string>
+    <string name="pc_menu_delete">Delete this sketch</string>
+    <string name="pc_start_title">How should the solid be made?</string>
+    <string name="pc_method_extrude">Give thickness (plate, sheet metal) · 1 photo from the top</string>
+    <string name="pc_method_two_view">Two views (block parts) · top + front photo</string>
+    <string name="pc_method_revolve">Revolve (shaft, flange, bushing) · 1 side photo</string>
+    <string name="pc_open_saved">Open a saved sketch (%1$d)</string>
+    <string name="pc_no_projects">No saved sketches yet</string>
+    <string name="pc_view_top">Top view</string>
+    <string name="pc_view_front">Front view</string>
+    <string name="pc_camera">Take photo</string>
+    <string name="pc_gallery">Gallery</string>
+    <string name="pc_video">Frame from video</string>
+    <string name="pc_video_record">Record a video</string>
+    <string name="pc_video_pick">Choose a video</string>
+    <string name="pc_draw">Draw by hand</string>
+    <string name="pc_scale">Scale</string>
+    <string name="pc_straighten">Straighten</string>
+    <string name="pc_straightened">Nearly horizontal / vertical edges were straightened</string>
+    <string name="pc_add_hole">Add hole</string>
+    <string name="pc_tune">Detection settings</string>
+    <string name="pc_undo">Undo</string>
+    <string name="pc_axis_h">Axis: horizontal</string>
+    <string name="pc_axis_v">Axis: vertical</string>
+    <string name="pc_sensitivity">Sensitivity (increase if parts of the object are missing, decrease if the shadow is included)</string>
+    <string name="pc_detail">Detail (more corner points)</string>
+    <string name="pc_draw_done">Done</string>
+    <string name="pc_draw_undo_point">Remove last point</string>
+    <string name="pc_draw_need3">At least 3 points are needed</string>
+    <string name="pc_draw_as_hole">The new outline will be added as a hole</string>
+    <string name="pc_cancel">Cancel</string>
+    <string name="pc_delete">Delete</string>
+    <string name="pc_delete_confirm">Delete this sketch, its photos and STEP file?</string>
+    <string name="pc_hint_start_top">Place the part on a plain, contrasting surface and take a photo straight from above. Or draw by hand.</string>
+    <string name="pc_hint_start_front">Now take a photo straight from the front (same left-right direction as the top view).</string>
+    <string name="pc_hint_start_side">Photograph the part from the side so that its axis is horizontal or vertical.</string>
+    <string name="pc_hint_seed">Tap on the part</string>
+    <string name="pc_hint_draw">Tap the corners in order. Tap the first point to close.</string>
+    <string name="pc_hint_scale">Enter a known dimension with Scale</string>
+    <string name="pc_hint_edit">%1$s × %2$s mm · tap an edge or hole to enter its size · drag points · long press: add / remove point</string>
+    <string name="pc_loading_image">Loading photo…</string>
+    <string name="pc_image_failed">The photo could not be opened</string>
+    <string name="pc_video_failed">The video could not be opened</string>
+    <string name="pc_frame_title">Choose a frame</string>
+    <string name="pc_frame_hint">Move the slider to the moment where the part is seen straight on.</string>
+    <string name="pc_frame_use">Use this frame</string>
+    <string name="pc_detecting">Finding the outline…</string>
+    <string name="pc_detect_failed">No outline found. Tap on the part again, change the sensitivity, or draw by hand.</string>
+    <string name="pc_auto_scaled">Front view was scaled to the width of the top view</string>
+    <string name="pc_scale_title">Real size</string>
+    <string name="pc_scale_note">Enter the overall width or height of the part. If you enter both, the photo is also corrected for slight perspective.</string>
+    <string name="pc_width">Overall width</string>
+    <string name="pc_height">Overall height</string>
+    <string name="pc_edge_title">Edge length</string>
+    <string name="pc_edge_length">Length</string>
+    <string name="pc_edge_note">Horizontal and vertical edges are stretched: everything to the right of (or above) the edge moves with it.</string>
+    <string name="pc_hole_title">Hole</string>
+    <string name="pc_diameter">Diameter</string>
+    <string name="pc_build">Create STEP</string>
+    <string name="pc_build_go">Create</string>
+    <string name="pc_name">Part name</string>
+    <string name="pc_thickness">Thickness</string>
+    <string name="pc_build_note_extrude">The outline is extruded by the thickness; holes go through.</string>
+    <string name="pc_build_note_two_view">The top and front outlines are extruded and intersected. Good for block-like parts; hidden pockets cannot be seen in photos.</string>
+    <string name="pc_build_note_revolve">The half of the outline on one side of the green axis is revolved 360°.</string>
+    <string name="pc_building">Creating the solid…</string>
+    <string name="pc_need_contour">Find or draw the outline first</string>
+    <string name="pc_need_front">The front view is still missing</string>
+    <string name="pc_revolve_tip">Take the photo from the side; the full silhouette is fine, the upper half is revolved.</string>
+    <string name="pc_err_title">Could not create the model</string>
+    <string name="pc_err_open">The outline is missing or too small.</string>
+    <string name="pc_err_bad">The outline crosses itself. Drag the crossing points apart or press Straighten, then try again.</string>
+    <string name="pc_err_empty">The result is empty. In two-view mode the top and front views must have the same width and direction.</string>
+    <string name="pc_err_write">The STEP file could not be written.</string>
+    <string name="pc_err_param">Enter a thickness greater than zero.</string>
+    <string name="pc_err_build">The geometry could not be built. Simplify the outline (Straighten, fewer points) and try again.</string>
+    <string name="pc_result_title">STEP ready</string>
+    <string name="pc_result">Size: %1$s × %2$s × %3$s mm
+Volume: %4$s mm³
+File: %5$s
+
+This is a rough model from a photo; check critical dimensions. You can reopen this sketch later from Saved sketches and change its dimensions.</string>
+    <string name="pc_view_model">View</string>
+    <string name="pc_save">Save…</string>
+    <string name="pc_share">Share</string>
+    <string name="pc_saved">Saved</string>
+    <string name="pc_save_failed">Could not save</string>
+    <string name="pc_camera_denied">Camera permission is needed to take a photo</string>
+    <string name="pc_help">1. Place the part on a plain surface with a different colour (e.g. white paper for a dark part) and take the photo straight on, from as far away as possible and zoomed in a little, so that perspective distortion stays small.
+
+2. Tap on the part: the outline and holes are found automatically. If the shadow is included or a part is missing, use Detection settings.
+
+3. Enter one known dimension with Scale (e.g. overall width). Then tap any edge or hole and type its real size. Straighten makes nearly horizontal / vertical edges exact.
+
+4. Create STEP: plate parts with a thickness, block parts from two views (top + front), shafts and flanges by revolving.
+
+A single photo cannot capture hidden depth, threads, chamfers or inner pockets; the result is a rough model for quick dimensioning, quotes and fixtures. Sketches are saved: you can reopen them later, change dimensions and create the STEP again.</string>
+</resources>

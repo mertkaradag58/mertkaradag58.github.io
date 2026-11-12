@@ -289,6 +289,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupToolbar() {
         findViewById<View>(R.id.empty_open_button).setOnClickListener { pickFile() }
+        findViewById<View>(R.id.empty_photo_button).setOnClickListener { openPhotoCad() }
         findViewById<View>(R.id.tool_open).setOnClickListener { pickFile() }
         toolMeasure.setOnClickListener { setMeasureMode(!measureMode) }
         toolSelect.setOnClickListener { setSelectMode(!selectMode) }
@@ -352,6 +353,7 @@ class MainActivity : AppCompatActivity() {
         popup.menu.add(Menu.NONE, MENU_HOLES, 1, R.string.menu_holes).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_DXF, 1, R.string.menu_dxf).isEnabled = hasModel
         popup.menu.add(Menu.NONE, MENU_DRAWING, 1, R.string.menu_drawing).isEnabled = hasModel
+        popup.menu.add(Menu.NONE, MENU_PHOTO_CAD, 2, R.string.pc_menu_entry)
         popup.menu.add(Menu.NONE, MENU_QUALITY, 2, R.string.menu_quality)
         popup.menu.add(Menu.NONE, MENU_ABOUT, 2, R.string.menu_about)
         if (!billing.adFree) {
@@ -372,6 +374,7 @@ class MainActivity : AppCompatActivity() {
                 MENU_HOLES -> showHoleTable()
                 MENU_DXF -> startDxfPick()
                 MENU_DRAWING -> showDrawing()
+                MENU_PHOTO_CAD -> openPhotoCad()
                 MENU_ABOUT -> showAbout()
                 MENU_QUALITY -> showQualityDialog()
                 MENU_PRIVACY -> ads.showPrivacyOptions()
@@ -437,6 +440,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     // -----------------------------------------------------------------------
+    /** Fotoğraftan kaba katı model (STEP) ekranı. */
+    private fun openPhotoCad() {
+        startActivity(Intent(this, com.mertkaradag.stepviewer.photocad.PhotoCadActivity::class.java))
+    }
+
     // Dosya açma
     // -----------------------------------------------------------------------
 
@@ -1908,6 +1916,7 @@ class MainActivity : AppCompatActivity() {
         private const val MENU_HOLES = 11
         private const val MENU_DXF = 12
         private const val MENU_DRAWING = 13
+        private const val MENU_PHOTO_CAD = 14
         private const val MENU_ORTHO = 50
         private const val MENU_YUP = 51
     }
