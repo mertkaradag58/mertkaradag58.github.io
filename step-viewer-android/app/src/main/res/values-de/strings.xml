@@ -40,6 +40,13 @@
     <string name="view_right">Rechts</string>
     <string name="view_ortho">Orthogonale Projektion</string>
     <string name="view_y_up">Y-Achse nach oben</string>
+    <string name="view_free_orbit">Freie Drehung (Trackball)</string>
+    <string name="rotate_speed">Drehgeschwindigkeit</string>
+    <string name="rotate_speed_slow">Langsam</string>
+    <string name="rotate_speed_normal">Normal</string>
+    <string name="rotate_speed_fast">Schnell</string>
+    <string name="free_orbit_on">Freie Drehung: Das Modell folgt dem Finger in jede Richtung. Mit zwei Fingern drehen zum Rollen.</string>
+    <string name="free_orbit_off">Drehteller: Das Modell bleibt aufrecht.</string>
     <string name="menu_model_info">Modellinfo</string>
     <string name="menu_share">Bild teilen</string>
     <string name="menu_about">Info und Lizenzen</string>

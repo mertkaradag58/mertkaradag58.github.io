@@ -51,6 +51,13 @@
     <string name="view_right">Sağ</string>
     <string name="view_ortho">Ortografik izdüşüm</string>
     <string name="view_y_up">Y ekseni yukarı</string>
+    <string name="view_free_orbit">Serbest döndürme (iz topu)</string>
+    <string name="rotate_speed">Döndürme hızı</string>
+    <string name="rotate_speed_slow">Yavaş</string>
+    <string name="rotate_speed_normal">Normal</string>
+    <string name="rotate_speed_fast">Hızlı</string>
+    <string name="free_orbit_on">Serbest döndürme: model parmağınızı her yönde izler. İki parmakla burarak çevirebilirsiniz.</string>
+    <string name="free_orbit_off">Döner tabla: model hep dik durur.</string>
 
     <!-- Menü -->
     <string name="menu_model_info">Model bilgisi</string>

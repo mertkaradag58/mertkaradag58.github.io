@@ -52,6 +52,13 @@
     <string name="view_right">Right</string>
     <string name="view_ortho">Orthographic projection</string>
     <string name="view_y_up">Y axis up</string>
+    <string name="view_free_orbit">Free rotation (trackball)</string>
+    <string name="rotate_speed">Rotation speed</string>
+    <string name="rotate_speed_slow">Slow</string>
+    <string name="rotate_speed_normal">Normal</string>
+    <string name="rotate_speed_fast">Fast</string>
+    <string name="free_orbit_on">Free rotation: the model follows your finger in every direction. Twist with two fingers to roll.</string>
+    <string name="free_orbit_off">Turntable rotation: the model stays upright.</string>
 
     <!-- Menü -->
     <string name="menu_model_info">Model info</string>
