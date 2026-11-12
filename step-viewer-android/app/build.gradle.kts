@@ -25,7 +25,7 @@ android {
         targetSdk = 36
         // Play'e her yüklemede sürüm kodu artmalı: CI çalışma numarasından türetilir.
         versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
-        versionName = "1.0.1"
+        versionName = "1.1.0"
 
         // AdMob kimlikleri gizli değildir. Varsayılanlar Cepte CAD için gerçek AdMob kimlikleridir.
         // -PadmobAppId=... veya ADMOB_APP_ID ortam değişkeniyle de değiştirilebilir.
