@@ -272,4 +272,44 @@ Inner cutouts: %3$d
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Paper size</string>
     <string name="drawing_info">Technical drawing · %1$s</string>
+
+    <!-- Maliyet hesabı -->
+    <string name="menu_cost">Cost estimate</string>
+    <string name="cost_title">Cost estimate</string>
+    <string name="cost_section_material">Material</string>
+    <string name="cost_section_stock">Raw stock</string>
+    <string name="cost_section_labor">Machining / labour</string>
+    <string name="cost_section_extra">Extras and profit</string>
+    <string name="cost_section_result">Cost per part</string>
+    <string name="cost_price_per_kg">Material price (%1$s/kg)</string>
+    <string name="cost_stock_type">Stock / process</string>
+    <string name="cost_allowance">Machining allowance per side (mm)</string>
+    <string name="cost_rate">Machine hourly rate (%1$s/h)</string>
+    <string name="cost_time">Time per part (min), empty = estimate</string>
+    <string name="cost_time_estimate">Estimate: %1$s min (from removed volume, surface and holes)</string>
+    <string name="cost_setup">Setup time per batch (min)</string>
+    <string name="cost_quantity">Quantity</string>
+    <string name="cost_extra">Extra per part: coating, heat treatment… (%1$s)</string>
+    <string name="cost_overhead" formatted="false">Overhead (%)</string>
+    <string name="cost_profit" formatted="false">Profit (%)</string>
+    <string name="cost_vat" formatted="false">VAT (%)</string>
+    <string name="cost_parts_count">Calculated part by part: %1$d parts</string>
+    <string name="cost_part_mass">Finished mass: %1$s</string>
+    <string name="cost_missing_solid">%1$d parts have no closed solid: only their stock is counted.</string>
+    <string name="cost_holes">Holes: %1$d</string>
+    <string name="cost_stock_block_dims">Stock block: %1$s × %2$s × %3$s mm</string>
+    <string name="cost_stock_round_dims">Round bar: Ø%1$s × %2$s mm</string>
+    <string name="cost_stock_mass">Stock mass: %1$s</string>
+    <string name="cost_scrap">Chips / scrap: %1$s (%2$s%%)</string>
+    <string name="cost_stock_net_info">Net volume: material is charged by the finished part mass (3D printing, casting).</string>
+    <string name="cost_line_material">Material: %1$s</string>
+    <string name="cost_line_machining">Machining (%1$s min): %2$s</string>
+    <string name="cost_line_setup">Setup share: %1$s</string>
+    <string name="cost_line_extra">Extras: %1$s</string>
+    <string name="cost_line_overhead">Overhead (%1$s%%): %2$s</string>
+    <string name="cost_line_profit">Profit (%1$s%%): %2$s</string>
+    <string name="cost_line_unit">Unit price excl. VAT: %1$s</string>
+    <string name="cost_line_vat">VAT (%1$s%%): %2$s</string>
+    <string name="cost_total">Unit: %1$s · %2$d pcs total: %3$s</string>
+    <string name="cost_disclaimer">Rough estimate. Stock comes from each part\'s bounding box in model axes; edit the prices, rates and time to match your shop. Your values are remembered.</string>
 </resources>

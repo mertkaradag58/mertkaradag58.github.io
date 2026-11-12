@@ -237,4 +237,6 @@ Découpes intérieures : %3$d
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Format du papier</string>
     <string name="drawing_info">Dessin technique · %1$s</string>
+    <string name="menu_cost">Calcul du coût</string>
+    <string name="cost_title">Calcul du coût</string>
 </resources>

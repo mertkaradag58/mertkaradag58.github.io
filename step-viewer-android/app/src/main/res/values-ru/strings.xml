@@ -243,4 +243,6 @@
     <string name="drawing_dxf">DXF</string>
     <string name="drawing_paper">Формат бумаги</string>
     <string name="drawing_info">Чертёж · %1$s</string>
+    <string name="menu_cost">Расчёт стоимости</string>
+    <string name="cost_title">Расчёт стоимости</string>
 </resources>
