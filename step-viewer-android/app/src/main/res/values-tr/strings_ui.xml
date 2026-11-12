@@ -14,7 +14,7 @@
     <string name="views_title">Görünüm</string>
     <string name="views_camera">Kamera</string>
     <string name="views_display">Görüntü modu</string>
-    <string name="views_saved">Kayıtlı görünümler</string>
+    <string name="views_saved_header">Kayıtlı görünümler</string>
     <string name="views_save_short">Görünümü kaydet</string>
     <string name="views_edit">Düzenle</string>
     <string name="views_options">Kamera ayarları</string>

@@ -134,7 +134,7 @@ class ViewsSheet(
         })
 
         // Kayıtlı görünümler
-        root.addView(header(R.string.views_saved))
+        root.addView(header(R.string.views_saved_header))
         val savedRow = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         host.savedViewNames().forEachIndexed { i, name ->
             savedRow.addView(chip("★ $name", false) {

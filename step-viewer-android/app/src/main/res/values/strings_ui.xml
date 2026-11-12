@@ -14,7 +14,7 @@
     <string name="views_title">View</string>
     <string name="views_camera">Camera</string>
     <string name="views_display">Display mode</string>
-    <string name="views_saved">Saved views</string>
+    <string name="views_saved_header">Saved views</string>
     <string name="views_save_short">Save view</string>
     <string name="views_edit">Edit</string>
     <string name="views_options">Camera options</string>
