@@ -1,0 +1,20 @@
+{
+  "name": "Mühendis Araçları",
+  "short_name": "Mühendis",
+  "description": "Tolerans, ağırlık, çekme, kaynak, hidrolik ve daha fazlası: mühendisler için hesap araçları.",
+  "lang": "tr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#163a6e",
+  "theme_color": "#163a6e",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "related_applications": [
+    {"platform": "play", "id": "tr.muhendis.araclar", "url": "https://play.google.com/store/apps/details?id=tr.muhendis.araclar"}
+  ]
+}
