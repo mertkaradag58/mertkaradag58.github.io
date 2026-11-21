@@ -25,7 +25,7 @@ android {
         targetSdk = 36
         // Play'e her yüklemede sürüm kodu artmalı: CI çalışma numarasından türetilir.
         versionCode = 100 + (System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 0)
-        versionName = "1.0.1"
+        versionName = "1.1.0"
 
         // AdMob kimlikleri gizli değildir. Varsayılanlar Cepte CAD için gerçek AdMob kimlikleridir.
         // -PadmobAppId=... veya ADMOB_APP_ID ortam değişkeniyle de değiştirilebilir.
@@ -108,6 +108,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.print:print:1.0.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("com.google.android.gms:play-services-ads:24.9.0")
     implementation("com.google.android.ump:user-messaging-platform:3.2.0")
@@ -115,4 +116,6 @@ dependencies {
     implementation("com.android.billingclient:billing:8.0.0")
     // Artırılmış gerçeklik (isteğe bağlı, ARCore olmayan telefonlarda AR düğmesi uyarı verir)
     implementation("com.google.ar:core:1.44.0")
+    // Teknik resimdeki ölçü yazılarını okumak için cihaz içi (çevrimdışı) metin tanıma
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }

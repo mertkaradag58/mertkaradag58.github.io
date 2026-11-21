@@ -79,6 +79,9 @@ class StepMesh(
             FORMAT_3DS -> "3DS"
             FORMAT_FBX -> "FBX"
             FORMAT_PLY -> "PLY"
+            FORMAT_3MF -> "3MF"
+            FORMAT_AMF -> "AMF"
+            FORMAT_OFF -> "OFF"
             else -> "?"
         }
 
@@ -147,6 +150,9 @@ class StepMesh(
         const val FORMAT_3DS = 8
         const val FORMAT_FBX = 9
         const val FORMAT_PLY = 10
+        const val FORMAT_3MF = 11
+        const val FORMAT_AMF = 12
+        const val FORMAT_OFF = 13
     }
 
     /** Mesh dosyası mı (birim bilgisi olmayabilir, yüzeyler üçgenlerden çıkarılır). */

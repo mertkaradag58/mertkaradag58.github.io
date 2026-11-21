@@ -7,6 +7,7 @@
 #include "../dxf_export.h"
 #include "../hole_finder.h"
 #include "../mesh_model.h"
+#include "../sheet_unfold.h"
 #include "../step_mesher.h"
 
 #include <algorithm>
@@ -210,6 +211,33 @@ int main(int argc, char** argv) {
         }
       }
       a += 1;
+    } else if (std::strcmp(argv[a], "--unfold") == 0 && a + 3 < argc) {
+      // --unfold yuzey|-1 k cikti.dxf : sac açınımı (ilk parça)
+      const long fi = std::strtol(argv[a + 1], nullptr, 10);
+      const double k = std::atof(argv[a + 2]);
+      TopoDS_Face base;
+      int part = 0;
+      if (fi >= 0 && static_cast<size_t>(fi) < mesh.faceShapes.size()) {
+        base = mesh.faceShapes[static_cast<size_t>(fi)];
+        while (part + 1 < static_cast<int>(mesh.partFaceOffsets.size()) && mesh.partFaceOffsets[part + 1] <= fi) ++part;
+      }
+      SheetResult r;
+      const auto t0 = std::chrono::steady_clock::now();
+      UnfoldSheet(mesh.partShapes[static_cast<size_t>(part)], base, k, r);
+      const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+      std::printf("acinim durum=%d t=%.4f k=%.2f boyut=%.4f x %.4f alan=%.3f atlanan=%d bukum=%zu (%.1f ms)\n",
+                  static_cast<int>(r.status), r.thickness, r.kFactor, r.width, r.height, r.area, r.skippedFaces,
+                  r.bends.size(), ms);
+      for (const auto& b : r.bends) {
+        std::printf("  bukum aci=%.3f Ric=%.3f boy=%.3f pay=%.4f %s (%.2f %.2f)-(%.2f %.2f)\n", b.angleDeg,
+                    b.innerRadius, b.length, b.allowance, b.up ? "yukari" : "asagi", b.x1, b.y1, b.x2, b.y2);
+      }
+      FILE* df = std::fopen(argv[a + 3], "w");
+      if (df) {
+        std::fwrite(r.dxf.data(), 1, r.dxf.size(), df);
+        std::fclose(df);
+      }
+      a += 3;
     } else if (std::strcmp(argv[a], "--holes") == 0) {
       std::vector<HoleInfo> holes;
       const auto t0 = std::chrono::steady_clock::now();
