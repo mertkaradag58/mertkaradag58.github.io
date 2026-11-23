@@ -5,15 +5,58 @@ import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Son açılan dosyalar (kalıcı okuma izni alınabilen URI'ler). */
+/** Son açılan dosyalar ve favoriler (kalıcı okuma izni alınabilen URI'ler). */
 class RecentFiles(context: Context) {
 
     data class Entry(val uri: Uri, val name: String, val time: Long)
 
     private val prefs = context.getSharedPreferences("recent_files", Context.MODE_PRIVATE)
 
-    fun list(): List<Entry> {
-        val json = prefs.getString(KEY, null) ?: return emptyList()
+    fun list(): List<Entry> = read(KEY)
+
+    fun favorites(): List<Entry> = read(KEY_FAV)
+
+    fun isFavorite(uri: Uri): Boolean = favorites().any { it.uri == uri }
+
+    fun add(uri: Uri, name: String) {
+        val items = list().filter { it.uri != uri }.toMutableList()
+        items.add(0, Entry(uri, name, System.currentTimeMillis()))
+        write(KEY, items.take(MAX))
+        // Favorideki adı ve tarihi de güncelle
+        val favs = favorites()
+        if (favs.any { it.uri == uri }) {
+            write(KEY_FAV, favs.map { if (it.uri == uri) Entry(uri, name, System.currentTimeMillis()) else it })
+        }
+    }
+
+    /** Favoriye ekler veya çıkarır; yeni durumu döndürür. */
+    fun toggleFavorite(uri: Uri, name: String): Boolean {
+        val favs = favorites().toMutableList()
+        val i = favs.indexOfFirst { it.uri == uri }
+        return if (i >= 0) {
+            favs.removeAt(i)
+            write(KEY_FAV, favs)
+            false
+        } else {
+            val time = list().firstOrNull { it.uri == uri }?.time ?: System.currentTimeMillis()
+            favs.add(0, Entry(uri, name, time))
+            write(KEY_FAV, favs.take(MAX_FAV))
+            true
+        }
+    }
+
+    fun remove(uri: Uri) {
+        write(KEY, list().filter { it.uri != uri })
+    }
+
+    /** Dosya artık açılamıyorsa her iki listeden de siler. */
+    fun forget(uri: Uri) {
+        remove(uri)
+        write(KEY_FAV, favorites().filter { it.uri != uri })
+    }
+
+    private fun read(key: String): List<Entry> {
+        val json = prefs.getString(key, null) ?: return emptyList()
         return try {
             val arr = JSONArray(json)
             (0 until arr.length()).mapNotNull { i ->
@@ -25,24 +68,18 @@ class RecentFiles(context: Context) {
         }
     }
 
-    fun add(uri: Uri, name: String) {
-        val items = list().filter { it.uri != uri }.toMutableList()
-        items.add(0, Entry(uri, name, System.currentTimeMillis()))
-        save(items.take(MAX))
-    }
-
-    fun remove(uri: Uri) = save(list().filter { it.uri != uri })
-
-    private fun save(items: List<Entry>) {
+    private fun write(key: String, items: List<Entry>) {
         val arr = JSONArray()
         for (e in items) {
             arr.put(JSONObject().put("uri", e.uri.toString()).put("name", e.name).put("time", e.time))
         }
-        prefs.edit().putString(KEY, arr.toString()).apply()
+        prefs.edit().putString(key, arr.toString()).apply()
     }
 
     companion object {
         private const val KEY = "items"
-        private const val MAX = 8
+        private const val KEY_FAV = "favorites"
+        private const val MAX = 12
+        private const val MAX_FAV = 30
     }
 }

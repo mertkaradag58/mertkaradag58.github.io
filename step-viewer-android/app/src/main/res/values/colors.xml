@@ -1,12 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Açık tema (Aydınlık Atölye / Gökyüzü CAD). Koyu tema: values-night/colors.xml -->
 <resources>
-    <color name="background">#FF13161B</color>
-    <color name="surface">#F01C2027</color>
-    <color name="surface_variant">#FF262B34</color>
-    <color name="text">#FFF2F4F7</color>
-    <color name="text_secondary">#FFAEB6C2</color>
-    <color name="accent">#FF5AB0FF</color>
-    <color name="accent_dark">#FF0B3A66</color>
-    <color name="measure">#FFFF8C00</color>
-    <color name="icon_bg">#FF1E4E8C</color>
+    <color name="background">#FFF3F5F8</color>
+    <color name="surface">#F7FFFFFF</color>
+    <color name="surface_variant">#FFEEF1F5</color>
+    <color name="surface_solid">#FFFFFFFF</color>
+    <color name="text">#FF1D2433</color>
+    <color name="text_secondary">#FF5B6475</color>
+    <color name="accent">#FFE8650E</color>
+    <color name="on_accent">#FFFFFFFF</color>
+    <color name="accent_container">#FFFFE9DA</color>
+    <color name="on_accent_container">#FF7A2E00</color>
+    <color name="accent_dark">#FFC4520A</color>
+    <color name="measure">#FFE8650E</color>
+    <color name="select">#FF2F7BD8</color>
+    <color name="outline">#1F1D2433</color>
+    <color name="tool_active">#FFFFE9DA</color>
+    <color name="tool_active_text">#FFC4520A</color>
+    <color name="scrim_top">#E6FFFFFF</color>
+    <color name="icon_bg">#FFE8650E</color>
+    <color name="card_shadow">#14000000</color>
 </resources>

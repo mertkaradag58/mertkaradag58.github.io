@@ -14,4 +14,9 @@
         <item>Naylon PA6 (1,14)</item>
         <item>Özel…</item>
     </string-array>
+    <string-array name="cost_stock_modes">
+        <item>Blok (frezeleme)</item>
+        <item>Yuvarlak çubuk (torna)</item>
+        <item>Net hacim (3D baskı, döküm)</item>
+    </string-array>
 </resources>

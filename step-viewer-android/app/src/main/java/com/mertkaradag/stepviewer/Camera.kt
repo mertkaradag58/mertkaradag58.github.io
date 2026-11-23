@@ -4,6 +4,7 @@ import android.opengl.Matrix
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.sqrt
 import kotlin.math.tan
 
@@ -43,6 +44,22 @@ class Camera {
     var orthographic = false
         @Synchronized get
         @Synchronized set
+
+    /**
+     * Serbest döndürme: model parmağı her yönde izler (iz topu). Kapalıyken döner tabla
+     * gibi davranır: yukarı ekseni hep dik kalır.
+     */
+    var freeOrbit = false
+        @Synchronized get
+        @Synchronized set
+
+    /** Döndürme hızı çarpanı (1 = normal). */
+    var rotateSpeed = 1f
+        @Synchronized get
+        @Synchronized set
+
+    /** Döner tabla modunda model ters döndüyse yatay sürükleme yönü çevrilir. */
+    private var turnSign = 1f
 
     var upAxis = UpAxis.Z
         @Synchronized get
@@ -172,6 +189,35 @@ class Camera {
         animating = true
     }
 
+    /**
+     * Kayıtlı görünüm için kamera durumu:
+     * [qw, qx, qy, qz, cx, cy, cz, zoom, panX, panY, ortho(0/1)].
+     */
+    @Synchronized
+    fun saveState(): FloatArray = floatArrayOf(
+        q.w, q.x, q.y, q.z, center[0], center[1], center[2], zoom, panX, panY, if (orthographic) 1f else 0f,
+    )
+
+    /** Kayıtlı görünüme yumuşak geçiş. */
+    @Synchronized
+    fun animateToState(s: FloatArray, durationMs: Long = 500) {
+        if (s.size < 10) return
+        stopMotion()
+        animFromQ = q
+        animToQ = Quat(s[0], s[1], s[2], s[3]).normalized()
+        animFromZoom = zoom
+        animToZoom = s[7].coerceIn(0.05f, 500f)
+        animFromPanX = panX
+        animFromPanY = panY
+        animToPanX = s[8]
+        animToPanY = s[9]
+        beginCenterAnim(floatArrayOf(s[4], s[5], s[6]))
+        if (s.size > 10) orthographic = s[10] > 0.5f
+        animStart = now()
+        animDuration = durationMs
+        animating = true
+    }
+
     /** Döner tabla gibi tam bir tur (360°). */
     @Synchronized
     fun spin360() {
@@ -237,17 +283,58 @@ class Camera {
         return isMoving
     }
 
+    /**
+     * Tek parmakla döndürme başlarken çağrılır.
+     *
+     * - Kaydırma (pan) dönme merkezine katlanır: model artık ekranın ortasındaki noktanın
+     *   etrafında döner. Böylece yakınlaşıp bir köşeye kaydırdıktan sonra döndürünce
+     *   model ekrandan kaçmaz. (Görüntü bu anda değişmez.)
+     * - Model baş aşağı ise yatay sürükleme yönü çevrilir; parmak yönü hep doğru hissettirir.
+     */
+    @Synchronized
+    fun beginRotate() {
+        stopMotion()
+        q.toMatrix(rot)
+        if (panX != 0f || panY != 0f) {
+            // center' = center - Rᵀ·(panX, panY, 0)  (rot sütun-öncelikli)
+            for (i in 0 until 3) {
+                center[i] -= rot[i * 4] * panX + rot[i * 4 + 1] * panY
+            }
+            panX = 0f
+            panY = 0f
+        }
+        // Modelin yukarı ekseninin ekrandaki dikey bileşeni
+        val k = if (upAxis == UpAxis.Z) 2 else 1
+        turnSign = if (rot[k * 4 + 1] < -0.02f) -1f else 1f
+    }
+
     /** Tek parmak sürükleme. */
     @Synchronized
     fun rotate(dxPixels: Float, dyPixels: Float) = rotateByPixels(dxPixels, dyPixels)
 
+    private fun degPerPixel(): Float =
+        ROTATE_DEG_PER_SHORT_SIDE * rotateSpeed / min(viewWidth, viewHeight)
+
     private fun rotateByPixels(dxPixels: Float, dyPixels: Float) {
-        val degPerPixel = 200f / max(viewWidth, viewHeight)
-        if (dxPixels != 0f) turntable(dxPixels * degPerPixel)
+        val dpp = degPerPixel()
+        if (freeOrbit) {
+            // İz topu: ekran eksenleri etrafında (soldan çarpım), model parmağı izler
+            if (dxPixels != 0f) q = (Quat.axisAngle(0f, 1f, 0f, dxPixels * dpp) * q).normalized()
+            if (dyPixels != 0f) q = (Quat.axisAngle(1f, 0f, 0f, dyPixels * dpp) * q).normalized()
+            return
+        }
+        if (dxPixels != 0f) turntable(dxPixels * dpp * turnSign)
         if (dyPixels != 0f) {
             // Ekran yatay ekseni etrafında (soldan çarpım)
-            q = (Quat.axisAngle(1f, 0f, 0f, dyPixels * degPerPixel) * q).normalized()
+            q = (Quat.axisAngle(1f, 0f, 0f, dyPixels * dpp) * q).normalized()
         }
+    }
+
+    /** İki parmakla burma: bakış ekseni etrafında döndür (yalnızca serbest modda). */
+    @Synchronized
+    fun roll(angleDeg: Float) {
+        if (!freeOrbit || angleDeg == 0f) return
+        q = (Quat.axisAngle(0f, 0f, 1f, angleDeg) * q).normalized()
     }
 
     /** Modelin yukarı ekseni etrafında döndür (sağdan çarpım: model uzayında). */
@@ -267,7 +354,23 @@ class Camera {
     /** Kıstırma: yakınlaştır / uzaklaştır. */
     @Synchronized
     fun zoomBy(factor: Float) {
-        zoom = (zoom * factor).coerceIn(0.05f, 500f)
+        zoom = (zoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+    }
+
+    /**
+     * Parmakların arasındaki noktaya doğru yakınlaştır: (fx, fy) piksel noktasının
+     * altındaki yer yakınlaşma boyunca parmakların altında kalır.
+     */
+    @Synchronized
+    fun zoomAt(factor: Float, fx: Float, fy: Float) {
+        if (animating) animating = false
+        val before = 2f * halfHeightAtFocus() / viewHeight
+        zoom = (zoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        val after = 2f * halfHeightAtFocus() / viewHeight
+        val sx = fx - viewWidth * 0.5f
+        val sy = viewHeight * 0.5f - fy
+        panX += sx * (after - before)
+        panY += sy * (after - before)
     }
 
     private fun distance(): Float {
@@ -348,5 +451,9 @@ class Camera {
     companion object {
         const val FOV_Y = 35.0
         const val SPIN_DURATION_MS = 3500f
+        /** Ekranın kısa kenarı boyunca sürükleme bu kadar derece döndürür. */
+        const val ROTATE_DEG_PER_SHORT_SIDE = 180f
+        const val MIN_ZOOM = 0.05f
+        const val MAX_ZOOM = 500f
     }
 }
